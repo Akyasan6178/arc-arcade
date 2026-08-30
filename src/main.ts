@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BootScene } from '@scenes/BootScene';
 import { PreloadScene } from '@scenes/PreloadScene';
+import { ModeSelectScene } from '@scenes/ModeSelectScene';
 import { MainScene } from '@scenes/MainScene';
 import { GameViewport } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
@@ -10,8 +11,8 @@ import { AudioManager } from '@systems/AudioManager';
  *
  * Application entry point. Creates the single Phaser.Game instance shared
  * by every game built on this foundation and registers the base scene
- * pipeline (Boot -> Preload -> Main). Individual games plug additional
- * scenes into this same array as they're built.
+ * pipeline (Boot -> Preload -> ModeSelect -> Main). Individual games
+ * plug additional scenes into this same array as they're built.
  *
  * ARC-01: `scale` is configured with Phaser.Scale.RESIZE so the canvas
  * always fills its parent container (`#app`, styled to 100% of the
@@ -37,7 +38,7 @@ const config: Phaser.Types.Core.GameConfig = {
     min: { width: 320, height: 240 },
     max: { width: 2560, height: 1440 },
   },
-  scene: [BootScene, PreloadScene, MainScene],
+  scene: [BootScene, PreloadScene, ModeSelectScene, MainScene],
 };
 
 const game = new Phaser.Game(config);

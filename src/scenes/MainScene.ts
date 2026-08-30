@@ -5,14 +5,23 @@ import { HighScoreStore } from '@systems/HighScoreStore';
 import { Paddle } from '@entities/dx-ball/Paddle';
 import { Ball } from '@entities/dx-ball/Ball';
 import { BrickGrid } from '@entities/dx-ball/BrickGrid';
-import { LEVELS } from '@entities/dx-ball/levels';
+import { LEVELS, type LevelConfig } from '@entities/dx-ball/levels';
 import { PowerupManager } from '@entities/dx-ball/PowerupManager';
 import type { PowerupType } from '@entities/dx-ball/Powerup';
 import { playDxBallSfx } from '@entities/dx-ball/audioCues';
+import {
+  TIME_ATTACK_DURATION_MS,
+  computeEndlessSpeedMultiplier,
+  formatTimeAttackClock,
+  getGameModeInfo,
+  isGameModeId,
+  type GameModeId,
+} from '@entities/dx-ball/GameMode';
 import { AudioManager } from '@systems/AudioManager';
 import { ScoreLabel } from '@ui/ScoreLabel';
 import { ActiveEffectsLabel, type ActiveEffectDisplay } from '@ui/ActiveEffectsLabel';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
+import { ModeLabel } from '@ui/ModeLabel';
 
 /**
  * scenes/MainScene.ts
@@ -105,7 +114,19 @@ import { ArcadeBackground } from '@ui/ArcadeBackground';
  * playfield, distinct brick/powerup/fire-ball drawing, and a shared HUD
  * typeface. Score, lives, levels, powerups, and audio call sites are
  * unchanged.
+ *
+ * DXB-14 adds game modes. `init()` reads `{ mode }` from ModeSelect
+ * (default Classic). Classic is the pre-DXB-14 loop. Time Attack adds a
+ * 90s countdown that ends the run at 0 (levels wrap so the full clock
+ * can keep scoring). Endless wraps the existing `LEVELS` forever and
+ * gradually raises a progression speed fold on every live ball. Score,
+ * lives, powerups, and audio keep their existing call sites; a
+ * `ModeLabel` shows the active mode (plus the Time Attack clock).
  */
+
+export interface MainSceneData {
+  mode?: GameModeId;
+}
 const HIGH_SCORE_KEY = 'dx-ball-high-score';
 
 /** DXB-07: Starting lives per run — a placeholder tuning value, not playtested (see docs/progress/DXB-07.md). */
@@ -146,23 +167,37 @@ export class MainScene extends Phaser.Scene {
   private livesLabel!: ScoreLabel;
   private levelLabel!: ScoreLabel;
   private effectsLabel!: ActiveEffectsLabel;
+  private modeLabel!: ModeLabel;
   private background!: ArcadeBackground;
   private bestScore = 0;
   private lives = STARTING_LIVES;
   private lastMissCount = 0;
   /** DXB-08: 0-based index into `LEVELS` of the level currently in play. */
   private currentLevelIndex = 0;
+  /** DXB-14: Chosen on the mode-select screen; defaults to Classic. */
+  private mode: GameModeId = 'classic';
+  /** DXB-14: Time Attack remaining ms. Unused in other modes. */
+  private remainingTimeMs = TIME_ATTACK_DURATION_MS;
+  /** DXB-14: Endless play time used for the gradual speed ramp. */
+  private runElapsedMs = 0;
   private unsubscribeViewport?: () => void;
   private won = false;
   private lost = false;
+  /** DXB-14: Time Attack clock reached 0. Sibling to `won` / `lost`. */
+  private timedOut = false;
   /** DXB-08: True between a level being cleared and the player continuing to the next one. */
   private transitioning = false;
   private winText?: Phaser.GameObjects.Text;
   private gameOverText?: Phaser.GameObjects.Text;
+  private timeUpText?: Phaser.GameObjects.Text;
   private levelTransitionText?: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: SceneKeys.Main });
+  }
+
+  init(data: MainSceneData = {}): void {
+    this.mode = isGameModeId(data.mode) ? data.mode : 'classic';
   }
 
   create(): void {
@@ -171,16 +206,19 @@ export class MainScene extends Phaser.Scene {
 
     this.won = false;
     this.lost = false;
+    this.timedOut = false;
     this.transitioning = false;
     this.lives = STARTING_LIVES;
     this.lastMissCount = 0;
     this.currentLevelIndex = 0;
+    this.remainingTimeMs = TIME_ATTACK_DURATION_MS;
+    this.runElapsedMs = 0;
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height);
     this.paddle = new Paddle(this, snapshot.width, snapshot.height);
-    const firstLevel = LEVELS[this.currentLevelIndex];
+    const firstLevel = this.getCurrentLevel();
     this.brickGrid = new BrickGrid(this, snapshot.width, snapshot.height, firstLevel.brickGrid);
     this.balls = [
       new Ball(
@@ -216,7 +254,11 @@ export class MainScene extends Phaser.Scene {
       anchor: 'bottom-right',
     });
     this.levelLabel.setValue(this.currentLevelIndex + 1);
-    this.effectsLabel = new ActiveEffectsLabel(this, snapshot.width, snapshot.height);
+    this.modeLabel = new ModeLabel(this, snapshot.width, snapshot.height);
+    this.refreshModeLabel();
+    this.effectsLabel = new ActiveEffectsLabel(this, snapshot.width, snapshot.height, {
+      topRatio: 0.055,
+    });
 
     // The pattern every future game should follow: subscribe once, then
     // reposition/rescale whatever depends on viewport size whenever it
@@ -242,7 +284,18 @@ export class MainScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (this.won || this.lost || this.transitioning) {
+    if (this.won || this.lost || this.timedOut) {
+      return;
+    }
+
+    this.updateTimeAttack(delta);
+    if (this.timedOut) {
+      return;
+    }
+
+    this.updateEndlessSpeed(delta);
+
+    if (this.transitioning) {
       return;
     }
 
@@ -373,8 +426,56 @@ export class MainScene extends Phaser.Scene {
 
   private createServeBall(): Ball {
     const { width, height } = GameViewport.get().getSnapshot();
-    const level = LEVELS[this.currentLevelIndex];
-    return new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
+    const level = this.getCurrentLevel();
+    const ball = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
+    this.applyEndlessSpeed(ball);
+    return ball;
+  }
+
+  /** DXB-14: Current `LEVELS` entry, wrapping in Time Attack / Endless. */
+  private getCurrentLevel(): LevelConfig {
+    return LEVELS[this.currentLevelIndex % LEVELS.length];
+  }
+
+  /** DXB-14: Time Attack countdown. Ends the run at 0; paused only after the run is over. */
+  private updateTimeAttack(deltaMs: number): void {
+    if (this.mode !== 'time-attack') {
+      return;
+    }
+
+    this.remainingTimeMs = Math.max(0, this.remainingTimeMs - deltaMs);
+    this.refreshModeLabel();
+
+    if (this.remainingTimeMs <= 0) {
+      this.handleTimeUp();
+    }
+  }
+
+  /** DXB-14: Endless gradual speed ramp. No-ops in Classic / Time Attack. */
+  private updateEndlessSpeed(deltaMs: number): void {
+    if (this.mode !== 'endless') {
+      return;
+    }
+
+    this.runElapsedMs += deltaMs;
+    for (const ball of this.balls) {
+      this.applyEndlessSpeed(ball);
+    }
+  }
+
+  private applyEndlessSpeed(ball: Ball): void {
+    if (this.mode !== 'endless') {
+      return;
+    }
+
+    ball.setProgressionMultiplier(computeEndlessSpeedMultiplier(this.runElapsedMs));
+  }
+
+  private refreshModeLabel(): void {
+    const label = getGameModeInfo(this.mode).label.toUpperCase();
+    const detail =
+      this.mode === 'time-attack' ? formatTimeAttackClock(this.remainingTimeMs) : undefined;
+    this.modeLabel.setContent(label, detail);
   }
 
   /**
@@ -472,11 +573,12 @@ export class MainScene extends Phaser.Scene {
     source.copyVelocityInto(sourceVelocity);
     const launched = source.isLaunched() && sourceVelocity.length() > 0;
     const { width, height } = GameViewport.get().getSnapshot();
-    const level = LEVELS[this.currentLevelIndex];
+    const level = this.getCurrentLevel();
 
     for (let i = 0; i < needed; i++) {
       const extra = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
       extra.copyEffectsFrom(source);
+      this.applyEndlessSpeed(extra);
 
       if (launched) {
         const split = sourceVelocity.clone().rotate(
@@ -503,14 +605,14 @@ export class MainScene extends Phaser.Scene {
   /**
    * DXB-08: Called instead of `handleWin()` whenever `brickGrid.isCleared()`
    * fires and a level *after* the current one still exists in `LEVELS`.
-   * On the last level this defers straight to `handleWin()` instead —
-   * clearing a level only ever means "advance" or "win", never both.
+   * DXB-14: Classic still wins on the last level. Time Attack and Endless
+   * wrap `LEVELS` so score can keep growing (timer / lives end those runs).
    * Freezes gameplay via the new `transitioning` flag (a sibling to
    * `won`/`lost` in `update()`'s guard) and shows a one-shot "LEVEL
    * CLEARED" message; a Space press calls `advanceToNextLevel()`.
    */
   private handleLevelCleared(): void {
-    if (this.currentLevelIndex >= LEVELS.length - 1) {
+    if (this.mode === 'classic' && this.currentLevelIndex >= LEVELS.length - 1) {
       this.handleWin();
       return;
     }
@@ -526,7 +628,15 @@ export class MainScene extends Phaser.Scene {
       `LEVEL ${clearedLevelNumber} CLEARED\nGet ready for Level ${clearedLevelNumber + 1}\nPress Space to continue`,
     );
 
-    this.input.keyboard?.once('keydown-SPACE', () => this.advanceToNextLevel());
+    this.input.keyboard?.once('keydown-SPACE', () => this.continueAfterLevelClear());
+  }
+
+  private continueAfterLevelClear(): void {
+    if (this.timedOut || this.won || this.lost) {
+      return;
+    }
+
+    this.advanceToNextLevel();
   }
 
   /**
@@ -544,7 +654,7 @@ export class MainScene extends Phaser.Scene {
     this.levelTransitionText = undefined;
 
     const { width, height } = GameViewport.get().getSnapshot();
-    const level = LEVELS[this.currentLevelIndex];
+    const level = this.getCurrentLevel();
 
     this.brickGrid.loadLevel(level.brickGrid ?? {}, width, height);
 
@@ -579,10 +689,10 @@ export class MainScene extends Phaser.Scene {
     this.winText = this.createCenteredMessage(
       width,
       height,
-      `YOU WIN\nAll ${LEVELS.length} levels cleared — Score: ${finalScore}\nPress Space to play again`,
+      `YOU WIN\nAll ${LEVELS.length} levels cleared — Score: ${finalScore}\nPress Space to play again\nPress Esc to change mode`,
     );
 
-    this.input.keyboard?.once('keydown-SPACE', () => this.scene.restart());
+    this.bindEndOfRunInput();
   }
 
   /**
@@ -601,10 +711,45 @@ export class MainScene extends Phaser.Scene {
     this.gameOverText = this.createCenteredMessage(
       width,
       height,
-      `GAME OVER\nScore: ${finalScore}\nPress Space to try again`,
+      `GAME OVER\nScore: ${finalScore}\nPress Space to try again\nPress Esc to change mode`,
     );
 
-    this.input.keyboard?.once('keydown-SPACE', () => this.scene.restart());
+    this.bindEndOfRunInput();
+  }
+
+  /**
+   * DXB-14: Time Attack clock reached 0. Highest score for the run is
+   * whatever `updateScore()` already persisted. Reuses the existing
+   * game-over cue so audio stays on the same 8-event vocabulary.
+   */
+  private handleTimeUp(): void {
+    if (this.timedOut || this.won || this.lost) {
+      return;
+    }
+
+    this.timedOut = true;
+    this.transitioning = false;
+    this.levelTransitionText?.destroy();
+    this.levelTransitionText = undefined;
+    playDxBallSfx('game-over');
+
+    const { width, height } = GameViewport.get().getSnapshot();
+    const finalScore = this.brickGrid.getScore();
+    this.timeUpText = this.createCenteredMessage(
+      width,
+      height,
+      `TIME'S UP\nScore: ${finalScore}\nPress Space to play again\nPress Esc to change mode`,
+    );
+
+    this.bindEndOfRunInput();
+  }
+
+  /** Space replays the same mode; Esc returns to mode select. */
+  private bindEndOfRunInput(): void {
+    this.input.keyboard?.off('keydown-SPACE');
+    this.input.keyboard?.off('keydown-ESC');
+    this.input.keyboard?.once('keydown-SPACE', () => this.scene.restart({ mode: this.mode }));
+    this.input.keyboard?.once('keydown-ESC', () => this.scene.start(SceneKeys.ModeSelect));
   }
 
   /**
@@ -650,6 +795,7 @@ export class MainScene extends Phaser.Scene {
     this.bestScoreLabel.resize(snapshot.width, snapshot.height);
     this.livesLabel.resize(snapshot.width, snapshot.height);
     this.levelLabel.resize(snapshot.width, snapshot.height);
+    this.modeLabel.resize(snapshot.width, snapshot.height);
     this.effectsLabel.resize(snapshot.width, snapshot.height);
 
     // The win/game-over/level-transition message is still shown (and
@@ -671,6 +817,12 @@ export class MainScene extends Phaser.Scene {
       const fontSize = Math.round(snapshot.height * 0.05);
       this.levelTransitionText.setPosition(snapshot.width / 2, snapshot.height / 2);
       this.levelTransitionText.setFontSize(fontSize);
+    }
+
+    if (this.timeUpText) {
+      const fontSize = Math.round(snapshot.height * 0.05);
+      this.timeUpText.setPosition(snapshot.width / 2, snapshot.height / 2);
+      this.timeUpText.setFontSize(fontSize);
     }
   }
 }

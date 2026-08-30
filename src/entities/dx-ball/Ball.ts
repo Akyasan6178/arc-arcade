@@ -95,6 +95,10 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * DXB-13: Fire Ball is a distinct hot fill plus a larger translucent
  * glow circle behind the ball. Visual only — pierce timing and collision
  * are unchanged.
+ *
+ * DXB-14: `setProgressionMultiplier()` folds an extra speed scale into
+ * launch / resize / travel speed (used by Endless). Slow / fast still
+ * apply on top. The ball does not know game modes exist.
  */
 export interface BallConfig {
   color?: number;
@@ -167,6 +171,12 @@ export class Ball extends Phaser.GameObjects.Arc {
   private missCount = 0;
   /** DXB-09/DXB-12: Current speed multiplier — slow, fast, or `1`. */
   private speedMultiplier = 1;
+  /**
+   * DXB-14: Extra speed fold from Endless progression. Classic / Time
+   * Attack leave this at `1`. Independent of slow/fast so those
+   * powerups still apply on top. The ball does not know game modes.
+   */
+  private progressionMultiplier = 1;
   /** DXB-09: Milliseconds remaining on the current slow effect, if any. */
   private slowRemainingMs = 0;
   /** DXB-12: Milliseconds remaining on the current fast effect, if any. */
@@ -331,9 +341,33 @@ export class Ball extends Phaser.GameObjects.Arc {
     out.copy(this.velocity);
   }
 
-  /** DXB-12: Current travel speed (base × active speed multiplier). */
+  /** DXB-12/DXB-14: Current travel speed (base × powerup × progression). */
   getTravelSpeed(): number {
-    return Ball.computeSpeed(this.viewportWidth, this.viewportHeight, this.config) * this.speedMultiplier;
+    return (
+      Ball.computeSpeed(this.viewportWidth, this.viewportHeight, this.config) *
+      this.speedMultiplier *
+      this.progressionMultiplier
+    );
+  }
+
+  /**
+   * DXB-14: Sets the Endless-style progression fold. `1` is Classic /
+   * Time Attack. Rescales a launched ball immediately. The ball still
+   * does not know a "mode" exists.
+   */
+  setProgressionMultiplier(multiplier: number): void {
+    const next = Number.isFinite(multiplier) ? Math.max(0.1, multiplier) : 1;
+    if (next === this.progressionMultiplier) {
+      return;
+    }
+
+    this.progressionMultiplier = next;
+    this.applySpeedMultiplier();
+  }
+
+  /** DXB-14: Current progression fold, so Multi-Ball extras can inherit it. */
+  getProgressionMultiplier(): number {
+    return this.progressionMultiplier;
   }
 
   /**
@@ -369,6 +403,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     const slow = source.getSlowRemainingMs();
     const fast = source.getFastRemainingMs();
     const fire = source.getFireRemainingMs();
+    const progression = source.getProgressionMultiplier();
     if (slow > 0) {
       this.applySlowEffect(slow);
     }
@@ -377,6 +412,9 @@ export class Ball extends Phaser.GameObjects.Arc {
     }
     if (fire > 0) {
       this.applyFireEffect(fire);
+    }
+    if (progression !== 1) {
+      this.setProgressionMultiplier(progression);
     }
   }
 
@@ -462,7 +500,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     }
 
     const baseSpeed = Ball.computeSpeed(this.viewportWidth, this.viewportHeight, this.config);
-    this.velocity.setLength(baseSpeed * this.speedMultiplier);
+    this.velocity.setLength(baseSpeed * this.speedMultiplier * this.progressionMultiplier);
   }
 
   /**
@@ -547,7 +585,10 @@ export class Ball extends Phaser.GameObjects.Arc {
       return;
     }
 
-    const newSpeed = Ball.computeSpeed(viewportWidth, viewportHeight, this.config) * this.speedMultiplier;
+    const newSpeed =
+      Ball.computeSpeed(viewportWidth, viewportHeight, this.config) *
+      this.speedMultiplier *
+      this.progressionMultiplier;
     this.velocity.setLength(newSpeed);
 
     this.setPosition(
@@ -573,7 +614,10 @@ export class Ball extends Phaser.GameObjects.Arc {
 
   /** Transitions from `attached` to `launched`, applying the fixed launch velocity (scaled by any active slow effect). */
   private launch(): void {
-    const speed = Ball.computeSpeed(this.viewportWidth, this.viewportHeight, this.config) * this.speedMultiplier;
+    const speed =
+      Ball.computeSpeed(this.viewportWidth, this.viewportHeight, this.config) *
+      this.speedMultiplier *
+      this.progressionMultiplier;
     this.velocity.copy(Ball.computeLaunchVelocity(speed));
     this.serveState = 'launched';
   }

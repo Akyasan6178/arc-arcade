@@ -27,3 +27,9 @@ Currently:
   `Graphics` object that paints a gradient, a faint grid, static dots,
   and a vignette from viewport size only — no assets, no per-frame
   work. Not DX-Ball-specific.
+- `ModeLabel.ts` — DXB-14's top-center mode HUD (`label` + optional
+  `detail`, e.g. a Time Attack clock). Same typeface/stroke as the
+  other HUD widgets. Not DX-Ball-specific.
+- `SelectMenu.ts` — DXB-14's reusable vertical option list (arrows,
+  Space / Enter, click). Caller supplies options and an `onSelect`
+  callback. Not DX-Ball-specific.

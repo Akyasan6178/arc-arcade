@@ -14,6 +14,7 @@
 export const SceneKeys = {
   Boot: 'BootScene',
   Preload: 'PreloadScene',
+  ModeSelect: 'ModeSelectScene',
   Main: 'MainScene',
 } as const;
 
