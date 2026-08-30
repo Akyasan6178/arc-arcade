@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Brick } from '@entities/dx-ball/Brick';
+import { parseBrickLayout, type BrickType } from '@entities/dx-ball/BrickType';
 import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 
 /**
@@ -60,6 +61,17 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * already happen at that exact point — the grid still has no idea an
  * "audio system" exists beyond that one fire-and-forget call, same as
  * it has no idea what a "powerup" is beyond a spawn point.
+ *
+ * DXB-11 adds brick types without replacing this collision loop: every
+ * overlapping brick still bounces the ball (same axis-of-least-overlap
+ * math), but `Brick.takeHit()` now decides whether that bounce also
+ * destroys the brick. Metal never dies (and never scores); cracked
+ * needs two hits and only scores on the second; bonus always queues a
+ * powerup spawn on destroy; normal still rolls `powerupDropChance`.
+ * `isCleared()` now means "no destructible bricks remain" so leftover
+ * metal obstacles cannot lock a level. An optional `layout` of compact
+ * row-strings selects types per cell; omitted, every cell is a normal
+ * brick — the pre-DXB-11 default.
  */
 export interface BrickGridConfig {
   rows?: number;
@@ -83,9 +95,20 @@ export interface BrickGridConfig {
   basePointsPerRow?: number;
   /** DXB-09: Chance (0..1) that destroying one brick queues a powerup spawn at its position. */
   powerupDropChance?: number;
+  /**
+   * DXB-11: Optional per-cell brick types. Each string is one row;
+   * characters are `N` normal, `C` cracked, `M` metal, `B` bonus, `.`
+   * empty. When present, `rows`/`columns` are derived from it (those
+   * fields are ignored). When omitted, the grid is a uniform field of
+   * normal bricks — the pre-DXB-11 default.
+   */
+  layout?: readonly string[];
 }
 
-const DEFAULT_CONFIG: Required<BrickGridConfig> = {
+type ResolvedBrickGridConfig = Required<Omit<BrickGridConfig, 'layout'>> &
+  Pick<BrickGridConfig, 'layout'>;
+
+const DEFAULT_CONFIG: Required<Omit<BrickGridConfig, 'layout'>> = {
   rows: 5,
   columns: 8,
   colors: [0xe63946, 0xf3722c, 0xf9c74f, 0x90be6d, 0x4d96ff],
@@ -107,6 +130,18 @@ export interface PowerupSpawnPoint {
   y: number;
 }
 
+/**
+ * DXB-11: Result of one ball/brick overlap. Same axis the ball has
+ * always bounced on, plus a position correction so a brick that
+ * *survives* the hit (metal, or a cracked brick's first hit) cannot
+ * re-overlap on the next motion substep and get hit twice in one frame.
+ */
+export interface BrickCollisionResult {
+  axis: 'horizontal' | 'vertical';
+  separateX: number;
+  separateY: number;
+}
+
 interface GridLayout {
   sideMargin: number;
   topOffset: number;
@@ -117,7 +152,7 @@ interface GridLayout {
 
 export class BrickGrid {
   private readonly scene: Phaser.Scene;
-  private config: Required<BrickGridConfig> = DEFAULT_CONFIG;
+  private config: ResolvedBrickGridConfig = DEFAULT_CONFIG;
   private readonly bricks: Brick[] = [];
   private score = 0;
   /** DXB-09: Spawn points queued since the last `consumePendingPowerupSpawns()` call. */
@@ -142,9 +177,18 @@ export class BrickGrid {
    * `BrickGrid` instance, so the running score keeps accumulating across
    * levels instead of resetting to 0 the way a brand-new `BrickGrid`
    * (e.g. on a full scene restart) would.
+   *
+   * DXB-11: when `config.layout` is present, `rows`/`columns` are taken
+   * from that layout so the scoring formula and cell math stay in sync
+   * with the authored pattern.
    */
   loadLevel(config: BrickGridConfig, viewportWidth: number, viewportHeight: number): void {
     this.config = { ...DEFAULT_CONFIG, ...config };
+
+    if (this.config.layout && this.config.layout.length > 0) {
+      this.config.rows = this.config.layout.length;
+      this.config.columns = this.config.layout[0].length;
+    }
 
     for (const brick of this.bricks) {
       brick.destroy();
@@ -155,30 +199,32 @@ export class BrickGrid {
 
   /**
    * Checks a ball's circle (center + radius) against every remaining
-   * brick and, on the first overlap found, safely removes that brick —
-   * dropping it from the tracked list *and* destroying its Phaser game
-   * object — before returning which axis the ball should bounce along.
+   * brick and, on the first overlap found, asks that brick to take a
+   * hit. A destroyed brick is dropped from the tracked list *and*
+   * destroyed as a Phaser game object before this returns; a surviving
+   * brick (metal, or a cracked brick's first hit) stays in the list.
+   * Either way the ball bounces — this method always returns which axis
+   * to reflect, plus a separation so the ball is no longer overlapping.
    * Returns `null` if the ball isn't overlapping any brick.
    *
-   * Removing the brick from `this.bricks` before calling `destroy()`
-   * (rather than after) guarantees no later step, in this call or a
-   * future one, can ever iterate over or touch an already-destroyed
-   * brick — this is what makes the removal collision-safe.
+   * Removing a destroyed brick from `this.bricks` before calling
+   * `destroy()` (rather than after) guarantees no later step, in this
+   * call or a future one, can ever iterate over or touch an already-
+   * destroyed brick — this is what makes the removal collision-safe.
    *
-   * At most one brick is removed per call, and a hit brick disappears
-   * immediately, so the same brick can never be double-hit within a
-   * call. `Ball` calls this once per collision-checked motion substep
-   * (DXB-05 splits a launched ball's per-frame motion into substeps to
-   * avoid tunneling; see `Ball.stepLaunched()`), so a fast ball *can*
-   * destroy more than one brick within a single frame — one per
-   * substep — which is correct: substeps exist precisely so every
-   * distinct overlap along the frame's motion gets its own check.
+   * At most one brick is *hit* per call. `Ball` calls this once per
+   * collision-checked motion substep (DXB-05 splits a launched ball's
+   * per-frame motion into substeps to avoid tunneling; see
+   * `Ball.stepLaunched()`), so a fast ball *can* destroy more than one
+   * brick within a single frame — one per substep — which is correct:
+   * substeps exist precisely so every distinct overlap along the frame's
+   * motion gets its own check.
    */
   resolveBallCollision(
     ballX: number,
     ballY: number,
     ballRadius: number,
-  ): 'horizontal' | 'vertical' | null {
+  ): BrickCollisionResult | null {
     for (let i = 0; i < this.bricks.length; i++) {
       const brick = this.bricks[i];
       const halfWidth = brick.width / 2;
@@ -191,30 +237,54 @@ export class BrickGrid {
         continue;
       }
 
+      const axis: 'horizontal' | 'vertical' = overlapX < overlapY ? 'horizontal' : 'vertical';
+      const signX = ballX >= brick.x ? 1 : -1;
+      const signY = ballY >= brick.y ? 1 : -1;
+      const result: BrickCollisionResult = {
+        axis,
+        separateX: axis === 'horizontal' ? signX * overlapX : 0,
+        separateY: axis === 'vertical' ? signY * overlapY : 0,
+      };
+
+      const destroyed = brick.takeHit();
+      if (!destroyed) {
+        return result;
+      }
+
       this.bricks.splice(i, 1);
-      this.score += brick.points;
+      if (brick.awardsScore) {
+        this.score += brick.points;
+      }
       playDxBallSfx('brick-break');
 
-      // DXB-09: rolled independently of scoring/removal, right before the
-      // brick's own position is lost to `destroy()` — a hit queues a spawn
-      // point for `MainScene`/`PowerupManager` to pick up next frame.
-      if (Math.random() < this.config.powerupDropChance) {
+      // DXB-09/DXB-11: drop policy is per-type. Bonus always queues a
+      // spawn; normal/cracked still roll `powerupDropChance`; metal never
+      // reaches here. Rolled independently of scoring, right before the
+      // brick's own position is lost to `destroy()`.
+      if (brick.powerupDrop === 'always') {
+        this.pendingPowerupSpawns.push({ x: brick.x, y: brick.y });
+      } else if (
+        brick.powerupDrop === 'chance' &&
+        Math.random() < this.config.powerupDropChance
+      ) {
         this.pendingPowerupSpawns.push({ x: brick.x, y: brick.y });
       }
 
       brick.destroy();
 
-      // The axis with the *smaller* overlap is the one the ball just
-      // crossed into the brick along, so that's the axis to reflect.
-      return overlapX < overlapY ? 'horizontal' : 'vertical';
+      return result;
     }
 
     return null;
   }
 
-  /** DXB-04: True once every brick has been removed — the win condition for a level. */
+  /**
+   * DXB-04/DXB-11: True once every *destructible* brick has been
+   * removed. Remaining metal bricks are obstacles, not a clear blocker
+   * — a level with only metal left is cleared.
+   */
   isCleared(): boolean {
-    return this.bricks.length === 0;
+    return this.bricks.every((brick) => brick.isIndestructible);
   }
 
   /** DXB-06: Running total of points earned from every brick destroyed so far this level. */
@@ -249,18 +319,27 @@ export class BrickGrid {
       const { x, y } = BrickGrid.computeCellPosition(brick.row, brick.column, layout);
       brick.setPosition(x, y);
       brick.setSize(layout.brickWidth, layout.brickHeight);
+      brick.refreshAppearance();
     }
   }
 
   private createBricks(viewportWidth: number, viewportHeight: number): Brick[] {
     const layout = BrickGrid.computeLayout(viewportWidth, viewportHeight, this.config);
+    const cells = this.config.layout
+      ? parseBrickLayout(this.config.layout)
+      : BrickGrid.uniformNormalLayout(this.config.rows, this.config.columns);
     const bricks: Brick[] = [];
 
-    for (let row = 0; row < this.config.rows; row++) {
+    for (let row = 0; row < cells.length; row++) {
       const color = this.config.colors[row % this.config.colors.length];
       const points = BrickGrid.computePointsForRow(row, this.config);
 
-      for (let column = 0; column < this.config.columns; column++) {
+      for (let column = 0; column < cells[row].length; column++) {
+        const brickType = cells[row][column];
+        if (brickType === null) {
+          continue;
+        }
+
         const { x, y } = BrickGrid.computeCellPosition(row, column, layout);
         bricks.push(
           new Brick(
@@ -273,6 +352,7 @@ export class BrickGrid {
             layout.brickHeight,
             color,
             points,
+            brickType,
           ),
         );
       }
@@ -281,20 +361,34 @@ export class BrickGrid {
     return bricks;
   }
 
+  private static uniformNormalLayout(rows: number, columns: number): BrickType[][] {
+    const cells: BrickType[][] = [];
+
+    for (let row = 0; row < rows; row++) {
+      const line: BrickType[] = [];
+      for (let column = 0; column < columns; column++) {
+        line.push('normal');
+      }
+      cells.push(line);
+    }
+
+    return cells;
+  }
+
   /**
    * DXB-06: Points value for every brick in `row`. Row 0 (the back row,
    * furthest from the paddle) is worth the most, decreasing by one
    * `basePointsPerRow` multiple per row toward the paddle — the last row
    * (`rows - 1`) is worth exactly one multiple.
    */
-  private static computePointsForRow(row: number, config: Required<BrickGridConfig>): number {
+  private static computePointsForRow(row: number, config: ResolvedBrickGridConfig): number {
     return (config.rows - row) * config.basePointsPerRow;
   }
 
   private static computeLayout(
     viewportWidth: number,
     viewportHeight: number,
-    config: Required<BrickGridConfig>,
+    config: ResolvedBrickGridConfig,
   ): GridLayout {
     const sideMargin = viewportWidth * config.sideMarginRatio;
     const topOffset = viewportHeight * config.topOffsetRatio;

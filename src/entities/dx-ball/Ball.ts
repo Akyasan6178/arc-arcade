@@ -71,6 +71,12 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * paddle hit visually via velocity — the ball fires its own hit sound
  * the same way it already owns its own bounce, no new "audio system"
  * dependency threaded in from `MainScene`.
+ *
+ * DXB-11: brick collision still goes through `BrickGrid.resolveBallCollision()`
+ * (same overlap math, still one brick per substep). The grid now also
+ * returns a separation vector so a brick that survives the hit (metal,
+ * cracked first hit) cannot be re-overlapped on the next substep. The
+ * ball still only reflects its own velocity and never knows brick types.
  */
 export interface BallConfig {
   color?: number;
@@ -414,19 +420,29 @@ export class Ball extends Phaser.GameObjects.Arc {
 
   /**
    * Asks the brick grid whether this ball is overlapping a brick and, if
-   * so, bounces off it. `BrickGrid.resolveBallCollision()` already
-   * removed the brick (safely) by the time this returns, so this method
-   * only ever needs to react on the ball's own velocity — it never
-   * touches a brick or the grid's internal list directly.
+   * so, bounces off it. `BrickGrid.resolveBallCollision()` still owns
+   * hit-point / removal / scoring / drops (DXB-11: a hit no longer always
+   * destroys the brick — metal and a cracked brick's first hit survive).
+   * This method only ever reacts on the ball: reflect velocity on the
+   * reported axis, then apply the grid's separation so a surviving brick
+   * cannot be re-hit on the next motion substep. Never touches a brick
+   * or the grid's internal list directly.
    */
   private resolveBrickCollisions(): void {
-    const axis = this.brickGrid.resolveBallCollision(this.x, this.y, this.radius);
+    const hit = this.brickGrid.resolveBallCollision(this.x, this.y, this.radius);
 
-    if (axis === 'horizontal') {
+    if (!hit) {
+      return;
+    }
+
+    if (hit.axis === 'horizontal') {
       this.velocity.x = -this.velocity.x;
-    } else if (axis === 'vertical') {
+    } else {
       this.velocity.y = -this.velocity.y;
     }
+
+    this.x += hit.separateX;
+    this.y += hit.separateY;
   }
 
   private static computeRadius(

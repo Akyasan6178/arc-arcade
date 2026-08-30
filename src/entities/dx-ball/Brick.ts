@@ -1,4 +1,9 @@
 import Phaser from 'phaser';
+import {
+  BRICK_TYPE_SPECS,
+  type BrickPowerupDrop,
+  type BrickType,
+} from '@entities/dx-ball/BrickType';
 
 /**
  * entities/dx-ball/Brick.ts
@@ -16,11 +21,29 @@ import Phaser from 'phaser';
  * construction by `BrickGrid` (which decides the row-based scoring rule)
  * and never mutated afterwards — the brick just carries it, the same way
  * it carries `row`/`column`.
+ *
+ * DXB-11 adds `brickType`: this brick's type identity (`normal` /
+ * `cracked` / `metal` / `bonus`), looked up in `BRICK_TYPE_SPECS` rather
+ * than switched on here. The brick owns remaining hit-points and its
+ * own appearance (healthy vs. cracked fill/stroke; metal/bonus color
+ * overrides) and reports `takeHit()` so `BrickGrid` can keep using the
+ * same overlap loop — it still decides bounce/score/drop/removal, this
+ * class only answers "did that hit destroy me?" and redraws itself.
  */
+
+export type { BrickType } from '@entities/dx-ball/BrickType';
+
 export class Brick extends Phaser.GameObjects.Rectangle {
   readonly row: number;
   readonly column: number;
   readonly points: number;
+  readonly brickType: BrickType;
+  readonly awardsScore: boolean;
+  readonly powerupDrop: BrickPowerupDrop;
+
+  /** Row color assigned by the grid; cracked/normal fills start from this. */
+  private readonly rowColor: number;
+  private remainingHits: number;
 
   constructor(
     scene: Phaser.Scene,
@@ -32,13 +55,88 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     height: number,
     color: number,
     points: number,
+    brickType: BrickType = 'normal',
   ) {
-    super(scene, x, y, width, height, color);
+    const spec = BRICK_TYPE_SPECS[brickType];
+    super(scene, x, y, width, height, spec.fillColor ?? color);
 
     this.row = row;
     this.column = column;
     this.points = points;
+    this.brickType = brickType;
+    this.awardsScore = spec.awardsScore;
+    this.powerupDrop = spec.powerupDrop;
+    this.rowColor = color;
+    this.remainingHits = spec.hitsToDestroy;
 
     scene.add.existing(this);
+    this.applyVisuals();
   }
+
+  /**
+   * True for types that can never be destroyed (metal). Remaining metal
+   * bricks are obstacles, not a win-condition blocker — see
+   * `BrickGrid.isCleared()`.
+   */
+  get isIndestructible(): boolean {
+    return !Number.isFinite(this.remainingHits);
+  }
+
+  /** Hits still required before this brick is destroyed. */
+  get remainingHitPoints(): number {
+    return this.remainingHits;
+  }
+
+  /**
+   * Apply one hit. Returns `true` when this hit destroyed the brick
+   * (caller should then score/drop/remove it). Metal always returns
+   * `false` and does not change appearance; a healthy cracked brick
+   * enters its damaged visual state and returns `false`.
+   */
+  takeHit(): boolean {
+    if (!Number.isFinite(this.remainingHits)) {
+      return false;
+    }
+
+    this.remainingHits -= 1;
+    this.applyVisuals();
+    return this.remainingHits <= 0;
+  }
+
+  /**
+   * Re-applies fill/stroke after a size change (viewport resize). Hit
+   * state is unchanged — only the stroke width needs to track the new
+   * brick height.
+   */
+  refreshAppearance(): void {
+    this.applyVisuals();
+  }
+
+  private applyVisuals(): void {
+    const spec = BRICK_TYPE_SPECS[this.brickType];
+    const isCrackedDamaged = this.brickType === 'cracked' && this.remainingHits === 1;
+
+    const fill = isCrackedDamaged
+      ? darkenColor(this.rowColor, spec.crackedFillDarken ?? 0.45)
+      : (spec.fillColor ?? this.rowColor);
+    this.setFillStyle(fill);
+
+    const strokeColor = isCrackedDamaged
+      ? (spec.crackedStrokeColor ?? spec.strokeColor)
+      : spec.strokeColor;
+    const strokeWidth = Math.max(2, this.height * 0.12);
+
+    if (strokeColor !== undefined) {
+      this.setStrokeStyle(strokeWidth, strokeColor);
+    } else {
+      this.setStrokeStyle(0);
+    }
+  }
+}
+
+function darkenColor(color: number, factor: number): number {
+  const r = Math.round(((color >> 16) & 0xff) * factor);
+  const g = Math.round(((color >> 8) & 0xff) * factor);
+  const b = Math.round((color & 0xff) * factor);
+  return (r << 16) | (g << 8) | b;
 }
