@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { Paddle } from '@entities/dx-ball/Paddle';
 import type { BrickGrid } from '@entities/dx-ball/BrickGrid';
+import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 
 /**
  * entities/dx-ball/Ball.ts
@@ -63,6 +64,13 @@ import type { BrickGrid } from '@entities/dx-ball/BrickGrid';
  * without the ball needing three different code paths. Same "entity
  * owns its own state/behavior" pattern `Paddle.applyWidenBoost()` uses —
  * the ball still has no idea a "powerup" exists.
+ *
+ * DXB-10 adds one audio cue: `resolvePaddleCollision()` now plays the
+ * "paddle hit" sound effect (`playDxBallSfx()`) the instant it detects a
+ * real overlap, mirroring how this same method already reacts to a
+ * paddle hit visually via velocity — the ball fires its own hit sound
+ * the same way it already owns its own bounce, no new "audio system"
+ * dependency threaded in from `MainScene`.
  */
 export interface BallConfig {
   color?: number;
@@ -126,6 +134,13 @@ export class Ball extends Phaser.GameObjects.Arc {
   private speedMultiplier = 1;
   /** DXB-09: Milliseconds remaining on the current slow effect, if any. */
   private slowRemainingMs = 0;
+  /**
+   * DXB-10: True while the ball is currently overlapping the paddle.
+   * Paddle-hit audio fires on the rising edge only, so a single contact
+   * that spans several DXB-05 motion substeps (the paddle does not push
+   * the ball out of overlap) does not replay the cue every substep.
+   */
+  private overlappingPaddle = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -331,6 +346,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.velocity.set(0, 0);
     this.serveState = 'attached';
     this.missCount++;
+    this.overlappingPaddle = false;
     this.followPaddle();
   }
 
@@ -389,6 +405,11 @@ export class Ball extends Phaser.GameObjects.Arc {
       const offset = this.paddle.computeHitOffset(this.x);
       this.velocity.copy(Ball.computePaddleBounceVelocity(offset, this.velocity.length()));
     }
+
+    if (axis && !this.overlappingPaddle) {
+      playDxBallSfx('paddle-hit');
+    }
+    this.overlappingPaddle = axis !== null;
   }
 
   /**

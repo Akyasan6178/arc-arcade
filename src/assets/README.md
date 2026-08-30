@@ -9,4 +9,10 @@ so they're copied verbatim to the build output; this `src/assets/` folder
 is reserved for asset *manifests*/*keys* and any TypeScript describing what
 to load and how, per game (e.g. `assets/dx-ball/manifest.ts`).
 
-Intentionally empty for now — no assets have been added yet.
+Intentionally empty of actual binary assets so far — no image/audio files
+exist yet. DXB-10 adds the first manifest file, `dx-ball/audio-manifest.ts`
+(currently an empty `DX_BALL_AUDIO_MANIFEST` array), the designated place
+for real DX-Ball audio files once any exist; `PreloadScene` already loads
+every entry in it. Until then, every DX-Ball sound effect plays through
+`AudioManager`'s synthesized fallback instead (see
+`entities/dx-ball/audioCues.ts` and `systems/AudioManager.ts`).

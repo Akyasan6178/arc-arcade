@@ -8,6 +8,8 @@ import { BrickGrid } from '@entities/dx-ball/BrickGrid';
 import { LEVELS } from '@entities/dx-ball/levels';
 import { PowerupManager } from '@entities/dx-ball/PowerupManager';
 import type { PowerupType } from '@entities/dx-ball/Powerup';
+import { playDxBallSfx } from '@entities/dx-ball/audioCues';
+import { AudioManager } from '@systems/AudioManager';
 import { ScoreLabel } from '@ui/ScoreLabel';
 
 /**
@@ -75,6 +77,17 @@ import { ScoreLabel } from '@ui/ScoreLabel';
  * delegate to `paddle.applyWidenBoost()`/`ball.applySlowEffect()`).
  * `powerupManager` itself never touches `Ball` or lives — see its own
  * doc comment for why.
+ *
+ * DXB-10 adds the four remaining audio cues this scene itself owns
+ * (`playDxBallSfx()`, right alongside the code that already detects each
+ * event): "life lost" in `updateLives()` the instant lives actually
+ * decrement, "level complete" in `handleLevelCleared()` (only on a
+ * non-final level — the final one defers straight to `handleWin()`,
+ * which plays "victory" instead so the two never both fire for the same
+ * clear), "game over" in `handleGameOver()`, and "victory" in
+ * `handleWin()`. `create()` also wires a global mute toggle (the `M`
+ * key) directly to `AudioManager.get().toggle()` — a keybinding, not a
+ * new HUD element, per this task's own "no visual redesign" restriction.
  */
 const HIGH_SCORE_KEY = 'dx-ball-high-score';
 
@@ -164,6 +177,19 @@ export class MainScene extends Phaser.Scene {
     // Scenes own their subscriptions: unsubscribe on shutdown so nothing
     // leaks if this scene is stopped/restarted.
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubscribeViewport?.());
+
+    // DXB-10: global audio mute toggle. A keybinding rather than a HUD
+    // button/icon, per this task's "no visual redesign" restriction; the
+    // listener itself is on `this.input.keyboard` (scene-scoped), so it's
+    // torn down automatically on shutdown/restart like every other
+    // per-scene input listener already is.
+    this.input.keyboard?.on('keydown-M', () => {
+      try {
+        AudioManager.get().toggle();
+      } catch {
+        // AudioManager missing/unavailable — ignore the toggle.
+      }
+    });
   }
 
   update(_time: number, delta: number): void {
@@ -225,6 +251,7 @@ export class MainScene extends Phaser.Scene {
     this.lastMissCount = missCount;
     this.lives = Math.max(0, this.lives - newMisses);
     this.livesLabel.setValue(this.lives);
+    playDxBallSfx('life-lost');
   }
 
   /**
@@ -277,6 +304,7 @@ export class MainScene extends Phaser.Scene {
       return;
     }
 
+    playDxBallSfx('level-complete');
     this.transitioning = true;
 
     const { width, height } = GameViewport.get().getSnapshot();
@@ -330,6 +358,7 @@ export class MainScene extends Phaser.Scene {
    */
   private handleWin(): void {
     this.won = true;
+    playDxBallSfx('victory');
 
     const { width, height } = GameViewport.get().getSnapshot();
     const finalScore = this.brickGrid.getScore();
@@ -351,6 +380,7 @@ export class MainScene extends Phaser.Scene {
    */
   private handleGameOver(): void {
     this.lost = true;
+    playDxBallSfx('game-over');
 
     const { width, height } = GameViewport.get().getSnapshot();
     const finalScore = this.brickGrid.getScore();

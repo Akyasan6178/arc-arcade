@@ -26,3 +26,15 @@ Currently:
   `get(key)` / `set(key, value)` wrapper around `localStorage`, keyed by
   a caller-provided string so each game picks its own key without this
   file knowing anything about that game's scoring rules.
+- `AudioManager.ts` — DXB-10 audio manager (the "music/sfx pooling, mute
+  state" example above, now built). `AudioManager.init(game)` once (see
+  `main.ts`), then `AudioManager.get().play(key, fallback)` from
+  anywhere: plays a real asset loaded under `key` if one exists in
+  Phaser's audio cache, otherwise synthesizes `fallback` (a short
+  `ToneSpec`) directly via the Web Audio API — today's real playback
+  path for every sound effect, since no real audio files exist in this
+  project yet. A global `enabled` flag (persisted, `isEnabled()` /
+  `setEnabled()` / `toggle()`) gates every sound; every operation is
+  defensive and never throws. Knows nothing about DX-Ball or any other
+  game's specific sound effects — see `entities/dx-ball/audioCues.ts`
+  for that game's own key/tone vocabulary.

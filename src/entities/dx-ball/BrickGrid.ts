@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Brick } from '@entities/dx-ball/Brick';
+import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 
 /**
  * entities/dx-ball/BrickGrid.ts
@@ -52,6 +53,13 @@ import { Brick } from '@entities/dx-ball/Brick';
  * it being caught are all owned by `entities/dx-ball/PowerupManager.ts`
  * and `MainScene`, which poll `consumePendingPowerupSpawns()` every
  * frame the exact same way they already poll `getScore()`/`isCleared()`.
+ *
+ * DXB-10 adds one audio cue: `resolveBallCollision()` now plays the
+ * "brick break" sound effect (`playDxBallSfx()`) the instant it removes
+ * a brick, right alongside the scoring/powerup-roll side effects that
+ * already happen at that exact point — the grid still has no idea an
+ * "audio system" exists beyond that one fire-and-forget call, same as
+ * it has no idea what a "powerup" is beyond a spawn point.
  */
 export interface BrickGridConfig {
   rows?: number;
@@ -185,6 +193,7 @@ export class BrickGrid {
 
       this.bricks.splice(i, 1);
       this.score += brick.points;
+      playDxBallSfx('brick-break');
 
       // DXB-09: rolled independently of scoring/removal, right before the
       // brick's own position is lost to `destroy()` — a hit queues a spawn

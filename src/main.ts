@@ -3,6 +3,7 @@ import { BootScene } from '@scenes/BootScene';
 import { PreloadScene } from '@scenes/PreloadScene';
 import { MainScene } from '@scenes/MainScene';
 import { GameViewport } from '@systems/GameViewport';
+import { AudioManager } from '@systems/AudioManager';
 
 /**
  * src/main.ts
@@ -41,3 +42,8 @@ const game = new Phaser.Game(config);
 // Single shared responsive-viewport service. Initialized once here so any
 // scene can call `GameViewport.get()` from this point on.
 GameViewport.init(game);
+
+// DXB-10: Single shared audio service, same singleton shape as
+// `GameViewport` above. Initialized once here so any scene/entity can
+// call `AudioManager.get()` from this point on.
+AudioManager.init(game);

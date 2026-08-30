@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Paddle } from '@entities/dx-ball/Paddle';
 import { Powerup, type PowerupType } from '@entities/dx-ball/Powerup';
+import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 
 /**
  * entities/dx-ball/PowerupManager.ts
@@ -23,6 +24,13 @@ import { Powerup, type PowerupType } from '@entities/dx-ball/Powerup';
  * every DX-Ball level transition (DXB-08), while the paddle and this
  * manager both live for an entire run — holding onto a `Ball` reference
  * here would go stale the moment a level advanced.
+ *
+ * DXB-10 adds two audio cues: `spawn()` plays "powerup spawn" the instant
+ * a capsule is created, and `update()` plays "powerup collect" the
+ * instant one is caught — both fired directly at the point each event
+ * actually happens, the same way `BrickGrid`/`Ball` fire their own
+ * break/hit cues, rather than being inferred later by `MainScene` from
+ * the caught-queue it drains afterward.
  */
 export interface PowerupManagerConfig {
   /** Which effect types can spawn; one is picked at random per `spawn()` call. */
@@ -73,6 +81,7 @@ export class PowerupManager {
     const fallSpeed = this.viewportHeight * this.config.fallSpeedRatio;
 
     this.capsules.push(new Powerup(this.scene, x, y, width, height, fallSpeed, type));
+    playDxBallSfx('powerup-spawn');
   }
 
   /**
@@ -90,6 +99,7 @@ export class PowerupManager {
 
       if (this.overlapsPaddle(capsule)) {
         this.caughtQueue.push(capsule.type);
+        playDxBallSfx('powerup-collect');
         this.removeCapsuleAt(i);
         continue;
       }
