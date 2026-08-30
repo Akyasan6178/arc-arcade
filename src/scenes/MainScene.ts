@@ -23,6 +23,9 @@ import { ActiveEffectsLabel, type ActiveEffectDisplay } from '@ui/ActiveEffectsL
 import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { ModeLabel } from '@ui/ModeLabel';
 import { PauseOverlay, type PauseOverlayAction } from '@ui/PauseOverlay';
+import { ResultOverlay } from '@ui/ResultOverlay';
+import { getTheme, loadThemeId, type ThemeDefinition } from '@entities/dx-ball/Theme';
+import type { BrickGridConfig } from '@entities/dx-ball/BrickGrid';
 
 /**
  * scenes/MainScene.ts
@@ -128,6 +131,11 @@ import { PauseOverlay, type PauseOverlayAction } from '@ui/PauseOverlay';
  * To Mode Selection) from every gameplay state. The campaign is 5
  * levels; the HUD shows `Level X / 5`. Score, lives, and high score
  * still carry across the sequence on the same `BrickGrid`.
+ *
+ * DXB-15: reads the persisted theme and applies it to the backdrop,
+ * HUD, brick row/type colors, powerup palette, pause card, and
+ * result cards (victory / game over / time-up / level-clear). No
+ * gameplay call site is replaced.
  */
 
 export interface MainSceneData {
@@ -175,7 +183,9 @@ export class MainScene extends Phaser.Scene {
   private effectsLabel!: ActiveEffectsLabel;
   private modeLabel!: ModeLabel;
   private pauseOverlay!: PauseOverlay;
+  private resultOverlay!: ResultOverlay;
   private background!: ArcadeBackground;
+  private theme!: ThemeDefinition;
   private bestScore = 0;
   private lives = STARTING_LIVES;
   private lastMissCount = 0;
@@ -196,10 +206,6 @@ export class MainScene extends Phaser.Scene {
   private paused = false;
   /** DXB-08: True between a level being cleared and the player continuing to the next one. */
   private transitioning = false;
-  private winText?: Phaser.GameObjects.Text;
-  private gameOverText?: Phaser.GameObjects.Text;
-  private timeUpText?: Phaser.GameObjects.Text;
-  private levelTransitionText?: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: SceneKeys.Main });
@@ -224,12 +230,24 @@ export class MainScene extends Phaser.Scene {
     this.remainingTimeMs = TIME_ATTACK_DURATION_MS;
     this.runElapsedMs = 0;
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
+    this.theme = getTheme(loadThemeId());
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
-    this.background = new ArcadeBackground(this, snapshot.width, snapshot.height);
+    this.cameras.main.setBackgroundColor(this.theme.backdrop.canvasBackground);
+    this.background = new ArcadeBackground(
+      this,
+      snapshot.width,
+      snapshot.height,
+      this.theme.backdrop,
+    );
     this.paddle = new Paddle(this, snapshot.width, snapshot.height);
     const firstLevel = this.getCurrentLevel();
-    this.brickGrid = new BrickGrid(this, snapshot.width, snapshot.height, firstLevel.brickGrid);
+    this.brickGrid = new BrickGrid(
+      this,
+      snapshot.width,
+      snapshot.height,
+      this.withThemeBricks(firstLevel.brickGrid),
+    );
     this.balls = [
       new Ball(
         this,
@@ -240,37 +258,55 @@ export class MainScene extends Phaser.Scene {
         firstLevel.ball,
       ),
     ];
-    this.powerupManager = new PowerupManager(this, snapshot.width, snapshot.height, this.paddle);
+    this.powerupManager = new PowerupManager(this, snapshot.width, snapshot.height, this.paddle, {
+      palette: this.theme.powerups,
+    });
     this.scoreLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Score: ',
-      color: '#f8f9fa',
+      color: this.theme.hud.score,
+      stroke: this.theme.hud.stroke,
       anchor: 'top-left',
     });
     this.bestScoreLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Best: ',
-      color: '#ffd166',
+      color: this.theme.hud.best,
+      stroke: this.theme.hud.stroke,
       anchor: 'top-right',
     });
     this.bestScoreLabel.setValue(this.bestScore);
     this.livesLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Lives: ',
-      color: '#95d5b2',
+      color: this.theme.hud.lives,
+      stroke: this.theme.hud.stroke,
       anchor: 'bottom-left',
     });
     this.livesLabel.setValue(this.lives);
     this.levelLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Level ',
-      color: '#90e0ef',
+      color: this.theme.hud.level,
+      stroke: this.theme.hud.stroke,
       anchor: 'bottom-right',
       fontSizeRatio: 0.032,
     });
     this.refreshLevelLabel();
-    this.modeLabel = new ModeLabel(this, snapshot.width, snapshot.height);
+    this.modeLabel = new ModeLabel(this, snapshot.width, snapshot.height, {
+      color: this.theme.hud.mode,
+    });
     this.refreshModeLabel();
     this.effectsLabel = new ActiveEffectsLabel(this, snapshot.width, snapshot.height, {
       topRatio: 0.055,
+      color: this.theme.hud.effects,
     });
     this.pauseOverlay = new PauseOverlay(this, snapshot.width, snapshot.height);
+    this.pauseOverlay.applyTheme({
+      ...this.theme.overlay,
+      menuColor: this.theme.menu.color,
+      menuHighlight: this.theme.menu.highlightColor,
+      menuDescription: this.theme.menu.descriptionColor,
+      menuMuted: this.theme.menu.mutedColor,
+    });
+    this.resultOverlay = new ResultOverlay(this, snapshot.width, snapshot.height);
+    this.resultOverlay.applyTheme(this.theme.overlay);
 
     // The pattern every future game should follow: subscribe once, then
     // reposition/rescale whatever depends on viewport size whenever it
@@ -636,13 +672,12 @@ export class MainScene extends Phaser.Scene {
     playDxBallSfx('level-complete');
     this.transitioning = true;
 
-    const { width, height } = GameViewport.get().getSnapshot();
     const clearedLevelNumber = this.currentLevelIndex + 1;
-    this.levelTransitionText = this.createCenteredMessage(
-      width,
-      height,
-      `LEVEL ${clearedLevelNumber} CLEARED\nGet ready for Level ${clearedLevelNumber + 1}\nPress Space to continue`,
-    );
+    this.resultOverlay.show({
+      tone: 'info',
+      title: `LEVEL ${clearedLevelNumber} CLEARED`,
+      body: `Get ready for Level ${clearedLevelNumber + 1}\nPress Space to continue`,
+    });
 
     this.input.keyboard?.once('keydown-SPACE', () => this.continueAfterLevelClear());
   }
@@ -666,13 +701,12 @@ export class MainScene extends Phaser.Scene {
    */
   private advanceToNextLevel(): void {
     this.currentLevelIndex++;
-    this.levelTransitionText?.destroy();
-    this.levelTransitionText = undefined;
+    this.resultOverlay.hide();
 
     const { width, height } = GameViewport.get().getSnapshot();
     const level = this.getCurrentLevel();
 
-    this.brickGrid.loadLevel(level.brickGrid ?? {}, width, height);
+    this.brickGrid.loadLevel(this.withThemeBricks(level.brickGrid), width, height);
 
     for (const ball of this.balls) {
       ball.destroy();
@@ -700,13 +734,12 @@ export class MainScene extends Phaser.Scene {
     this.won = true;
     playDxBallSfx('victory');
 
-    const { width, height } = GameViewport.get().getSnapshot();
     const finalScore = this.brickGrid.getScore();
-    this.winText = this.createCenteredMessage(
-      width,
-      height,
-      `YOU WIN\nAll ${LEVELS.length} levels cleared — Score: ${finalScore}\nPress Space to play again\nPress Esc for menu`,
-    );
+    this.resultOverlay.show({
+      tone: 'victory',
+      title: 'YOU WIN',
+      body: `All ${LEVELS.length} levels cleared\nScore: ${finalScore}\nPress Space to play again\nPress Esc for menu`,
+    });
 
     this.bindEndOfRunInput();
   }
@@ -722,13 +755,12 @@ export class MainScene extends Phaser.Scene {
     this.lost = true;
     playDxBallSfx('game-over');
 
-    const { width, height } = GameViewport.get().getSnapshot();
     const finalScore = this.brickGrid.getScore();
-    this.gameOverText = this.createCenteredMessage(
-      width,
-      height,
-      `GAME OVER\nScore: ${finalScore}\nPress Space to try again\nPress Esc for menu`,
-    );
+    this.resultOverlay.show({
+      tone: 'defeat',
+      title: 'GAME OVER',
+      body: `Score: ${finalScore}\nPress Space to try again\nPress Esc for menu`,
+    });
 
     this.bindEndOfRunInput();
   }
@@ -745,17 +777,15 @@ export class MainScene extends Phaser.Scene {
 
     this.timedOut = true;
     this.transitioning = false;
-    this.levelTransitionText?.destroy();
-    this.levelTransitionText = undefined;
+    this.resultOverlay.hide();
     playDxBallSfx('game-over');
 
-    const { width, height } = GameViewport.get().getSnapshot();
     const finalScore = this.brickGrid.getScore();
-    this.timeUpText = this.createCenteredMessage(
-      width,
-      height,
-      `TIME'S UP\nScore: ${finalScore}\nPress Space to play again\nPress Esc for menu`,
-    );
+    this.resultOverlay.show({
+      tone: 'defeat',
+      title: "TIME'S UP",
+      body: `Score: ${finalScore}\nPress Space to play again\nPress Esc for menu`,
+    });
 
     this.bindEndOfRunInput();
   }
@@ -831,30 +861,13 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  /**
-   * Shared layout for the win/game-over/level-transition messages:
-   * centered, responsive-size, multi-line text.
-   */
-  private createCenteredMessage(
-    viewportWidth: number,
-    viewportHeight: number,
-    message: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.05);
-
-    return this.add
-      .text(viewportWidth / 2, viewportHeight / 2, message, {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color: '#f8f9fa',
-        fontStyle: 'bold',
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 6,
-      })
-      .setOrigin(0.5)
-      .setShadow(1, 2, '#000000', 4, true, true)
-      .setDepth(30);
+  /** DXB-15: Level layouts stay authored; only palette tokens come from the theme. */
+  private withThemeBricks(config: BrickGridConfig | undefined): BrickGridConfig {
+    return {
+      ...config,
+      colors: this.theme.bricks.rowColors,
+      typeVisuals: this.theme.bricks.types,
+    };
   }
 
   private handleViewportChange(snapshot: ViewportSnapshot): void {
@@ -877,32 +890,6 @@ export class MainScene extends Phaser.Scene {
     this.modeLabel.resize(snapshot.width, snapshot.height);
     this.effectsLabel.resize(snapshot.width, snapshot.height);
     this.pauseOverlay.resize(snapshot.width, snapshot.height);
-
-    // The win/game-over/level-transition message is still shown (and
-    // still responsive) while it's up, so it needs to follow resizes the
-    // same way every other on-screen element does.
-    if (this.winText) {
-      const fontSize = Math.round(snapshot.height * 0.05);
-      this.winText.setPosition(snapshot.width / 2, snapshot.height / 2);
-      this.winText.setFontSize(fontSize);
-    }
-
-    if (this.gameOverText) {
-      const fontSize = Math.round(snapshot.height * 0.05);
-      this.gameOverText.setPosition(snapshot.width / 2, snapshot.height / 2);
-      this.gameOverText.setFontSize(fontSize);
-    }
-
-    if (this.levelTransitionText) {
-      const fontSize = Math.round(snapshot.height * 0.05);
-      this.levelTransitionText.setPosition(snapshot.width / 2, snapshot.height / 2);
-      this.levelTransitionText.setFontSize(fontSize);
-    }
-
-    if (this.timeUpText) {
-      const fontSize = Math.round(snapshot.height * 0.05);
-      this.timeUpText.setPosition(snapshot.width / 2, snapshot.height / 2);
-      this.timeUpText.setFontSize(fontSize);
-    }
+    this.resultOverlay.resize(snapshot.width, snapshot.height);
   }
 }

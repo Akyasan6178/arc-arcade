@@ -2,69 +2,69 @@ import Phaser from 'phaser';
 import { SceneKeys } from '@systems/SceneKeys';
 import { GameViewport, type ViewportSnapshot } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
-import { GAME_MODES, type GameModeId } from '@entities/dx-ball/GameMode';
-import { getTheme, loadThemeId } from '@entities/dx-ball/Theme';
+import {
+  THEME_INFOS,
+  getTheme,
+  loadThemeId,
+  saveThemeId,
+  type ThemeId,
+} from '@entities/dx-ball/Theme';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { SelectMenu } from '@ui/SelectMenu';
 
 /**
- * scenes/ModeSelectScene.ts
+ * scenes/ThemeSelectScene.ts
  *
- * DXB-14: The pre-run mode picker. Sits between ThemeSelect (DXB-15)
- * and `MainScene` so every run starts with an explicit Classic / Time
- * Attack / Endless choice. Owns no gameplay — it only paints the
- * themed backdrop, a title, and a `SelectMenu`, then starts
- * `MainScene` with `{ mode }`.
+ * DXB-15: Pre-run theme picker. Sits between `PreloadScene` and
+ * `ModeSelectScene` so every session starts with an explicit visual
+ * identity. Owns no gameplay — it paints a live-preview backdrop, a
+ * title, and a `SelectMenu`, then starts `ModeSelectScene`.
  *
- * Esc returns to ThemeSelect. Space on an ended run in MainScene
- * restarts the same mode instead.
+ * Returning here from ModeSelect (Esc) lets the player change theme
+ * without starting a run.
  */
-export class ModeSelectScene extends Phaser.Scene {
+export class ThemeSelectScene extends Phaser.Scene {
   private background!: ArcadeBackground;
   private titleText!: Phaser.GameObjects.Text;
   private subtitleText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
-  private themeHintText!: Phaser.GameObjects.Text;
-  private menu!: SelectMenu<GameModeId>;
+  private menu!: SelectMenu<ThemeId>;
   private unsubscribeViewport?: () => void;
 
   constructor() {
-    super({ key: SceneKeys.ModeSelect });
+    super({ key: SceneKeys.ThemeSelect });
   }
 
   create(): void {
     const viewport = GameViewport.get();
     const snapshot = viewport.getSnapshot();
-    const theme = getTheme(loadThemeId());
+    const currentId = loadThemeId();
+    const current = getTheme(currentId);
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
-    this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
-    this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
-    this.titleText = this.createTitle(snapshot.width, snapshot.height, theme.hud.title);
-    this.subtitleText = this.createSubtitle(snapshot.width, snapshot.height, theme.hud.subtitle);
-    this.themeHintText = this.createThemeHint(
-      snapshot.width,
-      snapshot.height,
-      theme.label,
-      theme.hud.hint,
-    );
-    this.hintText = this.createHint(snapshot.width, snapshot.height, theme.hud.hint);
+    this.cameras.main.setBackgroundColor(current.backdrop.canvasBackground);
+    this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, current.backdrop);
+    this.titleText = this.createTitle(snapshot.width, snapshot.height, current.hud);
+    this.subtitleText = this.createSubtitle(snapshot.width, snapshot.height, current.hud);
+    this.hintText = this.createHint(snapshot.width, snapshot.height, current.hud);
     this.menu = new SelectMenu(
       this,
       snapshot.width,
       snapshot.height,
-      ModeSelectScene.menuOriginY(snapshot.height),
-      GAME_MODES.map((mode) => ({
-        id: mode.id,
-        title: mode.label,
-        description: mode.description,
+      ThemeSelectScene.menuOriginY(snapshot.height),
+      THEME_INFOS.map((theme) => ({
+        id: theme.id,
+        title: theme.label,
+        description: theme.description,
       })),
-      (mode) => this.scene.start(SceneKeys.Main, { mode }),
+      (theme) => this.confirmTheme(theme),
       {
-        color: theme.menu.color,
-        highlightColor: theme.menu.highlightColor,
-        descriptionColor: theme.menu.descriptionColor,
-        mutedColor: theme.menu.mutedColor,
+        initialIndex: Math.max(0, THEME_INFOS.findIndex((theme) => theme.id === currentId)),
+        onHighlight: (theme) => this.previewTheme(theme),
+        color: current.menu.color,
+        highlightColor: current.menu.highlightColor,
+        descriptionColor: current.menu.descriptionColor,
+        mutedColor: current.menu.mutedColor,
       },
     );
 
@@ -78,23 +78,33 @@ export class ModeSelectScene extends Phaser.Scene {
         // AudioManager missing/unavailable — ignore the toggle.
       }
     });
+  }
 
-    this.input.keyboard?.on('keydown-ESC', () => {
-      this.scene.start(SceneKeys.ThemeSelect);
-    });
+  private confirmTheme(id: ThemeId): void {
+    saveThemeId(id);
+    this.scene.start(SceneKeys.ModeSelect);
+  }
+
+  private previewTheme(id: ThemeId): void {
+    const theme = getTheme(id);
+    this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
+    this.background.applyTheme(theme.backdrop);
+    this.titleText.setColor(theme.hud.title);
+    this.subtitleText.setColor(theme.hud.subtitle);
+    this.hintText.setColor(theme.hud.hint);
   }
 
   private createTitle(
     viewportWidth: number,
     viewportHeight: number,
-    color: string,
+    hud: { title: string },
   ): Phaser.GameObjects.Text {
     const fontSize = Math.round(viewportHeight * 0.08);
     return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.1, 'DX-BALL', {
+      .text(viewportWidth / 2, viewportHeight * 0.12, 'DX-BALL', {
         fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
         fontSize: `${fontSize}px`,
-        color,
+        color: hud.title,
         fontStyle: 'bold',
         align: 'center',
         stroke: '#0b1320',
@@ -108,14 +118,14 @@ export class ModeSelectScene extends Phaser.Scene {
   private createSubtitle(
     viewportWidth: number,
     viewportHeight: number,
-    color: string,
+    hud: { subtitle: string },
   ): Phaser.GameObjects.Text {
     const fontSize = Math.round(viewportHeight * 0.032);
     return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.2, 'SELECT MODE', {
+      .text(viewportWidth / 2, viewportHeight * 0.22, 'SELECT THEME', {
         fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
         fontSize: `${fontSize}px`,
-        color,
+        color: hud.subtitle,
         fontStyle: 'bold',
         align: 'center',
         stroke: '#0b1320',
@@ -126,42 +136,21 @@ export class ModeSelectScene extends Phaser.Scene {
       .setDepth(20);
   }
 
-  private createThemeHint(
-    viewportWidth: number,
-    viewportHeight: number,
-    themeLabel: string,
-    color: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.022);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.255, `Theme: ${themeLabel}  ·  Esc to change`, {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color,
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5, 0)
-      .setShadow(1, 2, '#000000', 3, true, true)
-      .setDepth(20);
-  }
-
   private createHint(
     viewportWidth: number,
     viewportHeight: number,
-    color: string,
+    hud: { hint: string },
   ): Phaser.GameObjects.Text {
     const fontSize = Math.round(viewportHeight * 0.022);
     return this.add
       .text(
         viewportWidth / 2,
         viewportHeight * 0.9,
-        'Arrows to move  ·  Space / Enter / click to start',
+        'Arrows to preview  ·  Space / Enter / click to choose',
         {
           fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
           fontSize: `${fontSize}px`,
-          color,
+          color: hud.hint,
           align: 'center',
           stroke: '#0b1320',
           strokeThickness: 3,
@@ -176,14 +165,11 @@ export class ModeSelectScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background.resize(snapshot.width, snapshot.height);
 
-    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.1);
+    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.12);
     this.titleText.setFontSize(Math.round(snapshot.height * 0.08));
 
-    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.2);
+    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.22);
     this.subtitleText.setFontSize(Math.round(snapshot.height * 0.032));
-
-    this.themeHintText.setPosition(snapshot.width / 2, snapshot.height * 0.255);
-    this.themeHintText.setFontSize(Math.round(snapshot.height * 0.022));
 
     this.hintText.setPosition(snapshot.width / 2, snapshot.height * 0.9);
     this.hintText.setFontSize(Math.round(snapshot.height * 0.022));
@@ -191,11 +177,11 @@ export class ModeSelectScene extends Phaser.Scene {
     this.menu.resize(
       snapshot.width,
       snapshot.height,
-      ModeSelectScene.menuOriginY(snapshot.height),
+      ThemeSelectScene.menuOriginY(snapshot.height),
     );
   }
 
   private static menuOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.36;
+    return viewportHeight * 0.34;
   }
 }

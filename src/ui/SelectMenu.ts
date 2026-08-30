@@ -16,7 +16,7 @@ export interface SelectMenuOption<T extends string = string> {
   description?: string;
 }
 
-export interface SelectMenuConfig {
+export interface SelectMenuConfig<T extends string = string> {
   color?: string;
   highlightColor?: string;
   descriptionColor?: string;
@@ -26,12 +26,16 @@ export interface SelectMenuConfig {
   rowHeightRatio?: number;
   /** Draw depth. Pause overlays pass a value above gameplay HUD / messages. */
   depth?: number;
+  /** DXB-15: Index highlighted when the menu is created. */
+  initialIndex?: number;
+  /** DXB-15: Fires when the highlight moves, before confirm. */
+  onHighlight?: (id: T) => void;
 }
 
 const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
 const HUD_DEPTH = 20;
 
-const DEFAULT_CONFIG: Required<SelectMenuConfig> = {
+const DEFAULT_CONFIG: Required<Omit<SelectMenuConfig, 'onHighlight' | 'initialIndex'>> = {
   color: '#c5d0dc',
   highlightColor: '#f8f9fa',
   descriptionColor: '#90e0ef',
@@ -51,7 +55,8 @@ export class SelectMenu<T extends string = string> {
   private readonly scene: Phaser.Scene;
   private readonly options: readonly SelectMenuOption<T>[];
   private readonly onSelect: (id: T) => void;
-  private readonly config: Required<SelectMenuConfig>;
+  private readonly config: Required<Omit<SelectMenuConfig<T>, 'onHighlight' | 'initialIndex'>> &
+    Pick<SelectMenuConfig<T>, 'onHighlight' | 'initialIndex'>;
   private readonly rows: SelectMenuRow[] = [];
   private selectedIndex = 0;
   private viewportWidth = 0;
@@ -71,12 +76,17 @@ export class SelectMenu<T extends string = string> {
     originY: number,
     options: readonly SelectMenuOption<T>[],
     onSelect: (id: T) => void,
-    config: SelectMenuConfig = {},
+    config: SelectMenuConfig<T> = {},
   ) {
     this.scene = scene;
     this.options = options;
     this.onSelect = onSelect;
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.selectedIndex = Phaser.Math.Clamp(
+      config.initialIndex ?? 0,
+      0,
+      Math.max(0, options.length - 1),
+    );
     this.viewportWidth = viewportWidth;
     this.viewportHeight = viewportHeight;
     this.originY = originY;
@@ -192,6 +202,7 @@ export class SelectMenu<T extends string = string> {
 
     this.selectedIndex = index;
     this.refreshHighlight();
+    this.config.onHighlight?.(this.options[index].id);
   }
 
   private confirm(): void {

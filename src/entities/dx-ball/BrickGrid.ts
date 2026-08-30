@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Brick } from '@entities/dx-ball/Brick';
 import { parseBrickLayout, type BrickType } from '@entities/dx-ball/BrickType';
+import type { ThemeBrickTypeVisual } from '@entities/dx-ball/Theme';
 import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 
 /**
@@ -110,12 +111,17 @@ export interface BrickGridConfig {
    * normal bricks — the pre-DXB-11 default.
    */
   layout?: readonly string[];
+  /**
+   * DXB-15: Theme-driven type colors. Gameplay fields in
+   * `BRICK_TYPE_SPECS` stay unchanged — only fill/stroke tokens.
+   */
+  typeVisuals?: Partial<Record<BrickType, ThemeBrickTypeVisual>>;
 }
 
-type ResolvedBrickGridConfig = Required<Omit<BrickGridConfig, 'layout'>> &
-  Pick<BrickGridConfig, 'layout'>;
+type ResolvedBrickGridConfig = Required<Omit<BrickGridConfig, 'layout' | 'typeVisuals'>> &
+  Pick<BrickGridConfig, 'layout' | 'typeVisuals'>;
 
-const DEFAULT_CONFIG: Required<Omit<BrickGridConfig, 'layout'>> = {
+const DEFAULT_CONFIG: Required<Omit<BrickGridConfig, 'layout' | 'typeVisuals'>> = {
   rows: 5,
   columns: 8,
   colors: [0xe63946, 0xf3722c, 0xf9c74f, 0x90be6d, 0x4d96ff],
@@ -370,6 +376,7 @@ export class BrickGrid {
             color,
             points,
             brickType,
+            this.config.typeVisuals?.[brickType],
           ),
         );
       }

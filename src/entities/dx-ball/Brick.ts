@@ -4,6 +4,7 @@ import {
   type BrickPowerupDrop,
   type BrickType,
 } from '@entities/dx-ball/BrickType';
+import type { ThemeBrickTypeVisual } from '@entities/dx-ball/Theme';
 
 /**
  * entities/dx-ball/Brick.ts
@@ -56,6 +57,8 @@ export class Brick extends Phaser.GameObjects.Rectangle {
   /** Row color assigned by the grid; cracked/normal fills start from this. */
   private readonly rowColor: number;
   private remainingHits: number;
+  /** DXB-15: Theme-driven type colors; gameplay specs stay in BrickType. */
+  private typeVisual: ThemeBrickTypeVisual;
   /** DXB-13: type-specific drawing layered on top of the collision rect. */
   private readonly overlay: Phaser.GameObjects.Graphics;
 
@@ -70,9 +73,10 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     color: number,
     points: number,
     brickType: BrickType = 'normal',
+    typeVisual: ThemeBrickTypeVisual = {},
   ) {
     const spec = BRICK_TYPE_SPECS[brickType];
-    super(scene, x, y, width, height, spec.fillColor ?? color);
+    super(scene, x, y, width, height, typeVisual.fillColor ?? spec.fillColor ?? color);
 
     this.row = row;
     this.column = column;
@@ -81,6 +85,7 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     this.awardsScore = spec.awardsScore;
     this.powerupDrop = spec.powerupDrop;
     this.rowColor = color;
+    this.typeVisual = typeVisual;
     this.remainingHits = spec.hitsToDestroy;
 
     this.overlay = scene.add.graphics();
@@ -159,10 +164,11 @@ export class Brick extends Phaser.GameObjects.Rectangle {
 
   private applyVisuals(): void {
     const spec = BRICK_TYPE_SPECS[this.brickType];
+    const visual = this.typeVisual;
     const isCrackedDamaged = this.brickType === 'cracked' && this.remainingHits === 1;
     const fill = isCrackedDamaged
-      ? darkenColor(this.rowColor, spec.crackedFillDarken ?? 0.42)
-      : (spec.fillColor ?? this.rowColor);
+      ? darkenColor(this.rowColor, visual.crackedFillDarken ?? spec.crackedFillDarken ?? 0.42)
+      : (visual.fillColor ?? spec.fillColor ?? this.rowColor);
 
     const width = this.width;
     const height = this.height;
@@ -176,12 +182,12 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     g.fillRoundedRect(x, y, width, height, radius);
 
     if (this.brickType === 'metal') {
-      this.drawMetal(g, x, y, width, height, radius, spec.strokeColor ?? 0xe9ecef);
+      this.drawMetal(g, x, y, width, height, radius, visual.strokeColor ?? spec.strokeColor ?? 0xe9ecef);
       return;
     }
 
     if (this.brickType === 'bonus') {
-      this.drawBonus(g, x, y, width, height, radius, spec.strokeColor ?? 0xffe66d);
+      this.drawBonus(g, x, y, width, height, radius, visual.strokeColor ?? spec.strokeColor ?? 0xffe66d);
       return;
     }
 
@@ -195,8 +201,8 @@ export class Brick extends Phaser.GameObjects.Rectangle {
         radius,
         isCrackedDamaged,
         isCrackedDamaged
-          ? (spec.crackedStrokeColor ?? 0xffc857)
-          : (spec.strokeColor ?? 0xf1f3f5),
+          ? (visual.crackedStrokeColor ?? spec.crackedStrokeColor ?? 0xffc857)
+          : (visual.strokeColor ?? spec.strokeColor ?? 0xf1f3f5),
       );
       return;
     }

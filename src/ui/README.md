@@ -27,14 +27,20 @@ Currently:
 - `ArcadeBackground.ts` — DXB-13's lightweight arcade backdrop. A
   `Graphics` object that paints a gradient, a faint grid, static dots,
   and a vignette from viewport size only — no assets, no per-frame
-  work. Not DX-Ball-specific.
+  work. DXB-15 adds `applyTheme()` so Neon / Space / Laboratory can
+  swap colors and motif. Not DX-Ball-specific.
 - `ModeLabel.ts` — DXB-14's top-center mode HUD (`label` + optional
   `detail`, e.g. a Time Attack clock). Same typeface/stroke as the
   other HUD widgets. Not DX-Ball-specific.
 - `SelectMenu.ts` — DXB-14's reusable vertical option list (arrows,
   Space / Enter, click). Caller supplies options and an `onSelect`
   callback. DXB-13A adds `destroy()` (so a pause overlay can unbind
-  Space) and a configurable `depth`. Not DX-Ball-specific.
+  Space) and a configurable `depth`. DXB-15 adds `initialIndex` and
+  `onHighlight` for live theme preview. Not DX-Ball-specific.
 - `PauseOverlay.ts` — DXB-13A's reusable pause/menu overlay. Dims the
   playfield, shows a title, and hosts a `SelectMenu`. Hidden until
-  `show()`. Not DX-Ball-specific.
+  `show()`. DXB-15 adds a framed panel, accent bar, and `applyTheme()`.
+  Not DX-Ball-specific.
+- `ResultOverlay.ts` — DXB-15's reusable end/transition card (victory,
+  game over, time-up, level-clear). Dim + framed panel + title + body.
+  Not DX-Ball-specific.

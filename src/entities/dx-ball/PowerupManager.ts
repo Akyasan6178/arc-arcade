@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Paddle } from '@entities/dx-ball/Paddle';
 import { Powerup, type PowerupType } from '@entities/dx-ball/Powerup';
+import type { ThemePowerupVisual } from '@entities/dx-ball/Theme';
 import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 
 /**
@@ -46,9 +47,12 @@ export interface PowerupManagerConfig {
   heightRatio?: number;
   /** Fall speed, as a ratio of viewport height per second. */
   fallSpeedRatio?: number;
+  /** DXB-15: Per-type fill/stroke from the active theme. */
+  palette?: Partial<Record<PowerupType, ThemePowerupVisual>>;
 }
 
-const DEFAULT_CONFIG: Required<PowerupManagerConfig> = {
+const DEFAULT_CONFIG: Required<Omit<PowerupManagerConfig, 'palette'>> &
+  Pick<PowerupManagerConfig, 'palette'> = {
   types: [
     'widen-paddle',
     'slow-ball',
@@ -58,15 +62,17 @@ const DEFAULT_CONFIG: Required<PowerupManagerConfig> = {
     'small-paddle',
     'fast-ball',
   ],
-  widthRatio: 0.05,
-  heightRatio: 0.03,
+  widthRatio: 0.056,
+  heightRatio: 0.038,
   fallSpeedRatio: 0.22,
+  palette: undefined,
 };
 
 export class PowerupManager {
   private readonly scene: Phaser.Scene;
   private readonly paddle: Paddle;
-  private readonly config: Required<PowerupManagerConfig>;
+  private readonly config: Required<Omit<PowerupManagerConfig, 'palette'>> &
+    Pick<PowerupManagerConfig, 'palette'>;
   private viewportWidth: number;
   private viewportHeight: number;
   private readonly capsules: Powerup[] = [];
@@ -93,7 +99,9 @@ export class PowerupManager {
     const height = this.viewportHeight * this.config.heightRatio;
     const fallSpeed = this.viewportHeight * this.config.fallSpeedRatio;
 
-    this.capsules.push(new Powerup(this.scene, x, y, width, height, fallSpeed, type));
+    this.capsules.push(
+      new Powerup(this.scene, x, y, width, height, fallSpeed, type, this.config.palette?.[type]),
+    );
     playDxBallSfx('powerup-spawn');
   }
 
