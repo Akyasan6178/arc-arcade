@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { BootScene } from '@scenes/BootScene';
 import { PreloadScene } from '@scenes/PreloadScene';
 import { MainScene } from '@scenes/MainScene';
+import { GameViewport } from '@systems/GameViewport';
 
 /**
  * src/main.ts
@@ -10,18 +11,33 @@ import { MainScene } from '@scenes/MainScene';
  * by every game built on this foundation and registers the base scene
  * pipeline (Boot -> Preload -> Main). Individual games plug additional
  * scenes into this same array as they're built.
+ *
+ * ARC-01: `scale` is configured with Phaser.Scale.RESIZE so the canvas
+ * always fills its parent container (`#app`, styled to 100% of the
+ * viewport in index.html) instead of being locked to a fixed design
+ * resolution. `min`/`max` guard against degenerate or absurdly large
+ * canvases. This is the "Phaser Scale Manager configuration" +
+ * "responsive viewport system" foundation every future game reads through
+ * the `GameViewport` service (see systems/GameViewport.ts).
  */
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'app',
-  width: 800,
-  height: 600,
   backgroundColor: '#1d1d1d',
   scale: {
-    mode: Phaser.Scale.FIT,
+    mode: Phaser.Scale.RESIZE,
+    parent: 'app',
     autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: '100%',
+    height: '100%',
+    min: { width: 320, height: 240 },
+    max: { width: 2560, height: 1440 },
   },
   scene: [BootScene, PreloadScene, MainScene],
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+// Single shared responsive-viewport service. Initialized once here so any
+// scene can call `GameViewport.get()` from this point on.
+GameViewport.init(game);

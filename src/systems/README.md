@@ -14,5 +14,11 @@ Examples of what belongs here as the project grows:
 Nothing in this folder should contain gameplay rules for a specific game —
 that belongs in `entities/` (per-game actors) or a future per-game module.
 
-Currently only `SceneKeys.ts` lives here, defining the string keys used to
-register and start scenes.
+Currently:
+
+- `SceneKeys.ts` — string keys used to register and start scenes.
+- `GameViewport.ts` — ARC-01 responsive-viewport service. Wraps Phaser's
+  Scale Manager plus browser orientation/safe-area concerns into a single
+  `GameViewport.get()` accessor (`width`, `height`, `centerX`, `centerY`,
+  `isPortrait`, `isLandscape`, `safeArea`, `onChange(listener)`) that any
+  scene/system/entity in any future game can read.

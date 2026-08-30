@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets content span into notch/home-indicator areas
+         on mobile devices, which is required for env(safe-area-inset-*)
+         (read by systems/GameViewport.ts) to report non-zero values. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Arc Arcade</title>
     <style>
       /* Minimal shell styling only: centers the game canvas.
