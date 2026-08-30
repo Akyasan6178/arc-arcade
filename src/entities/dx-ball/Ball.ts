@@ -53,6 +53,16 @@ import type { BrickGrid } from '@entities/dx-ball/BrickGrid';
  * can poll it the same "owning scene polls a getter" way it already
  * polls `BrickGrid.getScore()`/`isCleared()`, and turn misses into a
  * lives system without the ball knowing anything about lives itself.
+ *
+ * DXB-09 adds `applySlowEffect()`: a temporary speed multiplier the ball
+ * applies to itself and counts down every `update()` frame (whether
+ * `attached` or `launched`), reverting automatically on expiry. The
+ * multiplier is folded into every place base speed is turned into an
+ * actual velocity (`launch()`, `resize()`), so a slow effect caught
+ * before a serve, mid-flight, or spanning a resize all behave correctly
+ * without the ball needing three different code paths. Same "entity
+ * owns its own state/behavior" pattern `Paddle.applyWidenBoost()` uses —
+ * the ball still has no idea a "powerup" exists.
  */
 export interface BallConfig {
   color?: number;
@@ -94,6 +104,9 @@ const MAX_STEP_DISTANCE_RATIO = 0.5;
  */
 const MAX_SUBSTEPS_PER_FRAME = 8;
 
+/** DXB-09: Speed multiplier applied while a "slow ball" effect is active. */
+const SLOW_EFFECT_MULTIPLIER = 0.6;
+
 type BallState = 'attached' | 'launched';
 
 export class Ball extends Phaser.GameObjects.Arc {
@@ -109,6 +122,10 @@ export class Ball extends Phaser.GameObjects.Arc {
   private serveState: BallState = 'attached';
   /** DXB-07: Running count of bottom-edge misses (see `returnToPaddle()`). */
   private missCount = 0;
+  /** DXB-09: Current speed multiplier — `SLOW_EFFECT_MULTIPLIER` while a slow effect is active, `1` otherwise. */
+  private speedMultiplier = 1;
+  /** DXB-09: Milliseconds remaining on the current slow effect, if any. */
+  private slowRemainingMs = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -144,6 +161,8 @@ export class Ball extends Phaser.GameObjects.Arc {
    * already been updated for this frame.
    */
   update(deltaMs: number): void {
+    this.tickSlowEffect(deltaMs);
+
     if (this.serveState === 'attached') {
       this.followPaddle();
 
@@ -154,6 +173,47 @@ export class Ball extends Phaser.GameObjects.Arc {
     }
 
     this.advanceLaunched(deltaMs);
+  }
+
+  /**
+   * DXB-09: Applies (or refreshes) a temporary speed multiplier of
+   * `SLOW_EFFECT_MULTIPLIER`. Catching a second "slow" capsule while one
+   * is already active just extends the timer back to the full duration
+   * rather than stacking the multiplier again. Ticks down regardless of
+   * `serveState`, so catching one while the ball happens to be `attached`
+   * (waiting to be re-served after a miss) still counts down and is
+   * already in effect the moment it launches.
+   */
+  applySlowEffect(durationMs: number): void {
+    if (this.slowRemainingMs <= 0) {
+      this.speedMultiplier = SLOW_EFFECT_MULTIPLIER;
+      this.applySpeedMultiplier();
+    }
+    this.slowRemainingMs = durationMs;
+  }
+
+  /** Counts down an active slow effect by one frame, reverting speed the instant it expires. */
+  private tickSlowEffect(deltaMs: number): void {
+    if (this.slowRemainingMs <= 0) {
+      return;
+    }
+
+    this.slowRemainingMs -= deltaMs;
+    if (this.slowRemainingMs <= 0) {
+      this.slowRemainingMs = 0;
+      this.speedMultiplier = 1;
+      this.applySpeedMultiplier();
+    }
+  }
+
+  /** Rescales current velocity (if launched) to the base speed times `speedMultiplier`, preserving direction. */
+  private applySpeedMultiplier(): void {
+    if (this.serveState !== 'launched') {
+      return;
+    }
+
+    const baseSpeed = Ball.computeSpeed(this.viewportWidth, this.viewportHeight, this.config);
+    this.velocity.setLength(baseSpeed * this.speedMultiplier);
   }
 
   /**
@@ -234,7 +294,7 @@ export class Ball extends Phaser.GameObjects.Arc {
       return;
     }
 
-    const newSpeed = Ball.computeSpeed(viewportWidth, viewportHeight, this.config);
+    const newSpeed = Ball.computeSpeed(viewportWidth, viewportHeight, this.config) * this.speedMultiplier;
     this.velocity.setLength(newSpeed);
 
     this.setPosition(
@@ -254,9 +314,9 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.setPosition(x, y);
   }
 
-  /** Transitions from `attached` to `launched`, applying the fixed launch velocity. */
+  /** Transitions from `attached` to `launched`, applying the fixed launch velocity (scaled by any active slow effect). */
   private launch(): void {
-    const speed = Ball.computeSpeed(this.viewportWidth, this.viewportHeight, this.config);
+    const speed = Ball.computeSpeed(this.viewportWidth, this.viewportHeight, this.config) * this.speedMultiplier;
     this.velocity.copy(Ball.computeLaunchVelocity(speed));
     this.serveState = 'launched';
   }

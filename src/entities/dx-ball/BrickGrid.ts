@@ -43,6 +43,15 @@ import { Brick } from '@entities/dx-ball/Brick';
  * resets it back to 0. The constructor itself is now just `loadLevel()`
  * called once at construction time, so there is exactly one place that
  * builds a grid from a config.
+ *
+ * DXB-09 adds a powerup drop chance: whenever `resolveBallCollision()`
+ * removes a brick, it rolls `powerupDropChance` and, on a hit, queues
+ * that brick's position for a powerup spawn. This grid deliberately has
+ * no idea what a "powerup" is beyond a spawn point to report — picking
+ * which effect type drops, spawning the falling capsule, and reacting to
+ * it being caught are all owned by `entities/dx-ball/PowerupManager.ts`
+ * and `MainScene`, which poll `consumePendingPowerupSpawns()` every
+ * frame the exact same way they already poll `getScore()`/`isCleared()`.
  */
 export interface BrickGridConfig {
   rows?: number;
@@ -64,6 +73,8 @@ export interface BrickGridConfig {
    * — row 0 (the top/back row) is worth `rows * basePointsPerRow`.
    */
   basePointsPerRow?: number;
+  /** DXB-09: Chance (0..1) that destroying one brick queues a powerup spawn at its position. */
+  powerupDropChance?: number;
 }
 
 const DEFAULT_CONFIG: Required<BrickGridConfig> = {
@@ -79,7 +90,14 @@ const DEFAULT_CONFIG: Required<BrickGridConfig> = {
   gapRatio: 0.01,
   rowHeightRatio: 0.03,
   basePointsPerRow: 10,
+  powerupDropChance: 0.15,
 };
+
+/** A queued powerup spawn point, reported once per brick a ball destroys that rolled a drop. */
+export interface PowerupSpawnPoint {
+  x: number;
+  y: number;
+}
 
 interface GridLayout {
   sideMargin: number;
@@ -94,6 +112,8 @@ export class BrickGrid {
   private config: Required<BrickGridConfig> = DEFAULT_CONFIG;
   private readonly bricks: Brick[] = [];
   private score = 0;
+  /** DXB-09: Spawn points queued since the last `consumePendingPowerupSpawns()` call. */
+  private pendingPowerupSpawns: PowerupSpawnPoint[] = [];
 
   constructor(
     scene: Phaser.Scene,
@@ -165,6 +185,14 @@ export class BrickGrid {
 
       this.bricks.splice(i, 1);
       this.score += brick.points;
+
+      // DXB-09: rolled independently of scoring/removal, right before the
+      // brick's own position is lost to `destroy()` — a hit queues a spawn
+      // point for `MainScene`/`PowerupManager` to pick up next frame.
+      if (Math.random() < this.config.powerupDropChance) {
+        this.pendingPowerupSpawns.push({ x: brick.x, y: brick.y });
+      }
+
       brick.destroy();
 
       // The axis with the *smaller* overlap is the one the ball just
@@ -183,6 +211,25 @@ export class BrickGrid {
   /** DXB-06: Running total of points earned from every brick destroyed so far this level. */
   getScore(): number {
     return this.score;
+  }
+
+  /**
+   * DXB-09: Drains and returns every powerup spawn point queued since
+   * the last call — one entry per brick destroyed that rolled a drop
+   * (a ball's collision substeps, per DXB-05, can destroy more than one
+   * brick in a single frame, so this can return more than one entry at
+   * once). `MainScene` polls this every frame the same way it already
+   * polls `getScore()`/`isCleared()`, and hands each point to
+   * `PowerupManager.spawn()`.
+   */
+  consumePendingPowerupSpawns(): PowerupSpawnPoint[] {
+    if (this.pendingPowerupSpawns.length === 0) {
+      return [];
+    }
+
+    const spawns = this.pendingPowerupSpawns;
+    this.pendingPowerupSpawns = [];
+    return spawns;
   }
 
   /** Recomputes every brick's size and position for a new viewport size (e.g. on resize). */

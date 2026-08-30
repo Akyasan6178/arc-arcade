@@ -6,6 +6,8 @@ import { Paddle } from '@entities/dx-ball/Paddle';
 import { Ball } from '@entities/dx-ball/Ball';
 import { BrickGrid } from '@entities/dx-ball/BrickGrid';
 import { LEVELS } from '@entities/dx-ball/levels';
+import { PowerupManager } from '@entities/dx-ball/PowerupManager';
+import type { PowerupType } from '@entities/dx-ball/Powerup';
 import { ScoreLabel } from '@ui/ScoreLabel';
 
 /**
@@ -61,16 +63,32 @@ import { ScoreLabel } from '@ui/ScoreLabel';
  * fresh run). Score and lives are never reset by a level transition,
  * only by a full `scene.restart()`. A fourth `ScoreLabel` (`Level: `,
  * bottom-right — the last free corner) shows the current level number.
+ *
+ * DXB-09 adds powerups: every frame, `updatePowerups()` drains any spawn
+ * points `brickGrid.consumePendingPowerupSpawns()` queued this frame
+ * (from bricks just destroyed by `ball.update()` above it) into
+ * `powerupManager.spawn()`, advances every falling capsule via
+ * `powerupManager.update()`, then drains
+ * `powerupManager.consumeCaughtPowerups()` into `applyPowerupEffect()` —
+ * the one place that knows what each effect type actually does
+ * (`extra-life` bumps `lives` directly; `widen-paddle`/`slow-ball`
+ * delegate to `paddle.applyWidenBoost()`/`ball.applySlowEffect()`).
+ * `powerupManager` itself never touches `Ball` or lives — see its own
+ * doc comment for why.
  */
 const HIGH_SCORE_KEY = 'dx-ball-high-score';
 
 /** DXB-07: Starting lives per run — a placeholder tuning value, not playtested (see docs/progress/DXB-07.md). */
 const STARTING_LIVES = 3;
 
+/** DXB-09: How long a timed powerup effect (widen paddle / slow ball) lasts, in ms — a placeholder tuning value, not playtested. */
+const POWERUP_EFFECT_DURATION_MS = 8000;
+
 export class MainScene extends Phaser.Scene {
   private paddle!: Paddle;
   private ball!: Ball;
   private brickGrid!: BrickGrid;
+  private powerupManager!: PowerupManager;
   private scoreLabel!: ScoreLabel;
   private bestScoreLabel!: ScoreLabel;
   private livesLabel!: ScoreLabel;
@@ -117,6 +135,7 @@ export class MainScene extends Phaser.Scene {
       this.brickGrid,
       firstLevel.ball,
     );
+    this.powerupManager = new PowerupManager(this, snapshot.width, snapshot.height, this.paddle);
     this.scoreLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Score: ',
       anchor: 'top-left',
@@ -154,6 +173,7 @@ export class MainScene extends Phaser.Scene {
 
     this.paddle.update(delta);
     this.ball.update(delta);
+    this.updatePowerups(delta);
     this.updateScore();
     this.updateLives();
 
@@ -208,6 +228,41 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
+   * DXB-09: Spawns any powerup capsules `BrickGrid` queued this frame
+   * (from bricks destroyed during `ball.update()` above), advances every
+   * currently-falling capsule, and reacts to any the paddle just caught.
+   * Mirrors `updateScore()`/`updateLives()`'s "owning scene polls a
+   * getter/queue every frame" shape.
+   */
+  private updatePowerups(deltaMs: number): void {
+    for (const spawn of this.brickGrid.consumePendingPowerupSpawns()) {
+      this.powerupManager.spawn(spawn.x, spawn.y);
+    }
+
+    this.powerupManager.update(deltaMs);
+
+    for (const type of this.powerupManager.consumeCaughtPowerups()) {
+      this.applyPowerupEffect(type);
+    }
+  }
+
+  /** DXB-09: The one place that knows what each powerup type actually does. */
+  private applyPowerupEffect(type: PowerupType): void {
+    switch (type) {
+      case 'extra-life':
+        this.lives++;
+        this.livesLabel.setValue(this.lives);
+        break;
+      case 'widen-paddle':
+        this.paddle.applyWidenBoost(POWERUP_EFFECT_DURATION_MS);
+        break;
+      case 'slow-ball':
+        this.ball.applySlowEffect(POWERUP_EFFECT_DURATION_MS);
+        break;
+    }
+  }
+
+  /**
    * DXB-08: Called instead of `handleWin()` whenever `brickGrid.isCleared()`
    * fires and a level *after* the current one still exists in `LEVELS`.
    * On the last level this defers straight to `handleWin()` instead —
@@ -256,6 +311,9 @@ export class MainScene extends Phaser.Scene {
 
     this.ball.destroy();
     this.ball = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
+    // DXB-09: a stray capsule still falling from the just-cleared level
+    // shouldn't carry into the next one's fresh brick layout.
+    this.powerupManager.clear();
 
     this.lastMissCount = 0;
     this.levelLabel.setValue(this.currentLevelIndex + 1);
@@ -335,6 +393,7 @@ export class MainScene extends Phaser.Scene {
     this.paddle.resize(snapshot.width, snapshot.height);
     this.ball.resize(snapshot.width, snapshot.height);
     this.brickGrid.resize(snapshot.width, snapshot.height);
+    this.powerupManager.resize(snapshot.width, snapshot.height);
     this.scoreLabel.resize(snapshot.width, snapshot.height);
     this.bestScoreLabel.resize(snapshot.width, snapshot.height);
     this.livesLabel.resize(snapshot.width, snapshot.height);

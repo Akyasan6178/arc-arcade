@@ -26,6 +26,14 @@ import Phaser from 'phaser';
  *
  * DXB-06A (balance pass) narrows the default `widthRatio` by ~20% — no
  * behavior/architecture change, just a tuning value.
+ *
+ * DXB-09 adds `applyWidenBoost()`: a temporary width multiplier the
+ * paddle applies to itself and counts down every `update()` frame,
+ * reverting automatically on expiry. The paddle still has no idea a
+ * "powerup" exists — `PowerupManager`/`MainScene` decide *when* to call
+ * this and for how long; the paddle only ever owns its own size, the
+ * same "entity owns its own state/behavior" pattern established since
+ * DXB-01.
  */
 export interface PaddleConfig {
   color?: number;
@@ -46,14 +54,22 @@ const DEFAULT_CONFIG: Required<PaddleConfig> = {
   speedRatio: 1.2,
 };
 
+/** DXB-09: Width multiplier applied while a "widen paddle" boost is active. */
+const WIDEN_BOOST_MULTIPLIER = 1.5;
+
 export class Paddle extends Phaser.GameObjects.Rectangle {
   private readonly config: Required<PaddleConfig>;
   private readonly cursorKeys?: Phaser.Types.Input.Keyboard.CursorKeys;
   private readonly handlePointerMove: (pointer: Phaser.Input.Pointer) => void;
 
   private viewportWidth: number;
+  private viewportHeight: number;
   /** Desired paddle center x, driven by pointer/touch/keyboard input. */
   private targetX: number;
+  /** DXB-09: Current width multiplier — `WIDEN_BOOST_MULTIPLIER` while a boost is active, `1` otherwise. */
+  private widthMultiplier = 1;
+  /** DXB-09: Milliseconds remaining on the current widen boost, if any. */
+  private widenRemainingMs = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -69,6 +85,7 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
 
     this.config = resolvedConfig;
     this.viewportWidth = viewportWidth;
+    this.viewportHeight = viewportHeight;
     this.targetX = x;
 
     scene.add.existing(this);
@@ -89,6 +106,8 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
    * input, and speed-capped smoothing to work.
    */
   update(deltaMs: number): void {
+    this.tickWidenBoost(deltaMs);
+
     const deltaSeconds = deltaMs / 1000;
     const maxSpeed = this.viewportWidth * this.config.speedRatio;
     const halfWidth = this.width / 2;
@@ -105,6 +124,36 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     const maxStep = maxSpeed * deltaSeconds;
     const step = Phaser.Math.Clamp(this.targetX - this.x, -maxStep, maxStep);
     this.setX(Phaser.Math.Clamp(this.x + step, minX, maxX));
+  }
+
+  /**
+   * DXB-09: Applies (or refreshes) a temporary width boost of
+   * `WIDEN_BOOST_MULTIPLIER`. Catching a second "widen" capsule while one
+   * is already active just extends the timer back to the full duration
+   * rather than stacking the multiplier again — the paddle only ever
+   * re-applies the size change the moment it transitions from inactive to
+   * active.
+   */
+  applyWidenBoost(durationMs: number): void {
+    if (this.widenRemainingMs <= 0) {
+      this.widthMultiplier = WIDEN_BOOST_MULTIPLIER;
+      this.applySize();
+    }
+    this.widenRemainingMs = durationMs;
+  }
+
+  /** Counts down an active widen boost by one frame, reverting the width the instant it expires. */
+  private tickWidenBoost(deltaMs: number): void {
+    if (this.widenRemainingMs <= 0) {
+      return;
+    }
+
+    this.widenRemainingMs -= deltaMs;
+    if (this.widenRemainingMs <= 0) {
+      this.widenRemainingMs = 0;
+      this.widthMultiplier = 1;
+      this.applySize();
+    }
   }
 
   /**
@@ -146,13 +195,27 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
   /** Recomputes size and position for a new viewport size (e.g. on resize). */
   resize(viewportWidth: number, viewportHeight: number): void {
     this.viewportWidth = viewportWidth;
+    this.viewportHeight = viewportHeight;
+    this.applySize();
+  }
 
-    const { width, height } = Paddle.computeSize(viewportWidth, viewportHeight, this.config);
-    const { y } = Paddle.computePosition(viewportWidth, viewportHeight, height, this.config);
+  /**
+   * DXB-09: Recomputes size/position from the current viewport plus
+   * `widthMultiplier`, and re-clamps `x`/`targetX` into the new bounds.
+   * Shared by `resize()` (viewport changed) and the widen-boost
+   * apply/expire paths (viewport unchanged, only the multiplier did) so
+   * there is exactly one place that turns "base size + multiplier" into
+   * an actual on-screen size.
+   */
+  private applySize(): void {
+    const base = Paddle.computeSize(this.viewportWidth, this.viewportHeight, this.config);
+    const width = base.width * this.widthMultiplier;
+    const { y } = Paddle.computePosition(this.viewportWidth, this.viewportHeight, base.height, this.config);
 
-    this.setSize(width, height);
-    this.setPosition(Phaser.Math.Clamp(this.x, width / 2, viewportWidth - width / 2), y);
-    this.targetX = Phaser.Math.Clamp(this.targetX, width / 2, viewportWidth - width / 2);
+    this.setSize(width, base.height);
+    const halfWidth = width / 2;
+    this.setPosition(Phaser.Math.Clamp(this.x, halfWidth, this.viewportWidth - halfWidth), y);
+    this.targetX = Phaser.Math.Clamp(this.targetX, halfWidth, this.viewportWidth - halfWidth);
   }
 
   protected preDestroy(): void {
