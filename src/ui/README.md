@@ -14,3 +14,6 @@ Currently:
   subclass showing a `prefix` + numeric value anchored to a viewport
   corner, responsively sized/positioned. Not DX-Ball-specific; reusable
   for a score, a best score, or (in a future game) a lives counter.
+  DXB-07 added the two bottom corners as anchor options and put that
+  reuse into practice — DX-Ball's lives counter is a third `ScoreLabel`
+  instance (`Lives: `, bottom-left).

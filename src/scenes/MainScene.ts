@@ -36,8 +36,21 @@ import { ScoreLabel } from '@ui/ScoreLabel';
  * across restarts/reloads via `HighScoreStore` — updated live the moment
  * the current run's score passes it, not just at win time. The win
  * message also now reports the final score reached.
+ *
+ * DXB-07 adds the missing losing condition: the scene starts each run
+ * with `STARTING_LIVES` lives, polls `ball.getMissCount()` every frame
+ * (the same "owning scene polls a getter" pattern already used for
+ * `getScore()`/`isCleared()`) and decrements lives by however much that
+ * counter grew since last frame. A third `ScoreLabel` (`Lives: `,
+ * bottom-left — both top corners are already taken) shows the current
+ * count. Reaching zero freezes the loop exactly like a win does, via a
+ * parallel `lost` flag and a "GAME OVER" message reusing the same
+ * restart-on-Space flow as `handleWin()`.
  */
 const HIGH_SCORE_KEY = 'dx-ball-high-score';
+
+/** DXB-07: Starting lives per run — a placeholder tuning value, not playtested (see docs/progress/DXB-07.md). */
+const STARTING_LIVES = 3;
 
 export class MainScene extends Phaser.Scene {
   private paddle!: Paddle;
@@ -45,10 +58,15 @@ export class MainScene extends Phaser.Scene {
   private brickGrid!: BrickGrid;
   private scoreLabel!: ScoreLabel;
   private bestScoreLabel!: ScoreLabel;
+  private livesLabel!: ScoreLabel;
   private bestScore = 0;
+  private lives = STARTING_LIVES;
+  private lastMissCount = 0;
   private unsubscribeViewport?: () => void;
   private won = false;
+  private lost = false;
   private winText?: Phaser.GameObjects.Text;
+  private gameOverText?: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: SceneKeys.Main });
@@ -59,6 +77,9 @@ export class MainScene extends Phaser.Scene {
     const snapshot = viewport.getSnapshot();
 
     this.won = false;
+    this.lost = false;
+    this.lives = STARTING_LIVES;
+    this.lastMissCount = 0;
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
@@ -74,6 +95,11 @@ export class MainScene extends Phaser.Scene {
       anchor: 'top-right',
     });
     this.bestScoreLabel.setValue(this.bestScore);
+    this.livesLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
+      prefix: 'Lives: ',
+      anchor: 'bottom-left',
+    });
+    this.livesLabel.setValue(this.lives);
 
     // The pattern every future game should follow: subscribe once, then
     // reposition/rescale whatever depends on viewport size whenever it
@@ -86,16 +112,22 @@ export class MainScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (this.won) {
+    if (this.won || this.lost) {
       return;
     }
 
     this.paddle.update(delta);
     this.ball.update(delta);
     this.updateScore();
+    this.updateLives();
 
     if (this.brickGrid.isCleared()) {
       this.handleWin();
+      return;
+    }
+
+    if (this.lives <= 0) {
+      this.handleGameOver();
     }
   }
 
@@ -118,6 +150,28 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
+   * DXB-07: Polls `ball.getMissCount()` (the same "owning scene polls a
+   * getter" pattern `updateScore()` already uses) and decrements lives
+   * by however much it grew since last frame — normally by exactly one,
+   * but comparing counts rather than assuming "exactly one miss per
+   * frame" stays correct even if that ever changed. Never lets the
+   * label go negative; `update()` checks `this.lives <= 0` separately to
+   * trigger game over.
+   */
+  private updateLives(): void {
+    const missCount = this.ball.getMissCount();
+    const newMisses = missCount - this.lastMissCount;
+
+    if (newMisses <= 0) {
+      return;
+    }
+
+    this.lastMissCount = missCount;
+    this.lives = Math.max(0, this.lives - newMisses);
+    this.livesLabel.setValue(this.lives);
+  }
+
+  /**
    * DXB-04: Freezes gameplay (see the `won` guard at the top of
    * `update()`) and shows a one-shot win message with a restart prompt.
    * `once('keydown-SPACE', ...)` is scoped to this scene instance and
@@ -128,30 +182,52 @@ export class MainScene extends Phaser.Scene {
     this.won = true;
 
     const { width, height } = GameViewport.get().getSnapshot();
-    this.winText = this.createWinText(width, height, this.brickGrid.getScore());
+    const finalScore = this.brickGrid.getScore();
+    this.winText = this.createCenteredMessage(
+      width,
+      height,
+      `YOU WIN\nScore: ${finalScore}\nPress Space to play again`,
+    );
 
     this.input.keyboard?.once('keydown-SPACE', () => this.scene.restart());
   }
 
-  private createWinText(
+  /**
+   * DXB-07: Freezes gameplay (see the `lost` guard at the top of
+   * `update()`) once lives reach zero, and shows a one-shot game-over
+   * message with a restart prompt — the losing mirror of `handleWin()`,
+   * reusing the exact same one-shot-restart mechanics and message
+   * layout (`createCenteredMessage()`), just different text.
+   */
+  private handleGameOver(): void {
+    this.lost = true;
+
+    const { width, height } = GameViewport.get().getSnapshot();
+    const finalScore = this.brickGrid.getScore();
+    this.gameOverText = this.createCenteredMessage(
+      width,
+      height,
+      `GAME OVER\nScore: ${finalScore}\nPress Space to try again`,
+    );
+
+    this.input.keyboard?.once('keydown-SPACE', () => this.scene.restart());
+  }
+
+  /** Shared layout for the win/game-over messages: centered, responsive-size, multi-line text. */
+  private createCenteredMessage(
     viewportWidth: number,
     viewportHeight: number,
-    finalScore: number,
+    message: string,
   ): Phaser.GameObjects.Text {
     const fontSize = Math.round(viewportHeight * 0.05);
 
     return this.add
-      .text(
-        viewportWidth / 2,
-        viewportHeight / 2,
-        `YOU WIN\nScore: ${finalScore}\nPress Space to play again`,
-        {
-          fontFamily: 'sans-serif',
-          fontSize: `${fontSize}px`,
-          color: '#ffffff',
-          align: 'center',
-        },
-      )
+      .text(viewportWidth / 2, viewportHeight / 2, message, {
+        fontFamily: 'sans-serif',
+        fontSize: `${fontSize}px`,
+        color: '#ffffff',
+        align: 'center',
+      })
       .setOrigin(0.5);
   }
 
@@ -166,14 +242,21 @@ export class MainScene extends Phaser.Scene {
     this.brickGrid.resize(snapshot.width, snapshot.height);
     this.scoreLabel.resize(snapshot.width, snapshot.height);
     this.bestScoreLabel.resize(snapshot.width, snapshot.height);
+    this.livesLabel.resize(snapshot.width, snapshot.height);
 
-    // The win message is still shown (and still responsive) after the
-    // gameplay loop freezes, so it needs to follow resizes the same way
-    // every other on-screen element does.
+    // The win/game-over message is still shown (and still responsive)
+    // after the gameplay loop freezes, so it needs to follow resizes the
+    // same way every other on-screen element does.
     if (this.winText) {
       const fontSize = Math.round(snapshot.height * 0.05);
       this.winText.setPosition(snapshot.width / 2, snapshot.height / 2);
       this.winText.setFontSize(fontSize);
+    }
+
+    if (this.gameOverText) {
+      const fontSize = Math.round(snapshot.height * 0.05);
+      this.gameOverText.setPosition(snapshot.width / 2, snapshot.height / 2);
+      this.gameOverText.setFontSize(fontSize);
     }
   }
 }

@@ -14,8 +14,13 @@ import Phaser from 'phaser';
  * Mirrors the rest of the codebase's "entity IS the game object" pattern
  * (`Paddle` extends `Rectangle`, `Ball` extends `Arc`): `ScoreLabel`
  * extends `Phaser.GameObjects.Text` directly rather than wrapping one.
+ *
+ * DXB-07 adds the two bottom corners as anchor options — exactly the
+ * "lives counter" reuse this file's own doc comment already anticipated
+ * (`MainScene` uses one for a `Lives: ` label, since both top corners
+ * are already taken by the score/best labels).
  */
-export type ScoreLabelAnchor = 'top-left' | 'top-right';
+export type ScoreLabelAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 export interface ScoreLabelConfig {
   /** Text shown before the numeric value, e.g. `'Score: '`. */
@@ -58,7 +63,8 @@ export class ScoreLabel extends Phaser.GameObjects.Text {
     });
 
     this.config = resolvedConfig;
-    this.setOrigin(resolvedConfig.anchor === 'top-right' ? 1 : 0, 0);
+    const { originX, originY } = ScoreLabel.computeOrigin(resolvedConfig);
+    this.setOrigin(originX, originY);
 
     scene.add.existing(this);
   }
@@ -97,7 +103,23 @@ export class ScoreLabel extends Phaser.GameObjects.Text {
     config: Required<ScoreLabelConfig>,
   ): { x: number; y: number } {
     const margin = Math.min(viewportWidth, viewportHeight) * config.marginRatio;
-    const x = config.anchor === 'top-right' ? viewportWidth - margin : margin;
-    return { x, y: margin };
+    const isRight = config.anchor === 'top-right' || config.anchor === 'bottom-right';
+    const isBottom = config.anchor === 'bottom-left' || config.anchor === 'bottom-right';
+
+    return {
+      x: isRight ? viewportWidth - margin : margin,
+      y: isBottom ? viewportHeight - margin : margin,
+    };
+  }
+
+  /** Origin follows the anchored corner, so the label grows away from the edges it's pinned to. */
+  private static computeOrigin(config: Required<ScoreLabelConfig>): {
+    originX: number;
+    originY: number;
+  } {
+    const isRight = config.anchor === 'top-right' || config.anchor === 'bottom-right';
+    const isBottom = config.anchor === 'bottom-left' || config.anchor === 'bottom-right';
+
+    return { originX: isRight ? 1 : 0, originY: isBottom ? 1 : 0 };
   }
 }

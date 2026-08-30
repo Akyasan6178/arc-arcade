@@ -44,6 +44,15 @@ import type { BrickGrid } from '@entities/dx-ball/BrickGrid';
  *
  * No scoring, lives, levels, audio, UI, or powerups here — that's
  * explicitly out of scope, per this task's own restrictions.
+ *
+ * DXB-07 adds one trivial counter: `missCount`, incremented every time
+ * a bottom-edge exit calls `returnToPaddle()` (i.e. every miss, not
+ * every reset in general — there is no other caller of
+ * `returnToPaddle()`). The ball still has no concept of lives or
+ * game-over; `getMissCount()` exposes the running total so `MainScene`
+ * can poll it the same "owning scene polls a getter" way it already
+ * polls `BrickGrid.getScore()`/`isCleared()`, and turn misses into a
+ * lives system without the ball knowing anything about lives itself.
  */
 export interface BallConfig {
   color?: number;
@@ -98,6 +107,8 @@ export class Ball extends Phaser.GameObjects.Arc {
   private readonly velocity: Phaser.Math.Vector2;
   /** Named `serveState` (not `state`) to avoid colliding with `Phaser.GameObjects.GameObject#state`. */
   private serveState: BallState = 'attached';
+  /** DXB-07: Running count of bottom-edge misses (see `returnToPaddle()`). */
+  private missCount = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -250,11 +261,22 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.serveState = 'launched';
   }
 
-  /** Transitions from `launched` back to `attached`, stopping movement and re-homing above the paddle. */
+  /**
+   * Transitions from `launched` back to `attached`, stopping movement and
+   * re-homing above the paddle. The only caller is the bottom-edge exit
+   * check in `resolveWallCollisions()`, so every call here is a miss —
+   * DXB-07 counts it accordingly.
+   */
   private returnToPaddle(): void {
     this.velocity.set(0, 0);
     this.serveState = 'attached';
+    this.missCount++;
     this.followPaddle();
+  }
+
+  /** DXB-07: Running total of bottom-edge misses so far this level. */
+  getMissCount(): number {
+    return this.missCount;
   }
 
   /** Bounces off the left/right/top edges; a bottom exit ends the serve instead of bouncing. */
