@@ -5,6 +5,7 @@ import { HighScoreStore } from '@systems/HighScoreStore';
 import { Paddle } from '@entities/dx-ball/Paddle';
 import { Ball } from '@entities/dx-ball/Ball';
 import { BrickGrid } from '@entities/dx-ball/BrickGrid';
+import { LEVELS } from '@entities/dx-ball/levels';
 import { ScoreLabel } from '@ui/ScoreLabel';
 
 /**
@@ -46,6 +47,20 @@ import { ScoreLabel } from '@ui/ScoreLabel';
  * count. Reaching zero freezes the loop exactly like a win does, via a
  * parallel `lost` flag and a "GAME OVER" message reusing the same
  * restart-on-Space flow as `handleWin()`.
+ *
+ * DXB-08 turns the single brick grid into a fixed sequence of levels
+ * (`entities/dx-ball/levels.ts`). Clearing a level no longer always wins:
+ * `update()`'s existing `isCleared()` check now calls `handleWin()` only
+ * on the last level, otherwise `handleLevelCleared()` freezes play (a
+ * third `transitioning` flag, sibling to `won`/`lost`) behind a "LEVEL
+ * CLEARED" message, and a one-shot Space press calls
+ * `advanceToNextLevel()` — which loads the next level's bricks onto the
+ * *same* `BrickGrid` instance via its new `loadLevel()` (preserving the
+ * running score) and replaces `ball` with a fresh `Ball` built from that
+ * level's speed config (re-serving above the paddle, exactly like a
+ * fresh run). Score and lives are never reset by a level transition,
+ * only by a full `scene.restart()`. A fourth `ScoreLabel` (`Level: `,
+ * bottom-right — the last free corner) shows the current level number.
  */
 const HIGH_SCORE_KEY = 'dx-ball-high-score';
 
@@ -59,14 +74,20 @@ export class MainScene extends Phaser.Scene {
   private scoreLabel!: ScoreLabel;
   private bestScoreLabel!: ScoreLabel;
   private livesLabel!: ScoreLabel;
+  private levelLabel!: ScoreLabel;
   private bestScore = 0;
   private lives = STARTING_LIVES;
   private lastMissCount = 0;
+  /** DXB-08: 0-based index into `LEVELS` of the level currently in play. */
+  private currentLevelIndex = 0;
   private unsubscribeViewport?: () => void;
   private won = false;
   private lost = false;
+  /** DXB-08: True between a level being cleared and the player continuing to the next one. */
+  private transitioning = false;
   private winText?: Phaser.GameObjects.Text;
   private gameOverText?: Phaser.GameObjects.Text;
+  private levelTransitionText?: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: SceneKeys.Main });
@@ -78,14 +99,24 @@ export class MainScene extends Phaser.Scene {
 
     this.won = false;
     this.lost = false;
+    this.transitioning = false;
     this.lives = STARTING_LIVES;
     this.lastMissCount = 0;
+    this.currentLevelIndex = 0;
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.paddle = new Paddle(this, snapshot.width, snapshot.height);
-    this.brickGrid = new BrickGrid(this, snapshot.width, snapshot.height);
-    this.ball = new Ball(this, snapshot.width, snapshot.height, this.paddle, this.brickGrid);
+    const firstLevel = LEVELS[this.currentLevelIndex];
+    this.brickGrid = new BrickGrid(this, snapshot.width, snapshot.height, firstLevel.brickGrid);
+    this.ball = new Ball(
+      this,
+      snapshot.width,
+      snapshot.height,
+      this.paddle,
+      this.brickGrid,
+      firstLevel.ball,
+    );
     this.scoreLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Score: ',
       anchor: 'top-left',
@@ -100,6 +131,11 @@ export class MainScene extends Phaser.Scene {
       anchor: 'bottom-left',
     });
     this.livesLabel.setValue(this.lives);
+    this.levelLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
+      prefix: 'Level: ',
+      anchor: 'bottom-right',
+    });
+    this.levelLabel.setValue(this.currentLevelIndex + 1);
 
     // The pattern every future game should follow: subscribe once, then
     // reposition/rescale whatever depends on viewport size whenever it
@@ -112,7 +148,7 @@ export class MainScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (this.won || this.lost) {
+    if (this.won || this.lost || this.transitioning) {
       return;
     }
 
@@ -122,7 +158,7 @@ export class MainScene extends Phaser.Scene {
     this.updateLives();
 
     if (this.brickGrid.isCleared()) {
-      this.handleWin();
+      this.handleLevelCleared();
       return;
     }
 
@@ -172,11 +208,67 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
+   * DXB-08: Called instead of `handleWin()` whenever `brickGrid.isCleared()`
+   * fires and a level *after* the current one still exists in `LEVELS`.
+   * On the last level this defers straight to `handleWin()` instead —
+   * clearing a level only ever means "advance" or "win", never both.
+   * Freezes gameplay via the new `transitioning` flag (a sibling to
+   * `won`/`lost` in `update()`'s guard) and shows a one-shot "LEVEL
+   * CLEARED" message; a Space press calls `advanceToNextLevel()`.
+   */
+  private handleLevelCleared(): void {
+    if (this.currentLevelIndex >= LEVELS.length - 1) {
+      this.handleWin();
+      return;
+    }
+
+    this.transitioning = true;
+
+    const { width, height } = GameViewport.get().getSnapshot();
+    const clearedLevelNumber = this.currentLevelIndex + 1;
+    this.levelTransitionText = this.createCenteredMessage(
+      width,
+      height,
+      `LEVEL ${clearedLevelNumber} CLEARED\nGet ready for Level ${clearedLevelNumber + 1}\nPress Space to continue`,
+    );
+
+    this.input.keyboard?.once('keydown-SPACE', () => this.advanceToNextLevel());
+  }
+
+  /**
+   * DXB-08: Advances from `currentLevelIndex` to the next `LEVELS` entry.
+   * Loads that level's brick layout onto the *same* `BrickGrid` instance
+   * via `loadLevel()` (score keeps accumulating — see that method's own
+   * doc comment) and replaces `ball` with a fresh `Ball` built from that
+   * level's speed config, which re-serves it above the paddle exactly
+   * like a brand-new run would. Lives and score are untouched — only a
+   * full `scene.restart()` resets those.
+   */
+  private advanceToNextLevel(): void {
+    this.currentLevelIndex++;
+    this.levelTransitionText?.destroy();
+    this.levelTransitionText = undefined;
+
+    const { width, height } = GameViewport.get().getSnapshot();
+    const level = LEVELS[this.currentLevelIndex];
+
+    this.brickGrid.loadLevel(level.brickGrid ?? {}, width, height);
+
+    this.ball.destroy();
+    this.ball = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
+
+    this.lastMissCount = 0;
+    this.levelLabel.setValue(this.currentLevelIndex + 1);
+    this.transitioning = false;
+  }
+
+  /**
    * DXB-04: Freezes gameplay (see the `won` guard at the top of
    * `update()`) and shows a one-shot win message with a restart prompt.
    * `once('keydown-SPACE', ...)` is scoped to this scene instance and
    * never fires more than once, so it cannot double-restart even if
-   * pressed rapidly.
+   * pressed rapidly. DXB-08: only reachable once every `LEVELS` entry has
+   * been cleared (see `handleLevelCleared()`), so the message now says so.
    */
   private handleWin(): void {
     this.won = true;
@@ -186,7 +278,7 @@ export class MainScene extends Phaser.Scene {
     this.winText = this.createCenteredMessage(
       width,
       height,
-      `YOU WIN\nScore: ${finalScore}\nPress Space to play again`,
+      `YOU WIN\nAll ${LEVELS.length} levels cleared — Score: ${finalScore}\nPress Space to play again`,
     );
 
     this.input.keyboard?.once('keydown-SPACE', () => this.scene.restart());
@@ -213,7 +305,10 @@ export class MainScene extends Phaser.Scene {
     this.input.keyboard?.once('keydown-SPACE', () => this.scene.restart());
   }
 
-  /** Shared layout for the win/game-over messages: centered, responsive-size, multi-line text. */
+  /**
+   * Shared layout for the win/game-over/level-transition messages:
+   * centered, responsive-size, multi-line text.
+   */
   private createCenteredMessage(
     viewportWidth: number,
     viewportHeight: number,
@@ -243,9 +338,10 @@ export class MainScene extends Phaser.Scene {
     this.scoreLabel.resize(snapshot.width, snapshot.height);
     this.bestScoreLabel.resize(snapshot.width, snapshot.height);
     this.livesLabel.resize(snapshot.width, snapshot.height);
+    this.levelLabel.resize(snapshot.width, snapshot.height);
 
-    // The win/game-over message is still shown (and still responsive)
-    // after the gameplay loop freezes, so it needs to follow resizes the
+    // The win/game-over/level-transition message is still shown (and
+    // still responsive) while it's up, so it needs to follow resizes the
     // same way every other on-screen element does.
     if (this.winText) {
       const fontSize = Math.round(snapshot.height * 0.05);
@@ -257,6 +353,12 @@ export class MainScene extends Phaser.Scene {
       const fontSize = Math.round(snapshot.height * 0.05);
       this.gameOverText.setPosition(snapshot.width / 2, snapshot.height / 2);
       this.gameOverText.setFontSize(fontSize);
+    }
+
+    if (this.levelTransitionText) {
+      const fontSize = Math.round(snapshot.height * 0.05);
+      this.levelTransitionText.setPosition(snapshot.width / 2, snapshot.height / 2);
+      this.levelTransitionText.setFontSize(fontSize);
     }
   }
 }

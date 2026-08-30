@@ -34,6 +34,15 @@ import { Brick } from '@entities/dx-ball/Brick';
  * slightly, shrinking each brick a bit — no behavior/architecture change,
  * just tuning values. Row/column count and the scoring formula are
  * unchanged.
+ *
+ * DXB-08 adds `loadLevel()`, which replaces every brick with a fresh grid
+ * built from a new config *without* resetting `score` — this is what
+ * lets a DX-Ball level transition carry the running score forward, since
+ * the same `BrickGrid` instance (and its accumulated `score`) survives
+ * across levels; only a full scene restart (a brand-new `BrickGrid`)
+ * resets it back to 0. The constructor itself is now just `loadLevel()`
+ * called once at construction time, so there is exactly one place that
+ * builds a grid from a config.
  */
 export interface BrickGridConfig {
   rows?: number;
@@ -82,8 +91,8 @@ interface GridLayout {
 
 export class BrickGrid {
   private readonly scene: Phaser.Scene;
-  private readonly config: Required<BrickGridConfig>;
-  private readonly bricks: Brick[];
+  private config: Required<BrickGridConfig> = DEFAULT_CONFIG;
+  private readonly bricks: Brick[] = [];
   private score = 0;
 
   constructor(
@@ -93,8 +102,27 @@ export class BrickGrid {
     config: BrickGridConfig = {},
   ) {
     this.scene = scene;
+    this.loadLevel(config, viewportWidth, viewportHeight);
+  }
+
+  /**
+   * DXB-08: Replaces every currently-tracked brick with a fresh grid
+   * built from `config` (merged over `DEFAULT_CONFIG`, exactly the same
+   * merge the constructor has always done) — without touching `score`.
+   * Called by the constructor for the initial grid, and by `MainScene`
+   * on every subsequent DX-Ball level transition, on the *same*
+   * `BrickGrid` instance, so the running score keeps accumulating across
+   * levels instead of resetting to 0 the way a brand-new `BrickGrid`
+   * (e.g. on a full scene restart) would.
+   */
+  loadLevel(config: BrickGridConfig, viewportWidth: number, viewportHeight: number): void {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.bricks = this.createBricks(viewportWidth, viewportHeight);
+
+    for (const brick of this.bricks) {
+      brick.destroy();
+    }
+    this.bricks.length = 0;
+    this.bricks.push(...this.createBricks(viewportWidth, viewportHeight));
   }
 
   /**
