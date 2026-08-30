@@ -11,8 +11,19 @@ import Phaser from 'phaser';
  * (`src/assets/` is still empty) — the same "plain Phaser shape"
  * convention every other entity in this codebase follows (`Paddle`/
  * `Brick` are rectangles, `Ball` is a circle).
+ *
+ * DXB-12 adds four more types to the same visual map (`F` fire, `M`
+ * multi, `N` narrow/small paddle, `T` turbo/fast). Effect logic still
+ * lives entirely in `PowerupManager` / `MainScene`.
  */
-export type PowerupType = 'widen-paddle' | 'slow-ball' | 'extra-life';
+export type PowerupType =
+  | 'widen-paddle'
+  | 'slow-ball'
+  | 'extra-life'
+  | 'fire-ball'
+  | 'multi-ball'
+  | 'small-paddle'
+  | 'fast-ball';
 
 interface PowerupVisual {
   color: number;
@@ -23,6 +34,10 @@ const POWERUP_VISUALS: Record<PowerupType, PowerupVisual> = {
   'widen-paddle': { color: 0x4d96ff, letter: 'W' },
   'slow-ball': { color: 0x90be6d, letter: 'S' },
   'extra-life': { color: 0xe63946, letter: 'L' },
+  'fire-ball': { color: 0xff6b35, letter: 'F' },
+  'multi-ball': { color: 0xffd60a, letter: 'M' },
+  'small-paddle': { color: 0x9b5de5, letter: 'N' },
+  'fast-ball': { color: 0xf72585, letter: 'T' },
 };
 
 /** Corner radius of the capsule background, as a ratio of its own height. */

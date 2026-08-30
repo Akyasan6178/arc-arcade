@@ -29,6 +29,10 @@ import {
  * overrides) and reports `takeHit()` so `BrickGrid` can keep using the
  * same overlap loop — it still decides bounce/score/drop/removal, this
  * class only answers "did that hit destroy me?" and redraws itself.
+ *
+ * DXB-12: `takeHit({ fire: true })` destroys the brick in one hit,
+ * including metal. The ball still does not know types exist —
+ * `BrickGrid` is the only caller that passes that flag.
  */
 
 export type { BrickType } from '@entities/dx-ball/BrickType';
@@ -92,8 +96,19 @@ export class Brick extends Phaser.GameObjects.Rectangle {
    * (caller should then score/drop/remove it). Metal always returns
    * `false` and does not change appearance; a healthy cracked brick
    * enters its damaged visual state and returns `false`.
+   *
+   * DXB-12: `{ fire: true }` is the Fire Ball path — the brick is
+   * destroyed in one hit, including metal (which a normal ball can
+   * never remove). The ball still does not know brick types exist;
+   * `BrickGrid` decides whether to pass this flag.
    */
-  takeHit(): boolean {
+  takeHit(options?: { fire?: boolean }): boolean {
+    if (options?.fire) {
+      this.remainingHits = 0;
+      this.applyVisuals();
+      return true;
+    }
+
     if (!Number.isFinite(this.remainingHits)) {
       return false;
     }

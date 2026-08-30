@@ -11,6 +11,7 @@ import type { PowerupType } from '@entities/dx-ball/Powerup';
 import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 import { AudioManager } from '@systems/AudioManager';
 import { ScoreLabel } from '@ui/ScoreLabel';
+import { ActiveEffectsLabel, type ActiveEffectDisplay } from '@ui/ActiveEffectsLabel';
 
 /**
  * scenes/MainScene.ts
@@ -88,24 +89,57 @@ import { ScoreLabel } from '@ui/ScoreLabel';
  * `handleWin()`. `create()` also wires a global mute toggle (the `M`
  * key) directly to `AudioManager.get().toggle()` — a keybinding, not a
  * new HUD element, per this task's own "no visual redesign" restriction.
+ *
+ * DXB-12 expands the powerup roster and the HUD: `applyPowerupEffect()`
+ * gains Fire Ball (timed pierce, including metal), Multi Ball (up to 3
+ * balls; extras spend on miss so lives still only decrement when the
+ * last ball is gone), Small Paddle, and Fast Ball. Timed effects keep
+ * living on the entity they affect. An `ActiveEffectsLabel` at top-
+ * center lists every active effect and its remaining duration. Existing
+ * widen / slow / extra-life, score, lives, levels, and audio paths are
+ * unchanged except that this scene now owns a `balls` array instead of
+ * a single `ball` so Multi Ball can coexist with those systems.
  */
 const HIGH_SCORE_KEY = 'dx-ball-high-score';
 
 /** DXB-07: Starting lives per run — a placeholder tuning value, not playtested (see docs/progress/DXB-07.md). */
 const STARTING_LIVES = 3;
 
-/** DXB-09: How long a timed powerup effect (widen paddle / slow ball) lasts, in ms — a placeholder tuning value, not playtested. */
+/** DXB-09: How long widen-paddle / slow-ball last, in ms — preserved from the original timed pair. */
 const POWERUP_EFFECT_DURATION_MS = 8000;
+
+/** DXB-12: Per-type durations. Instant effects use `0`. */
+const POWERUP_DURATION_MS: Record<PowerupType, number> = {
+  'widen-paddle': POWERUP_EFFECT_DURATION_MS,
+  'slow-ball': POWERUP_EFFECT_DURATION_MS,
+  'extra-life': 0,
+  'fire-ball': 10000,
+  'multi-ball': 0,
+  'small-paddle': 15000,
+  'fast-ball': 10000,
+};
+
+/** DXB-12: Multi Ball always tops up to this many balls, never more. */
+const MULTI_BALL_TOTAL = 3;
+
+/** DXB-12: Heading offsets (degrees) applied to extras split from a launched ball. */
+const MULTI_BALL_SPLIT_ANGLES_DEG = [-20, 20];
 
 export class MainScene extends Phaser.Scene {
   private paddle!: Paddle;
-  private ball!: Ball;
+  /**
+   * DXB-12: Every live ball this run. Index 0 is the serve ball at
+   * create / level-advance time; extras are appended by Multi Ball.
+   * Lives still only decrement when the last remaining ball misses.
+   */
+  private balls: Ball[] = [];
   private brickGrid!: BrickGrid;
   private powerupManager!: PowerupManager;
   private scoreLabel!: ScoreLabel;
   private bestScoreLabel!: ScoreLabel;
   private livesLabel!: ScoreLabel;
   private levelLabel!: ScoreLabel;
+  private effectsLabel!: ActiveEffectsLabel;
   private bestScore = 0;
   private lives = STARTING_LIVES;
   private lastMissCount = 0;
@@ -140,14 +174,16 @@ export class MainScene extends Phaser.Scene {
     this.paddle = new Paddle(this, snapshot.width, snapshot.height);
     const firstLevel = LEVELS[this.currentLevelIndex];
     this.brickGrid = new BrickGrid(this, snapshot.width, snapshot.height, firstLevel.brickGrid);
-    this.ball = new Ball(
-      this,
-      snapshot.width,
-      snapshot.height,
-      this.paddle,
-      this.brickGrid,
-      firstLevel.ball,
-    );
+    this.balls = [
+      new Ball(
+        this,
+        snapshot.width,
+        snapshot.height,
+        this.paddle,
+        this.brickGrid,
+        firstLevel.ball,
+      ),
+    ];
     this.powerupManager = new PowerupManager(this, snapshot.width, snapshot.height, this.paddle);
     this.scoreLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Score: ',
@@ -168,6 +204,7 @@ export class MainScene extends Phaser.Scene {
       anchor: 'bottom-right',
     });
     this.levelLabel.setValue(this.currentLevelIndex + 1);
+    this.effectsLabel = new ActiveEffectsLabel(this, snapshot.width, snapshot.height);
 
     // The pattern every future game should follow: subscribe once, then
     // reposition/rescale whatever depends on viewport size whenever it
@@ -198,10 +235,10 @@ export class MainScene extends Phaser.Scene {
     }
 
     this.paddle.update(delta);
-    this.ball.update(delta);
+    this.updateBalls(delta);
     this.updatePowerups(delta);
     this.updateScore();
-    this.updateLives();
+    this.updateActiveEffects();
 
     if (this.brickGrid.isCleared()) {
       this.handleLevelCleared();
@@ -241,7 +278,12 @@ export class MainScene extends Phaser.Scene {
    * trigger game over.
    */
   private updateLives(): void {
-    const missCount = this.ball.getMissCount();
+    const serveBall = this.balls[0];
+    if (!serveBall) {
+      return;
+    }
+
+    const missCount = serveBall.getMissCount();
     const newMisses = missCount - this.lastMissCount;
 
     if (newMisses <= 0) {
@@ -273,19 +315,176 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  /** DXB-09: The one place that knows what each powerup type actually does. */
+  /**
+   * DXB-12: Advances every live ball, removes extras that spent on a
+   * miss, and only runs the existing lives poll when exactly one ball
+   * remains. If every ball spent in the same frame, that is one life
+   * lost and a fresh serve ball is created — the Multi-Ball equivalent
+   * of `returnToPaddle()` + `updateLives()`.
+   */
+  private updateBalls(deltaMs: number): void {
+    for (const ball of this.balls) {
+      ball.update(deltaMs);
+    }
+
+    const hadMultiple = this.balls.length > 1;
+    this.balls = this.balls.filter((ball) => {
+      if (!ball.isSpent()) {
+        return true;
+      }
+      ball.destroy();
+      return false;
+    });
+
+    if (this.balls.length === 0) {
+      this.handleAllBallsSpent();
+      return;
+    }
+
+    if (this.balls.length === 1) {
+      this.balls[0].setMissBehavior('reserve');
+      if (hadMultiple) {
+        this.lastMissCount = this.balls[0].getMissCount();
+      }
+      this.updateLives();
+    }
+  }
+
+  /** Last remaining balls all spent this frame — one miss, one new serve. */
+  private handleAllBallsSpent(): void {
+    this.balls = [this.createServeBall()];
+    this.lastMissCount = 0;
+    this.lives = Math.max(0, this.lives - 1);
+    this.livesLabel.setValue(this.lives);
+    playDxBallSfx('life-lost');
+  }
+
+  private createServeBall(): Ball {
+    const { width, height } = GameViewport.get().getSnapshot();
+    const level = LEVELS[this.currentLevelIndex];
+    return new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
+  }
+
+  /**
+   * DXB-12: Polls every timed effect (and Multi Ball's live count) into
+   * the top-center HUD. Extra-life is instant and is not listed.
+   */
+  private updateActiveEffects(): void {
+    const effects: ActiveEffectDisplay[] = [];
+    const fireMs = this.maxBallEffect((ball) => ball.getFireRemainingMs());
+    const slowMs = this.maxBallEffect((ball) => ball.getSlowRemainingMs());
+    const fastMs = this.maxBallEffect((ball) => ball.getFastRemainingMs());
+    const widenMs = this.paddle.getWidenRemainingMs();
+    const smallMs = this.paddle.getSmallRemainingMs();
+
+    if (fireMs > 0) {
+      effects.push({ label: 'FIRE', remainingMs: fireMs });
+    }
+    if (this.balls.length > 1) {
+      effects.push({ label: 'MULTI', detail: `x${this.balls.length}` });
+    }
+    if (widenMs > 0) {
+      effects.push({ label: 'WIDE', remainingMs: widenMs });
+    }
+    if (smallMs > 0) {
+      effects.push({ label: 'SMALL', remainingMs: smallMs });
+    }
+    if (slowMs > 0) {
+      effects.push({ label: 'SLOW', remainingMs: slowMs });
+    }
+    if (fastMs > 0) {
+      effects.push({ label: 'FAST', remainingMs: fastMs });
+    }
+
+    this.effectsLabel.setEffects(effects);
+  }
+
+  private maxBallEffect(read: (ball: Ball) => number): number {
+    let max = 0;
+    for (const ball of this.balls) {
+      max = Math.max(max, read(ball));
+    }
+    return max;
+  }
+
+  /** DXB-09/DXB-12: The one place that knows what each powerup type actually does. */
   private applyPowerupEffect(type: PowerupType): void {
+    const durationMs = POWERUP_DURATION_MS[type];
+
     switch (type) {
       case 'extra-life':
         this.lives++;
         this.livesLabel.setValue(this.lives);
         break;
       case 'widen-paddle':
-        this.paddle.applyWidenBoost(POWERUP_EFFECT_DURATION_MS);
+        this.paddle.applyWidenBoost(durationMs);
         break;
       case 'slow-ball':
-        this.ball.applySlowEffect(POWERUP_EFFECT_DURATION_MS);
+        for (const ball of this.balls) {
+          ball.applySlowEffect(durationMs);
+        }
         break;
+      case 'fire-ball':
+        for (const ball of this.balls) {
+          ball.applyFireEffect(durationMs);
+        }
+        break;
+      case 'fast-ball':
+        for (const ball of this.balls) {
+          ball.applyFastEffect(durationMs);
+        }
+        break;
+      case 'small-paddle':
+        this.paddle.applyShrinkEffect(durationMs);
+        break;
+      case 'multi-ball':
+        this.spawnMultiBall();
+        break;
+    }
+  }
+
+  /**
+   * DXB-12: Tops the live ball count up to `MULTI_BALL_TOTAL`. Extras
+   * inherit the source ball's remaining timed effects and start already
+   * launched. While more than one ball is in play, every ball spends on
+   * miss so a single extra falling off the bottom cannot cost a life.
+   */
+  private spawnMultiBall(): void {
+    const needed = MULTI_BALL_TOTAL - this.balls.length;
+    if (needed <= 0 || this.balls.length === 0) {
+      return;
+    }
+
+    const source = this.balls.find((ball) => ball.isLaunched()) ?? this.balls[0];
+    const sourceVelocity = new Phaser.Math.Vector2();
+    source.copyVelocityInto(sourceVelocity);
+    const launched = source.isLaunched() && sourceVelocity.length() > 0;
+    const { width, height } = GameViewport.get().getSnapshot();
+    const level = LEVELS[this.currentLevelIndex];
+
+    for (let i = 0; i < needed; i++) {
+      const extra = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
+      extra.copyEffectsFrom(source);
+
+      if (launched) {
+        const split = sourceVelocity.clone().rotate(
+          Phaser.Math.DegToRad(MULTI_BALL_SPLIT_ANGLES_DEG[i] ?? (i % 2 === 0 ? -20 : 20)),
+        );
+        extra.becomeExtra(source.x, source.y, split.x, split.y);
+      } else {
+        const speed = source.getTravelSpeed();
+        const angleDeg = -60 + (MULTI_BALL_SPLIT_ANGLES_DEG[i] ?? (i % 2 === 0 ? -20 : 20));
+        const angle = Phaser.Math.DegToRad(angleDeg);
+        extra.becomeExtra(source.x, source.y, Math.cos(angle) * speed, Math.sin(angle) * speed);
+      }
+
+      this.balls.push(extra);
+    }
+
+    if (this.balls.length > 1) {
+      for (const ball of this.balls) {
+        ball.setMissBehavior('spend');
+      }
     }
   }
 
@@ -337,11 +536,14 @@ export class MainScene extends Phaser.Scene {
 
     this.brickGrid.loadLevel(level.brickGrid ?? {}, width, height);
 
-    this.ball.destroy();
-    this.ball = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
+    for (const ball of this.balls) {
+      ball.destroy();
+    }
+    this.balls = [this.createServeBall()];
     // DXB-09: a stray capsule still falling from the just-cleared level
     // shouldn't carry into the next one's fresh brick layout.
     this.powerupManager.clear();
+    this.effectsLabel.setEffects([]);
 
     this.lastMissCount = 0;
     this.levelLabel.setValue(this.currentLevelIndex + 1);
@@ -421,13 +623,16 @@ export class MainScene extends Phaser.Scene {
     // drift, no stale viewport on rapid resizes).
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.paddle.resize(snapshot.width, snapshot.height);
-    this.ball.resize(snapshot.width, snapshot.height);
+    for (const ball of this.balls) {
+      ball.resize(snapshot.width, snapshot.height);
+    }
     this.brickGrid.resize(snapshot.width, snapshot.height);
     this.powerupManager.resize(snapshot.width, snapshot.height);
     this.scoreLabel.resize(snapshot.width, snapshot.height);
     this.bestScoreLabel.resize(snapshot.width, snapshot.height);
     this.livesLabel.resize(snapshot.width, snapshot.height);
     this.levelLabel.resize(snapshot.width, snapshot.height);
+    this.effectsLabel.resize(snapshot.width, snapshot.height);
 
     // The win/game-over/level-transition message is still shown (and
     // still responsive) while it's up, so it needs to follow resizes the

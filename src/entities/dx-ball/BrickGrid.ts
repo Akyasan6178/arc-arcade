@@ -72,6 +72,13 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * metal obstacles cannot lock a level. An optional `layout` of compact
  * row-strings selects types per cell; omitted, every cell is a normal
  * brick — the pre-DXB-11 default.
+ *
+ * DXB-12: `resolveBallCollision()` accepts an optional `{ pierce: true }`
+ * from a Fire Ball. The overlap loop is unchanged; on a pierce hit the
+ * brick is force-destroyed (including metal) and this method returns
+ * `null` so the ball keeps travelling instead of bouncing. Score, the
+ * `'brick-break'` cue, and the drop queue still run only on actual
+ * destruction — same side-effect site as a normal hit.
  */
 export interface BrickGridConfig {
   rows?: number;
@@ -224,6 +231,7 @@ export class BrickGrid {
     ballX: number,
     ballY: number,
     ballRadius: number,
+    options?: { pierce?: boolean },
   ): BrickCollisionResult | null {
     for (let i = 0; i < this.bricks.length; i++) {
       const brick = this.bricks[i];
@@ -246,7 +254,11 @@ export class BrickGrid {
         separateY: axis === 'vertical' ? signY * overlapY : 0,
       };
 
-      const destroyed = brick.takeHit();
+      // DXB-12: a Fire Ball asks `takeHit({ fire: true })` so metal and
+      // a cracked brick both die in one contact. Pierce then returns
+      // `null` (no bounce / no separation) so the ball keeps travelling
+      // through the cell; the next DXB-05 substep hits the next brick.
+      const destroyed = brick.takeHit({ fire: options?.pierce });
       if (!destroyed) {
         return result;
       }
@@ -258,9 +270,10 @@ export class BrickGrid {
       playDxBallSfx('brick-break');
 
       // DXB-09/DXB-11: drop policy is per-type. Bonus always queues a
-      // spawn; normal/cracked still roll `powerupDropChance`; metal never
-      // reaches here. Rolled independently of scoring, right before the
-      // brick's own position is lost to `destroy()`.
+      // spawn; normal/cracked still roll `powerupDropChance`; metal
+      // (`'never'`) can now reach here when a Fire Ball destroys it,
+      // and still does not drop. Rolled independently of scoring, right
+      // before the brick's own position is lost to `destroy()`.
       if (brick.powerupDrop === 'always') {
         this.pendingPowerupSpawns.push({ x: brick.x, y: brick.y });
       } else if (
@@ -271,6 +284,10 @@ export class BrickGrid {
       }
 
       brick.destroy();
+
+      if (options?.pierce) {
+        return null;
+      }
 
       return result;
     }

@@ -31,6 +31,11 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * actually happens, the same way `BrickGrid`/`Ball` fire their own
  * break/hit cues, rather than being inferred later by `MainScene` from
  * the caught-queue it drains afterward.
+ *
+ * DXB-12 expands the default spawn pool with Fire Ball, Multi Ball,
+ * Small Paddle, and Fast Ball. Type picking is still a uniform random
+ * draw from `config.types` — positives and negatives share the existing
+ * drop pipeline; this manager still does not know what any type does.
  */
 export interface PowerupManagerConfig {
   /** Which effect types can spawn; one is picked at random per `spawn()` call. */
@@ -44,7 +49,15 @@ export interface PowerupManagerConfig {
 }
 
 const DEFAULT_CONFIG: Required<PowerupManagerConfig> = {
-  types: ['widen-paddle', 'slow-ball', 'extra-life'],
+  types: [
+    'widen-paddle',
+    'slow-ball',
+    'extra-life',
+    'fire-ball',
+    'multi-ball',
+    'small-paddle',
+    'fast-ball',
+  ],
   widthRatio: 0.05,
   heightRatio: 0.03,
   fallSpeedRatio: 0.22,

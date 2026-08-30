@@ -17,3 +17,7 @@ Currently:
   DXB-07 added the two bottom corners as anchor options and put that
   reuse into practice — DX-Ball's lives counter is a third `ScoreLabel`
   instance (`Lives: `, bottom-left).
+- `ActiveEffectsLabel.ts` — DXB-12's second shared widget. A centered
+  top-of-viewport `Text` listing active effects and remaining duration
+  (or a count suffix for untimed effects). Hidden when the list is empty.
+  Not DX-Ball-specific; `MainScene` decides which effects to show.

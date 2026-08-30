@@ -77,6 +77,20 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * returns a separation vector so a brick that survives the hit (metal,
  * cracked first hit) cannot be re-overlapped on the next substep. The
  * ball still only reflects its own velocity and never knows brick types.
+ *
+ * DXB-12 adds three more self-owned effects, still without the ball
+ * knowing a "powerup" exists:
+ *   - `applyFireEffect()` — a timed pierce flag. While active,
+ *     `resolveBrickCollisions()` asks the grid `{ pierce: true }` so the
+ *     ball travels through destructible bricks and can destroy metal;
+ *     the ball itself still only decides whether to bounce.
+ *   - `applyFastEffect()` — the speed-multiplier sibling of
+ *     `applySlowEffect()`, mutually exclusive with it (applying one
+ *     cancels the other) so slow and fast never stack.
+ *   - Extra-ball miss behavior (`becomeExtra()` / `setMissBehavior()`):
+ *     a Multi-Ball extra treats a bottom-edge exit as "spent" instead of
+ *     re-serving, so `MainScene` can remove it without touching lives.
+ *     The last remaining ball is flipped back to reserve-on-miss.
  */
 export interface BallConfig {
   color?: number;
@@ -121,7 +135,14 @@ const MAX_SUBSTEPS_PER_FRAME = 8;
 /** DXB-09: Speed multiplier applied while a "slow ball" effect is active. */
 const SLOW_EFFECT_MULTIPLIER = 0.6;
 
+/** DXB-12: Speed multiplier applied while a "fast ball" effect is active. */
+const FAST_EFFECT_MULTIPLIER = 1.45;
+
+/** DXB-12: Fill color while a Fire Ball effect is active. */
+const FIRE_BALL_COLOR = 0xff6b35;
+
 type BallState = 'attached' | 'launched';
+type MissBehavior = 'reserve' | 'spend';
 
 export class Ball extends Phaser.GameObjects.Arc {
   private readonly config: Required<BallConfig>;
@@ -136,10 +157,24 @@ export class Ball extends Phaser.GameObjects.Arc {
   private serveState: BallState = 'attached';
   /** DXB-07: Running count of bottom-edge misses (see `returnToPaddle()`). */
   private missCount = 0;
-  /** DXB-09: Current speed multiplier — `SLOW_EFFECT_MULTIPLIER` while a slow effect is active, `1` otherwise. */
+  /** DXB-09/DXB-12: Current speed multiplier — slow, fast, or `1`. */
   private speedMultiplier = 1;
   /** DXB-09: Milliseconds remaining on the current slow effect, if any. */
   private slowRemainingMs = 0;
+  /** DXB-12: Milliseconds remaining on the current fast effect, if any. */
+  private fastRemainingMs = 0;
+  /** DXB-12: Milliseconds remaining on the current fire effect, if any. */
+  private fireRemainingMs = 0;
+  /**
+   * DXB-12: How a bottom-edge miss is handled. `'reserve'` re-serves
+   * above the paddle (the original DXB-02/DXB-07 path). `'spend'` marks
+   * this ball finished so `MainScene` can destroy it — used for
+   * Multi-Ball extras, and for the original ball while extras are still
+   * in play.
+   */
+  private missBehavior: MissBehavior = 'reserve';
+  /** DXB-12: True after a `'spend'` miss; `update()` becomes a no-op. */
+  private spent = false;
   /**
    * DXB-10: True while the ball is currently overlapping the paddle.
    * Paddle-hit audio fires on the rising edge only, so a single contact
@@ -182,7 +217,12 @@ export class Ball extends Phaser.GameObjects.Arc {
    * already been updated for this frame.
    */
   update(deltaMs: number): void {
-    this.tickSlowEffect(deltaMs);
+    if (this.spent) {
+      return;
+    }
+
+    this.tickSpeedEffects(deltaMs);
+    this.tickFireEffect(deltaMs);
 
     if (this.serveState === 'attached') {
       this.followPaddle();
@@ -206,6 +246,7 @@ export class Ball extends Phaser.GameObjects.Arc {
    * already in effect the moment it launches.
    */
   applySlowEffect(durationMs: number): void {
+    this.clearFastEffect();
     if (this.slowRemainingMs <= 0) {
       this.speedMultiplier = SLOW_EFFECT_MULTIPLIER;
       this.applySpeedMultiplier();
@@ -213,18 +254,164 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.slowRemainingMs = durationMs;
   }
 
-  /** Counts down an active slow effect by one frame, reverting speed the instant it expires. */
-  private tickSlowEffect(deltaMs: number): void {
-    if (this.slowRemainingMs <= 0) {
+  /**
+   * DXB-12: Applies (or refreshes) a temporary speed multiplier of
+   * `FAST_EFFECT_MULTIPLIER`. Mutually exclusive with
+   * `applySlowEffect()` — a fast-ball catch cancels an active slow
+   * (and vice versa) rather than stacking `0.6 * 1.45`.
+   */
+  applyFastEffect(durationMs: number): void {
+    this.clearSlowEffect();
+    if (this.fastRemainingMs <= 0) {
+      this.speedMultiplier = FAST_EFFECT_MULTIPLIER;
+      this.applySpeedMultiplier();
+    }
+    this.fastRemainingMs = durationMs;
+  }
+
+  /**
+   * DXB-12: Applies (or refreshes) a timed pierce flag. Catching a
+   * second fire capsule while one is already active just extends the
+   * timer. The ball tints itself while active so the effect is readable
+   * without a new sprite; color reverts on expiry.
+   */
+  applyFireEffect(durationMs: number): void {
+    if (this.fireRemainingMs <= 0) {
+      this.setFillStyle(FIRE_BALL_COLOR);
+    }
+    this.fireRemainingMs = durationMs;
+  }
+
+  /** DXB-12: Remaining slow-effect time, for the active-effects HUD. */
+  getSlowRemainingMs(): number {
+    return this.slowRemainingMs;
+  }
+
+  /** DXB-12: Remaining fast-effect time, for the active-effects HUD. */
+  getFastRemainingMs(): number {
+    return this.fastRemainingMs;
+  }
+
+  /** DXB-12: Remaining fire-effect time, for the active-effects HUD. */
+  getFireRemainingMs(): number {
+    return this.fireRemainingMs;
+  }
+
+  isLaunched(): boolean {
+    return this.serveState === 'launched';
+  }
+
+  isSpent(): boolean {
+    return this.spent;
+  }
+
+  /**
+   * DXB-12: Copies this ball's current velocity into `out` so
+   * `MainScene` can spawn Multi-Ball extras at a rotated heading
+   * without reading `velocity` directly.
+   */
+  copyVelocityInto(out: Phaser.Math.Vector2): void {
+    out.copy(this.velocity);
+  }
+
+  /** DXB-12: Current travel speed (base × active speed multiplier). */
+  getTravelSpeed(): number {
+    return Ball.computeSpeed(this.viewportWidth, this.viewportHeight, this.config) * this.speedMultiplier;
+  }
+
+  /**
+   * DXB-12: Places this ball in play immediately at `(x, y)` with the
+   * given velocity and treats a later bottom-edge miss as spent instead
+   * of re-serving. Used for Multi-Ball extras.
+   */
+  becomeExtra(x: number, y: number, velocityX: number, velocityY: number): void {
+    this.setPosition(x, y);
+    this.velocity.set(velocityX, velocityY);
+    this.serveState = 'launched';
+    this.missBehavior = 'spend';
+    this.spent = false;
+  }
+
+  /**
+   * DXB-12: Switches miss handling. `'reserve'` is the original
+   * re-serve path (last remaining ball); `'spend'` marks the ball
+   * finished on a bottom-edge exit (extras, or the original while
+   * extras are still in play).
+   */
+  setMissBehavior(behavior: MissBehavior): void {
+    this.missBehavior = behavior;
+  }
+
+  /**
+   * DXB-12: Copies remaining timed effects from `source` onto this
+   * freshly constructed extra so a Multi-Ball split inherits fire /
+   * slow / fast instead of resetting them.
+   */
+  copyEffectsFrom(source: Ball): void {
+    const slow = source.getSlowRemainingMs();
+    const fast = source.getFastRemainingMs();
+    const fire = source.getFireRemainingMs();
+    if (slow > 0) {
+      this.applySlowEffect(slow);
+    }
+    if (fast > 0) {
+      this.applyFastEffect(fast);
+    }
+    if (fire > 0) {
+      this.applyFireEffect(fire);
+    }
+  }
+
+  /** Counts down active speed effects by one frame, reverting speed the instant they expire. */
+  private tickSpeedEffects(deltaMs: number): void {
+    if (this.slowRemainingMs > 0) {
+      this.slowRemainingMs -= deltaMs;
+      if (this.slowRemainingMs <= 0) {
+        this.slowRemainingMs = 0;
+        this.revertSpeedMultiplier();
+      }
+    }
+
+    if (this.fastRemainingMs > 0) {
+      this.fastRemainingMs -= deltaMs;
+      if (this.fastRemainingMs <= 0) {
+        this.fastRemainingMs = 0;
+        this.revertSpeedMultiplier();
+      }
+    }
+  }
+
+  private tickFireEffect(deltaMs: number): void {
+    if (this.fireRemainingMs <= 0) {
       return;
     }
 
-    this.slowRemainingMs -= deltaMs;
-    if (this.slowRemainingMs <= 0) {
-      this.slowRemainingMs = 0;
-      this.speedMultiplier = 1;
-      this.applySpeedMultiplier();
+    this.fireRemainingMs -= deltaMs;
+    if (this.fireRemainingMs <= 0) {
+      this.fireRemainingMs = 0;
+      this.setFillStyle(this.config.color);
     }
+  }
+
+  private clearSlowEffect(): void {
+    if (this.slowRemainingMs <= 0) {
+      return;
+    }
+    this.slowRemainingMs = 0;
+    this.revertSpeedMultiplier();
+  }
+
+  private clearFastEffect(): void {
+    if (this.fastRemainingMs <= 0) {
+      return;
+    }
+    this.fastRemainingMs = 0;
+    this.revertSpeedMultiplier();
+  }
+
+  private revertSpeedMultiplier(): void {
+    this.speedMultiplier = 1;
+    this.applySpeedMultiplier();
   }
 
   /** Rescales current velocity (if launched) to the base speed times `speedMultiplier`, preserving direction. */
@@ -325,7 +512,10 @@ export class Ball extends Phaser.GameObjects.Arc {
   }
 
   protected preDestroy(): void {
-    this.spaceKey?.destroy();
+    // DXB-12: do not destroy the SPACE key. Phaser returns the same
+    // Key instance for every `addKey(SPACE)` on this scene; destroying
+    // it from an extra Multi-Ball would disarm launch on the remaining
+    // serve ball. Scene shutdown already tears keyboard keys down.
     super.preDestroy();
   }
 
@@ -350,9 +540,16 @@ export class Ball extends Phaser.GameObjects.Arc {
    */
   private returnToPaddle(): void {
     this.velocity.set(0, 0);
-    this.serveState = 'attached';
     this.missCount++;
     this.overlappingPaddle = false;
+
+    if (this.missBehavior === 'spend') {
+      this.spent = true;
+      this.setVisible(false);
+      return;
+    }
+
+    this.serveState = 'attached';
     this.followPaddle();
   }
 
@@ -429,7 +626,9 @@ export class Ball extends Phaser.GameObjects.Arc {
    * or the grid's internal list directly.
    */
   private resolveBrickCollisions(): void {
-    const hit = this.brickGrid.resolveBallCollision(this.x, this.y, this.radius);
+    const hit = this.brickGrid.resolveBallCollision(this.x, this.y, this.radius, {
+      pierce: this.fireRemainingMs > 0,
+    });
 
     if (!hit) {
       return;

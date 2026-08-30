@@ -21,6 +21,7 @@ be updated at the end of every task's closure workflow.
 - ✅ DXB-09 Powerup System
 - ✅ DXB-10 Audio System
 - ✅ DXB-11 Advanced Brick System
+- ✅ DXB-12 Advanced Powerups
 
 ## Technology Stack
 
@@ -35,14 +36,14 @@ src/
   scenes/     BootScene -> PreloadScene -> MainScene
   systems/    GameViewport, SceneKeys, HighScoreStore, AudioManager
   entities/   dx-ball/ (Paddle, Ball, Brick, BrickType, BrickGrid, levels, Powerup, PowerupManager, audioCues)
-  ui/         ScoreLabel
+  ui/         ScoreLabel, ActiveEffectsLabel
   assets/     dx-ball/audio-manifest.ts (empty real-asset list; SFX use synthesized fallback)
 ```
 
 **Scenes**
 - `BootScene` — first scene to run; minimal setup, hands off to `PreloadScene`.
 - `PreloadScene` — loads assets and shows loading progress, hands off to `MainScene`. Since DXB-10: also loops over `DX_BALL_AUDIO_MANIFEST` calling `this.load.audio()` for each entry (currently zero, so a no-op today).
-- `MainScene` — the active DX-Ball gameplay scene. Owns and drives `Paddle`, `Ball`, and `BrickGrid` each frame; subscribes to `GameViewport` to keep the camera and every entity in sync with resizes; since DXB-04, also owns the win/restart flow (freezes the update loop and shows a win message once `BrickGrid.isCleared()`, restarting the scene via `this.scene.restart()` on Space). Since DXB-06: also owns the score HUD — polls `BrickGrid.getScore()` every frame into a `ScoreLabel`, tracks/persists a best score via `HighScoreStore` the moment it's passed, and reports the final score in the win message. Since DXB-07: also owns the lives/lose flow — starts each run with 3 lives, polls `Ball.getMissCount()` every frame to decrement them, and once they reach zero freezes the loop (mirroring the win flow via a sibling `lost` flag) and shows a "GAME OVER" message with the same restart-on-Space mechanic. Since DXB-08: also owns the level sequence (`entities/dx-ball/levels.ts`) — `isCleared()` now advances to the next level (`BrickGrid.loadLevel()` + a fresh `Ball`, both preserving score/lives) behind a "LEVEL CLEARED" transition message, and only calls `handleWin()` once the last level is cleared. Since DXB-09: also owns a `PowerupManager` for the run — every frame it drains `BrickGrid`'s queued powerup spawns into it, advances it, and dispatches any caught capsule's effect (`extra-life` bumps lives directly; `widen-paddle`/`slow-ball` delegate to `Paddle`/`Ball`); a level transition clears any still-falling capsules. Since DXB-10: plays the four scene-owned audio cues (`life-lost`, `level-complete`, `game-over`, `victory`) at the same code paths that already detect those events, and wires the `M` key to `AudioManager.toggle()` as a global mute (a keybinding, not a HUD control).
+- `MainScene` — the active DX-Ball gameplay scene. Owns and drives `Paddle`, `Ball`, and `BrickGrid` each frame; subscribes to `GameViewport` to keep the camera and every entity in sync with resizes; since DXB-04, also owns the win/restart flow (freezes the update loop and shows a win message once `BrickGrid.isCleared()`, restarting the scene via `this.scene.restart()` on Space). Since DXB-06: also owns the score HUD — polls `BrickGrid.getScore()` every frame into a `ScoreLabel`, tracks/persists a best score via `HighScoreStore` the moment it's passed, and reports the final score in the win message. Since DXB-07: also owns the lives/lose flow — starts each run with 3 lives, polls `Ball.getMissCount()` every frame to decrement them, and once they reach zero freezes the loop (mirroring the win flow via a sibling `lost` flag) and shows a "GAME OVER" message with the same restart-on-Space mechanic. Since DXB-08: also owns the level sequence (`entities/dx-ball/levels.ts`) — `isCleared()` now advances to the next level (`BrickGrid.loadLevel()` + a fresh `Ball`, both preserving score/lives) behind a "LEVEL CLEARED" transition message, and only calls `handleWin()` once the last level is cleared. Since DXB-09: also owns a `PowerupManager` for the run — every frame it drains `BrickGrid`'s queued powerup spawns into it, advances it, and dispatches any caught capsule's effect (`extra-life` bumps lives directly; `widen-paddle`/`slow-ball` delegate to `Paddle`/`Ball`); a level transition clears any still-falling capsules. Since DXB-10: plays the four scene-owned audio cues (`life-lost`, `level-complete`, `game-over`, `victory`) at the same code paths that already detect those events, and wires the `M` key to `AudioManager.toggle()` as a global mute (a keybinding, not a HUD control). Since DXB-12: owns a `balls[]` instead of a single `ball` so Multi Ball can coexist with lives/levels (extras spend on miss; lives still only decrement when the last ball is gone); `applyPowerupEffect()` also dispatches Fire Ball / Fast Ball / Small Paddle / Multi Ball; an `ActiveEffectsLabel` at top-center lists every active effect and its remaining duration.
 
 **Systems**
 - `GameViewport` — game-agnostic responsive-viewport service (singleton). Wraps Phaser's Scale Manager plus browser resize/orientation/safe-area concerns into one snapshot (`width`, `height`, `centerX/Y`, `isPortrait/Landscape`, `safeArea`) with a subscribable `onChange()`.
@@ -52,19 +53,20 @@ src/
 
 ## Current Entities (`dx-ball/`)
 
-- `Paddle` — rectangle game object; responsive size/position; mouse/touch (pointer) + keyboard (arrow key) control with speed-capped smoothing; clamped to viewport width. Since DXB-04: `checkBallCollision(ballX, ballY, ballRadius)` reports which axis a ball overlapping it should bounce along. Since DXB-05: `computeHitOffset(x)` reports where on the paddle (`-1` left edge .. `1` right edge) a point sits, used to vary the ball's bounce angle. Since DXB-06A: default width narrowed ~20% (`widthRatio` 0.16 → 0.128), a tuning-only change. Since DXB-09: `applyWidenBoost(durationMs)` applies a temporary `1.5x` width multiplier that the paddle counts down and reverts itself every frame.
-- `Ball` — circle game object; responsive size/speed; `attached` / `launched` serve state machine (Space to launch, exactly once per serve); bounces off left/right/top viewport edges; a bottom exit re-serves it above the paddle. Since DXB-03: bounces off bricks via `BrickGrid.resolveBallCollision()`. Since DXB-04: also bounces off the paddle via `Paddle.checkBallCollision()`, checked every launched frame right before the brick check. Since DXB-05: a paddle hit's bounce angle now varies by where on the paddle it landed (center = straight up, edges deviate up to 60°), and a launched frame's motion is split into small collision-checked substeps (capped to half the ball's radius each) instead of one big step, closing a tunneling gap at high speed. Since DXB-07: also tracks a running `missCount` (incremented on every bottom-edge miss), exposed via `getMissCount()` for `MainScene` to poll into a lives system. Since DXB-09: `applySlowEffect(durationMs)` applies a temporary `0.6x` speed multiplier, folded into launch/resize speed and ticked/reverted every frame regardless of serve state. Since DXB-10: `resolvePaddleCollision()` plays `'paddle-hit'` on the rising edge of paddle overlap (so a single contact spanning several substeps does not replay the cue). Since DXB-11: also applies the separation vector `BrickGrid.resolveBallCollision()` now returns, so a brick that survives the hit (metal, cracked first hit) cannot be re-overlapped on the next substep; the ball still does not know brick types exist.
-- `Brick` — single rectangle grid cell; owns its row/column identity. Since DXB-06: also carries a fixed `points` value, assigned once by `BrickGrid` at creation. Since DXB-11: also carries `brickType` plus remaining hit-points and type-driven appearance (`takeHit()` / healthy-vs-cracked fill and stroke); metal/bonus override the row color. Collision, scoring, and drops still live in `BrickGrid`.
+- `Paddle` — rectangle game object; responsive size/position; mouse/touch (pointer) + keyboard (arrow key) control with speed-capped smoothing; clamped to viewport width. Since DXB-04: `checkBallCollision(ballX, ballY, ballRadius)` reports which axis a ball overlapping it should bounce along. Since DXB-05: `computeHitOffset(x)` reports where on the paddle (`-1` left edge .. `1` right edge) a point sits, used to vary the ball's bounce angle. Since DXB-06A: default width narrowed ~20% (`widthRatio` 0.16 → 0.128), a tuning-only change. Since DXB-09: `applyWidenBoost(durationMs)` applies a temporary `1.5x` width multiplier that the paddle counts down and reverts itself every frame. Since DXB-12: `applyShrinkEffect(durationMs)` applies a temporary `0.65x` width (Small Paddle), mutually exclusive with widen; getters expose remaining ms for the effects HUD.
+- `Ball` — circle game object; responsive size/speed; `attached` / `launched` serve state machine (Space to launch, exactly once per serve); bounces off left/right/top viewport edges; a bottom exit re-serves it above the paddle. Since DXB-03: bounces off bricks via `BrickGrid.resolveBallCollision()`. Since DXB-04: also bounces off the paddle via `Paddle.checkBallCollision()`, checked every launched frame right before the brick check. Since DXB-05: a paddle hit's bounce angle now varies by where on the paddle it landed (center = straight up, edges deviate up to 60°), and a launched frame's motion is split into small collision-checked substeps (capped to half the ball's radius each) instead of one big step, closing a tunneling gap at high speed. Since DXB-07: also tracks a running `missCount` (incremented on every bottom-edge miss), exposed via `getMissCount()` for `MainScene` to poll into a lives system. Since DXB-09: `applySlowEffect(durationMs)` applies a temporary `0.6x` speed multiplier, folded into launch/resize speed and ticked/reverted every frame regardless of serve state. Since DXB-10: `resolvePaddleCollision()` plays `'paddle-hit'` on the rising edge of paddle overlap (so a single contact spanning several substeps does not replay the cue). Since DXB-11: also applies the separation vector `BrickGrid.resolveBallCollision()` now returns, so a brick that survives the hit (metal, cracked first hit) cannot be re-overlapped on the next substep; the ball still does not know brick types exist. Since DXB-12: `applyFireEffect()` (timed pierce — the ball asks the grid `{ pierce: true }` and tints orange); `applyFastEffect()` (`1.45x`, mutually exclusive with slow); extra-ball miss behavior for Multi Ball (`becomeExtra()` / `setMissBehavior('spend')` marks a bottom-edge exit spent instead of re-serving).
+- `Brick` — single rectangle grid cell; owns its row/column identity. Since DXB-06: also carries a fixed `points` value, assigned once by `BrickGrid` at creation. Since DXB-11: also carries `brickType` plus remaining hit-points and type-driven appearance (`takeHit()` / healthy-vs-cracked fill and stroke); metal/bonus override the row color. Collision, scoring, and drops still live in `BrickGrid`. Since DXB-12: `takeHit({ fire: true })` destroys in one hit, including metal — only `BrickGrid` passes that flag.
 - `BrickType.ts` — DXB-11: reusable brick-type vocabulary (`normal` | `cracked` | `metal` | `bonus`), a `BRICK_TYPE_SPECS` data table (hit count, score, drop policy, fill/stroke), and the compact layout parser (`N`/`C`/`M`/`B`/`.`). Kept out of `BrickGrid` the same way `levels.ts` keeps level data out of the grid.
-- `BrickGrid` — owns the full set of `Brick`s (default 5 rows × 8 columns, one color per row); responsive layout; `resolveBallCollision()` checks a ball against every remaining brick and safely removes the first one it overlaps. Since DXB-04: `isCleared()` reports whether every brick has been removed (the win condition). Since DXB-06: also assigns each brick's `points` (row-weighted — back rows worth more) and accumulates a running `getScore()` total as bricks are destroyed. Since DXB-06A: bricks sized slightly smaller (`gapRatio` 0.008 → 0.01, `rowHeightRatio` 0.035 → 0.03), a tuning-only change; row/column count and scoring formula unchanged. Since DXB-08: `loadLevel(config, viewportWidth, viewportHeight)` replaces every brick with a fresh grid built from a new config *without* resetting `score`, letting a level transition carry the running score forward on the same instance. Since DXB-09: also rolls a `powerupDropChance` (default 0.15) whenever it removes a brick, queuing that brick's position for `consumePendingPowerupSpawns()` to report — the grid itself has no idea what a "powerup" is beyond a spawn point. Since DXB-10: `resolveBallCollision()` plays `'brick-break'` the instant it removes a brick. Since DXB-11: the same overlap loop now asks `Brick.takeHit()` before removing, so metal and a cracked first hit bounce without being destroyed; score and `'brick-break'` still fire only on actual destruction; bonus always queues a drop; `isCleared()` ignores remaining metal; an optional `layout` of row-strings selects types per cell (omitted → all normal).
+- `BrickGrid` — owns the full set of `Brick`s (default 5 rows × 8 columns, one color per row); responsive layout; `resolveBallCollision()` checks a ball against every remaining brick and safely removes the first one it overlaps. Since DXB-04: `isCleared()` reports whether every brick has been removed (the win condition). Since DXB-06: also assigns each brick's `points` (row-weighted — back rows worth more) and accumulates a running `getScore()` total as bricks are destroyed. Since DXB-06A: bricks sized slightly smaller (`gapRatio` 0.008 → 0.01, `rowHeightRatio` 0.035 → 0.03), a tuning-only change; row/column count and scoring formula unchanged. Since DXB-08: `loadLevel(config, viewportWidth, viewportHeight)` replaces every brick with a fresh grid built from a new config *without* resetting `score`, letting a level transition carry the running score forward on the same instance. Since DXB-09: also rolls a `powerupDropChance` (default 0.15) whenever it removes a brick, queuing that brick's position for `consumePendingPowerupSpawns()` to report — the grid itself has no idea what a "powerup" is beyond a spawn point. Since DXB-10: `resolveBallCollision()` plays `'brick-break'` the instant it removes a brick. Since DXB-11: the same overlap loop now asks `Brick.takeHit()` before removing, so metal and a cracked first hit bounce without being destroyed; score and `'brick-break'` still fire only on actual destruction; bonus always queues a drop; `isCleared()` ignores remaining metal; an optional `layout` of row-strings selects types per cell (omitted → all normal). Since DXB-12: optional `{ pierce: true }` force-destroys the overlapped brick (including metal) and returns `null` so a Fire Ball continues through instead of bouncing; drop policy for metal is still `'never'`.
 - `levels.ts` — DXB-08: DX-Ball's fixed level sequence, a plain `LevelConfig[]` (`LEVELS`) of partial `BrickGrid`/`Ball` config overrides, read only by `MainScene`. 3 entries: level 1 is unchanged defaults, levels 2-3 progressively add rows/columns, tighten spacing, raise points-per-row, and raise ball speed. Since DXB-11: levels 2-3 also carry compact `layout` strings (level 2 adds cracked; level 3 adds cracked, metal, and bonus). Level 1 stays all-normal (no `layout`).
-- `Powerup` — DXB-09: a single falling capsule; a `Container` holding a colored rounded-rect background plus a one-letter label (`W`/`S`/`L`), one fixed color+letter pair per `PowerupType` (`widen-paddle` | `slow-ball` | `extra-life`). Purely visual/motion — all "what happens when caught" logic lives in `PowerupManager`.
-- `PowerupManager` — DXB-09: owns every currently-falling `Powerup` for one run. `spawn(x, y)` picks a random configured type; `update()` advances each capsule and checks it against the paddle (caught → queued, no penalty either way if missed) or the bottom edge (removed); `consumeCaughtPowerups()` drains the caught queue for `MainScene` to react to. Deliberately never holds a `Ball` reference (which is replaced, not mutated, on every level transition) or touches lives/score directly. Since DXB-10: `spawn()` plays `'powerup-spawn'` and a catch plays `'powerup-collect'`.
+- `Powerup` — DXB-09: a single falling capsule; a `Container` holding a colored rounded-rect background plus a one-letter label, one fixed color+letter pair per `PowerupType`. Purely visual/motion — all "what happens when caught" logic lives in `PowerupManager`. Since DXB-12: the union and visual map also include `fire-ball` (`F`), `multi-ball` (`M`), `small-paddle` (`N`), `fast-ball` (`T`) alongside the original `W`/`S`/`L`.
+- `PowerupManager` — DXB-09: owns every currently-falling `Powerup` for one run. `spawn(x, y)` picks a random configured type; `update()` advances each capsule and checks it against the paddle (caught → queued, no penalty either way if missed) or the bottom edge (removed); `consumeCaughtPowerups()` drains the caught queue for `MainScene` to react to. Deliberately never holds a `Ball` reference (which is replaced, not mutated, on every level transition) or touches lives/score directly. Since DXB-10: `spawn()` plays `'powerup-spawn'` and a catch plays `'powerup-collect'`. Since DXB-12: the default spawn pool is the full 7-type roster (positives and negatives share the existing drop pipeline); this manager still does not know what any type does.
 - `audioCues.ts` — DXB-10: DX-Ball's own 8-event sound-effect vocabulary (`DxBallSfxKey` + synthesized `ToneSpec` per key) and the single `playDxBallSfx(key)` helper every entity/scene uses. Kept out of `AudioManager` the same way `levels.ts` keeps level data out of `BrickGrid`.
 
 ## Current UI (`ui/`)
 
 - `ScoreLabel` — DXB-06: reusable HUD widget (`Phaser.GameObjects.Text` subclass) showing a `prefix` + numeric value anchored to a viewport corner, responsively sized/positioned. Not DX-Ball-specific — `MainScene` uses four instances (`Score:` top-left, `Best:` top-right, `Lives:` bottom-left since DXB-07, `Level:` bottom-right since DXB-08). Since DXB-07: anchor supports all four corners (`top-left` | `top-right` | `bottom-left` | `bottom-right`), not just the top two.
+- `ActiveEffectsLabel` — DXB-12: reusable top-center HUD listing active effects and remaining duration (or a count suffix for untimed effects such as Multi Ball). Hidden when empty. Not DX-Ball-specific — `MainScene` decides which effects to show.
 
 ## Documentation
 
@@ -80,6 +82,7 @@ src/
 - `docs/progress/DXB-09.md`
 - `docs/progress/DXB-10.md`
 - `docs/progress/DXB-11.md`
+- `docs/progress/DXB-12.md`
 - `docs/CURRENT_STATE.md` (this file)
 
 ## Repository
@@ -94,42 +97,38 @@ src/
 
 ## Last Completed Task
 
-DXB-11 Advanced Brick System — the brick field now supports four types
-through a reusable spec table (`BrickType.ts`): normal (1 hit, existing
-score and random drop), cracked (2 hits, visible damaged state, score
-only on destroy), metal (indestructible obstacle that still bounces the
-ball and does not block `isCleared()`), and bonus (score plus a
-guaranteed powerup via the existing drop queue). `BrickGrid`'s collision
-loop is reused; `Brick.takeHit()` decides destruction. Level 1 stays
-all-normal; level 2 introduces cracked bricks; level 3 mixes cracked,
-metal, and bonus. Score, lives, levels, powerups, and audio pipelines
-are preserved. See `docs/progress/DXB-11.md` for full details.
-`npm run typecheck` and `npm run build` both verified passing.
+DXB-12 Advanced Powerups — the drop/catch pipeline now includes four
+new effects alongside Widen / Slow / Extra Life: Fire Ball (10s pierce,
+can destroy metal), Multi Ball (tops up to 3 live balls; extras spend
+on miss so lives still only decrement when the last ball is gone),
+Small Paddle (15s, 0.65× width), and Fast Ball (10s, 1.45× speed).
+Opposing timed pairs (widen/small, slow/fast) overwrite rather than
+stack. An `ActiveEffectsLabel` at top-center lists every active effect
+and its remaining duration. Score, lives, levels, existing powerups,
+and audio pipelines are preserved. See `docs/progress/DXB-12.md` for
+full details. `npm run typecheck` and `npm run build` both verified
+passing.
 
 ## Next Recommended Task
 
-The core gameplay loop now spans a full level sequence plus powerups,
-audio, and advanced brick types (win, lose, score, best score, lives,
-levels, powerups, SFX, brick types). Good candidates going forward,
-none yet confirmed with a requester:
-- A live-playtested balance pass covering the new type mix (how many
-  cracked/metal/bonus per level, metal placement) together with the
-  powerup system's values (drop chance, effect duration, widen/slow
-  multipliers), all 3 levels' layouts/ball speed, paddle width/speed,
-  starting lives, and DXB-10's 8 synthesized cues' pitches/durations/
-  gains — the standing recommendation since DXB-06A/DXB-07/DXB-08,
-  still using manual verification this session (see DXB-11's own Known
-  Risks).
+The core gameplay loop now spans a full level sequence plus the expanded
+powerup roster, audio, and advanced brick types (win, lose, score, best
+score, lives, levels, powerups, SFX, brick types). Good candidates going
+forward, none yet confirmed with a requester:
+- A live-playtested balance pass covering the new 7-type mix (drop
+  chance, durations, widen/small/slow/fast multipliers) together with
+  the brick-type layouts, all 3 levels' ball speed, paddle width/speed,
+  starting lives, and DXB-10's 8 synthesized cues — the standing
+  recommendation since DXB-06A/DXB-07/DXB-08, still using manual
+  verification this session (see DXB-12's own Known Risks).
 - Visual feedback polish (a "+N" popup or flash on scoring, a flash on
   losing a life, catching a powerup, win/game-over, or a level
-  transition; a HUD indicator for an active timed effect's remaining
-  duration; a crack-hit cue) — the visual half of the polish item
-  repeatedly deferred since DXB-05; audio is now in.
+  transition; a crack-hit cue) — the timed-effect HUD requested since
+  DXB-09 is now in; the rest of this polish item has been deferred
+  since DXB-05.
 - Background music, explicitly deferred by DXB-10's own Restrictions —
   `AudioManager`'s real-asset path and `AudioManifestEntry.category` are
   already shaped for it.
 - A pause/main menu (`ui/` still has no menu component); a visible mute
   toggle would fit naturally there once one exists.
-- Additional powerup types deferred at DXB-09's own scoping (Multi-Ball,
-  Shrink Paddle, Sticky Paddle) if a future task wants to expand the
-  effect roster.
+- Sticky Paddle, still deferred at DXB-09's own scoping.

@@ -34,6 +34,12 @@ import Phaser from 'phaser';
  * this and for how long; the paddle only ever owns its own size, the
  * same "entity owns its own state/behavior" pattern established since
  * DXB-01.
+ *
+ * DXB-12 adds `applyShrinkEffect()` (Small Paddle): the same multiplier
+ * + remaining-ms shape, with a `< 1` multiplier. Widen and shrink are
+ * mutually exclusive — applying one cancels the other — so the paddle
+ * never stacks `1.5 * 0.65`. Catching a second capsule of the same
+ * effect still only refreshes the timer, never the multiplier.
  */
 export interface PaddleConfig {
   color?: number;
@@ -57,6 +63,9 @@ const DEFAULT_CONFIG: Required<PaddleConfig> = {
 /** DXB-09: Width multiplier applied while a "widen paddle" boost is active. */
 const WIDEN_BOOST_MULTIPLIER = 1.5;
 
+/** DXB-12: Width multiplier applied while a "small paddle" effect is active. */
+const SMALL_PADDLE_MULTIPLIER = 0.65;
+
 export class Paddle extends Phaser.GameObjects.Rectangle {
   private readonly config: Required<PaddleConfig>;
   private readonly cursorKeys?: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -66,10 +75,12 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
   private viewportHeight: number;
   /** Desired paddle center x, driven by pointer/touch/keyboard input. */
   private targetX: number;
-  /** DXB-09: Current width multiplier — `WIDEN_BOOST_MULTIPLIER` while a boost is active, `1` otherwise. */
+  /** DXB-09/DXB-12: Current width multiplier — widen, shrink, or `1`. */
   private widthMultiplier = 1;
   /** DXB-09: Milliseconds remaining on the current widen boost, if any. */
   private widenRemainingMs = 0;
+  /** DXB-12: Milliseconds remaining on the current small-paddle effect, if any. */
+  private smallRemainingMs = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -106,7 +117,7 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
    * input, and speed-capped smoothing to work.
    */
   update(deltaMs: number): void {
-    this.tickWidenBoost(deltaMs);
+    this.tickWidthEffects(deltaMs);
 
     const deltaSeconds = deltaMs / 1000;
     const maxSpeed = this.viewportWidth * this.config.speedRatio;
@@ -135,6 +146,7 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
    * active.
    */
   applyWidenBoost(durationMs: number): void {
+    this.clearShrinkEffect();
     if (this.widenRemainingMs <= 0) {
       this.widthMultiplier = WIDEN_BOOST_MULTIPLIER;
       this.applySize();
@@ -142,18 +154,69 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     this.widenRemainingMs = durationMs;
   }
 
-  /** Counts down an active widen boost by one frame, reverting the width the instant it expires. */
-  private tickWidenBoost(deltaMs: number): void {
+  /**
+   * DXB-12: Applies (or refreshes) a temporary width shrink of
+   * `SMALL_PADDLE_MULTIPLIER`. Mutually exclusive with
+   * `applyWidenBoost()` — a small-paddle catch cancels an active widen
+   * (and vice versa) rather than stacking the two multipliers.
+   */
+  applyShrinkEffect(durationMs: number): void {
+    this.clearWidenBoost();
+    if (this.smallRemainingMs <= 0) {
+      this.widthMultiplier = SMALL_PADDLE_MULTIPLIER;
+      this.applySize();
+    }
+    this.smallRemainingMs = durationMs;
+  }
+
+  /** DXB-12: Remaining widen-boost time, for the active-effects HUD. */
+  getWidenRemainingMs(): number {
+    return this.widenRemainingMs;
+  }
+
+  /** DXB-12: Remaining small-paddle time, for the active-effects HUD. */
+  getSmallRemainingMs(): number {
+    return this.smallRemainingMs;
+  }
+
+  /** Counts down an active width effect by one frame, reverting the width the instant it expires. */
+  private tickWidthEffects(deltaMs: number): void {
+    if (this.widenRemainingMs > 0) {
+      this.widenRemainingMs -= deltaMs;
+      if (this.widenRemainingMs <= 0) {
+        this.widenRemainingMs = 0;
+        this.revertWidthMultiplier();
+      }
+    }
+
+    if (this.smallRemainingMs > 0) {
+      this.smallRemainingMs -= deltaMs;
+      if (this.smallRemainingMs <= 0) {
+        this.smallRemainingMs = 0;
+        this.revertWidthMultiplier();
+      }
+    }
+  }
+
+  private clearWidenBoost(): void {
     if (this.widenRemainingMs <= 0) {
       return;
     }
+    this.widenRemainingMs = 0;
+    this.revertWidthMultiplier();
+  }
 
-    this.widenRemainingMs -= deltaMs;
-    if (this.widenRemainingMs <= 0) {
-      this.widenRemainingMs = 0;
-      this.widthMultiplier = 1;
-      this.applySize();
+  private clearShrinkEffect(): void {
+    if (this.smallRemainingMs <= 0) {
+      return;
     }
+    this.smallRemainingMs = 0;
+    this.revertWidthMultiplier();
+  }
+
+  private revertWidthMultiplier(): void {
+    this.widthMultiplier = 1;
+    this.applySize();
   }
 
   /**
