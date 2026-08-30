@@ -3,20 +3,26 @@ import { SceneKeys } from '@systems/SceneKeys';
 import { GameViewport, type ViewportSnapshot } from '@systems/GameViewport';
 import { Paddle } from '@entities/dx-ball/Paddle';
 import { Ball } from '@entities/dx-ball/Ball';
+import { BrickGrid } from '@entities/dx-ball/BrickGrid';
 
 /**
  * scenes/MainScene.ts
  *
  * The active gameplay scene. DXB-01 introduced the first DX-Ball gameplay
  * entity here: the paddle (see `entities/dx-ball/Paddle.ts`). DXB-02 adds
- * the second: the ball (see `entities/dx-ball/Ball.ts`). The ARC-01
- * diagnostic viewport border/label that previously lived here have been
- * removed now that real gameplay exists, per that code's own note that it
- * was a temporary stand-in and NOT game UI/HUD.
+ * the second: the ball (see `entities/dx-ball/Ball.ts`). DXB-03 adds the
+ * brick field and ball/brick collision (see
+ * `entities/dx-ball/BrickGrid.ts`). The brick grid is constructed before
+ * the ball since the ball takes it by reference to check/react to brick
+ * collisions each frame. The ARC-01 diagnostic viewport border/label that
+ * previously lived here have been removed now that real gameplay exists,
+ * per that code's own note that it was a temporary stand-in and NOT game
+ * UI/HUD.
  */
 export class MainScene extends Phaser.Scene {
   private paddle!: Paddle;
   private ball!: Ball;
+  private brickGrid!: BrickGrid;
   private unsubscribeViewport?: () => void;
 
   constructor() {
@@ -29,7 +35,8 @@ export class MainScene extends Phaser.Scene {
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.paddle = new Paddle(this, snapshot.width, snapshot.height);
-    this.ball = new Ball(this, snapshot.width, snapshot.height, this.paddle);
+    this.brickGrid = new BrickGrid(this, snapshot.width, snapshot.height);
+    this.ball = new Ball(this, snapshot.width, snapshot.height, this.paddle, this.brickGrid);
 
     // The pattern every future game should follow: subscribe once, then
     // reposition/rescale whatever depends on viewport size whenever it
@@ -54,5 +61,6 @@ export class MainScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.paddle.resize(snapshot.width, snapshot.height);
     this.ball.resize(snapshot.width, snapshot.height);
+    this.brickGrid.resize(snapshot.width, snapshot.height);
   }
 }
