@@ -12,6 +12,9 @@ import Phaser from 'phaser';
  * Mirrors `ScoreLabel`: this class *is* the `Phaser.GameObjects.Text`,
  * sized/positioned from viewport ratios. The caller owns *which* effects
  * are active and for how long; this widget only formats and places them.
+ *
+ * DXB-13: same HUD typeface, stroke, and shadow as `ScoreLabel` so the
+ * top-center list matches the corner counters.
  */
 export interface ActiveEffectDisplay {
   /** Short name shown on the HUD, e.g. `'FIRE'`. */
@@ -34,10 +37,13 @@ export interface ActiveEffectsLabelConfig {
   fontSizeRatio?: number;
 }
 
+const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
+const HUD_DEPTH = 20;
+
 const DEFAULT_CONFIG: Required<ActiveEffectsLabelConfig> = {
-  color: '#ffffff',
+  color: '#ffe066',
   topRatio: 0.02,
-  fontSizeRatio: 0.022,
+  fontSizeRatio: 0.024,
 };
 
 export class ActiveEffectsLabel extends Phaser.GameObjects.Text {
@@ -55,14 +61,19 @@ export class ActiveEffectsLabel extends Phaser.GameObjects.Text {
     const { x, y } = ActiveEffectsLabel.computePosition(viewportWidth, viewportHeight, resolvedConfig);
 
     super(scene, x, y, '', {
-      fontFamily: 'sans-serif',
+      fontFamily: HUD_FONT_FAMILY,
       fontSize: `${fontSize}px`,
       color: resolvedConfig.color,
+      fontStyle: 'bold',
       align: 'center',
+      stroke: '#0b1320',
+      strokeThickness: 4,
     });
 
     this.config = resolvedConfig;
     this.setOrigin(0.5, 0);
+    this.setShadow(1, 2, '#000000', 3, true, true);
+    this.setDepth(HUD_DEPTH);
     this.setVisible(false);
     scene.add.existing(this);
   }

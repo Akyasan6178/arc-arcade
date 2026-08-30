@@ -100,6 +100,7 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     this.targetX = x;
 
     scene.add.existing(this);
+    this.setDepth(10);
 
     // `pointermove` covers mouse movement on desktop and finger drags on
     // touch devices alike — Phaser normalizes both into the same event.

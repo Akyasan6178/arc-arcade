@@ -20,11 +20,14 @@ import { AudioManager } from '@systems/AudioManager';
  * canvases. This is the "Phaser Scale Manager configuration" +
  * "responsive viewport system" foundation every future game reads through
  * the `GameViewport` service (see systems/GameViewport.ts).
+ *
+ * DXB-13: `backgroundColor` matches the arcade backdrop's top band so a
+ * resize/load flash stays in the same navy family.
  */
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'app',
-  backgroundColor: '#1d1d1d',
+  backgroundColor: '#0a1128',
   scale: {
     mode: Phaser.Scale.RESIZE,
     parent: 'app',

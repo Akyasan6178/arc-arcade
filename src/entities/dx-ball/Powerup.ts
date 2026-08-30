@@ -15,6 +15,10 @@ import Phaser from 'phaser';
  * DXB-12 adds four more types to the same visual map (`F` fire, `M`
  * multi, `N` narrow/small paddle, `T` turbo/fast). Effect logic still
  * lives entirely in `PowerupManager` / `MainScene`.
+ *
+ * DXB-13: positive types use a green family; negative types use a
+ * red/orange family. Letter indicators are unchanged. Catch/motion
+ * behavior is unchanged.
  */
 export type PowerupType =
   | 'widen-paddle'
@@ -27,17 +31,18 @@ export type PowerupType =
 
 interface PowerupVisual {
   color: number;
+  stroke: number;
   letter: string;
 }
 
 const POWERUP_VISUALS: Record<PowerupType, PowerupVisual> = {
-  'widen-paddle': { color: 0x4d96ff, letter: 'W' },
-  'slow-ball': { color: 0x90be6d, letter: 'S' },
-  'extra-life': { color: 0xe63946, letter: 'L' },
-  'fire-ball': { color: 0xff6b35, letter: 'F' },
-  'multi-ball': { color: 0xffd60a, letter: 'M' },
-  'small-paddle': { color: 0x9b5de5, letter: 'N' },
-  'fast-ball': { color: 0xf72585, letter: 'T' },
+  'widen-paddle': { color: 0x2d6a4f, stroke: 0xb7e4c7, letter: 'W' },
+  'slow-ball': { color: 0x40916c, stroke: 0xd8f3dc, letter: 'S' },
+  'extra-life': { color: 0x52b788, stroke: 0xedf6f0, letter: 'L' },
+  'fire-ball': { color: 0x1b4332, stroke: 0x95d5b2, letter: 'F' },
+  'multi-ball': { color: 0x74c69d, stroke: 0xf0fff4, letter: 'M' },
+  'small-paddle': { color: 0xe85d04, stroke: 0xffd166, letter: 'N' },
+  'fast-ball': { color: 0xc1121f, stroke: 0xffba08, letter: 'T' },
 };
 
 /** Corner radius of the capsule background, as a ratio of its own height. */
@@ -45,6 +50,8 @@ const CORNER_RADIUS_RATIO = 0.3;
 
 /** Label font size, as a ratio of the capsule's own height. */
 const LABEL_FONT_SIZE_RATIO = 0.65;
+
+const PLAYFIELD_DEPTH = 10;
 
 export class Powerup extends Phaser.GameObjects.Container {
   readonly type: PowerupType;
@@ -69,6 +76,7 @@ export class Powerup extends Phaser.GameObjects.Container {
     this.fallSpeed = fallSpeed;
 
     const visual = POWERUP_VISUALS[type];
+    const corner = height * CORNER_RADIUS_RATIO;
     const background = scene.add.graphics();
     background.fillStyle(visual.color, 1);
     background.fillRoundedRect(
@@ -76,19 +84,30 @@ export class Powerup extends Phaser.GameObjects.Container {
       -this.halfHeight,
       width,
       height,
-      height * CORNER_RADIUS_RATIO,
+      corner,
+    );
+    background.lineStyle(Math.max(2, height * 0.12), visual.stroke, 1);
+    background.strokeRoundedRect(
+      -this.halfWidth,
+      -this.halfHeight,
+      width,
+      height,
+      corner,
     );
 
     const label = scene.add
       .text(0, 0, visual.letter, {
-        fontFamily: 'sans-serif',
+        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
         fontSize: `${Math.round(height * LABEL_FONT_SIZE_RATIO)}px`,
-        color: '#1a1a1a',
+        color: '#ffffff',
         fontStyle: 'bold',
+        stroke: '#0b1320',
+        strokeThickness: Math.max(2, Math.round(height * 0.12)),
       })
       .setOrigin(0.5);
 
     this.add([background, label]);
+    this.setDepth(PLAYFIELD_DEPTH);
     scene.add.existing(this);
   }
 

@@ -12,6 +12,7 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 import { AudioManager } from '@systems/AudioManager';
 import { ScoreLabel } from '@ui/ScoreLabel';
 import { ActiveEffectsLabel, type ActiveEffectDisplay } from '@ui/ActiveEffectsLabel';
+import { ArcadeBackground } from '@ui/ArcadeBackground';
 
 /**
  * scenes/MainScene.ts
@@ -99,6 +100,11 @@ import { ActiveEffectsLabel, type ActiveEffectDisplay } from '@ui/ActiveEffectsL
  * widen / slow / extra-life, score, lives, levels, and audio paths are
  * unchanged except that this scene now owns a `balls` array instead of
  * a single `ball` so Multi Ball can coexist with those systems.
+ *
+ * DXB-13 is a visual-only pass: an `ArcadeBackground` behind the
+ * playfield, distinct brick/powerup/fire-ball drawing, and a shared HUD
+ * typeface. Score, lives, levels, powerups, and audio call sites are
+ * unchanged.
  */
 const HIGH_SCORE_KEY = 'dx-ball-high-score';
 
@@ -140,6 +146,7 @@ export class MainScene extends Phaser.Scene {
   private livesLabel!: ScoreLabel;
   private levelLabel!: ScoreLabel;
   private effectsLabel!: ActiveEffectsLabel;
+  private background!: ArcadeBackground;
   private bestScore = 0;
   private lives = STARTING_LIVES;
   private lastMissCount = 0;
@@ -171,6 +178,7 @@ export class MainScene extends Phaser.Scene {
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
+    this.background = new ArcadeBackground(this, snapshot.width, snapshot.height);
     this.paddle = new Paddle(this, snapshot.width, snapshot.height);
     const firstLevel = LEVELS[this.currentLevelIndex];
     this.brickGrid = new BrickGrid(this, snapshot.width, snapshot.height, firstLevel.brickGrid);
@@ -187,20 +195,24 @@ export class MainScene extends Phaser.Scene {
     this.powerupManager = new PowerupManager(this, snapshot.width, snapshot.height, this.paddle);
     this.scoreLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Score: ',
+      color: '#f8f9fa',
       anchor: 'top-left',
     });
     this.bestScoreLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Best: ',
+      color: '#ffd166',
       anchor: 'top-right',
     });
     this.bestScoreLabel.setValue(this.bestScore);
     this.livesLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Lives: ',
+      color: '#95d5b2',
       anchor: 'bottom-left',
     });
     this.livesLabel.setValue(this.lives);
     this.levelLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Level: ',
+      color: '#90e0ef',
       anchor: 'bottom-right',
     });
     this.levelLabel.setValue(this.currentLevelIndex + 1);
@@ -608,12 +620,17 @@ export class MainScene extends Phaser.Scene {
 
     return this.add
       .text(viewportWidth / 2, viewportHeight / 2, message, {
-        fontFamily: 'sans-serif',
+        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
         fontSize: `${fontSize}px`,
-        color: '#ffffff',
+        color: '#f8f9fa',
+        fontStyle: 'bold',
         align: 'center',
+        stroke: '#0b1320',
+        strokeThickness: 6,
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setShadow(1, 2, '#000000', 4, true, true)
+      .setDepth(30);
   }
 
   private handleViewportChange(snapshot: ViewportSnapshot): void {
@@ -622,6 +639,7 @@ export class MainScene extends Phaser.Scene {
     // world/coordinate space always matches it exactly (no letterboxing
     // drift, no stale viewport on rapid resizes).
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
+    this.background.resize(snapshot.width, snapshot.height);
     this.paddle.resize(snapshot.width, snapshot.height);
     for (const ball of this.balls) {
       ball.resize(snapshot.width, snapshot.height);

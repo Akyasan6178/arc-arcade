@@ -19,6 +19,10 @@ import Phaser from 'phaser';
  * "lives counter" reuse this file's own doc comment already anticipated
  * (`MainScene` uses one for a `Lives: ` label, since both top corners
  * are already taken by the score/best labels).
+ *
+ * DXB-13: bold face, dark stroke, and a short drop shadow so every
+ * corner label stays readable against the arcade backdrop. Prefix /
+ * value / anchor behavior is unchanged.
  */
 export type ScoreLabelAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
@@ -32,14 +36,21 @@ export interface ScoreLabelConfig {
   marginRatio?: number;
   /** Font size, as a ratio of viewport height. */
   fontSizeRatio?: number;
+  stroke?: string;
+  strokeThickness?: number;
 }
+
+const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
+const HUD_DEPTH = 20;
 
 const DEFAULT_CONFIG: Required<ScoreLabelConfig> = {
   prefix: 'Score: ',
-  color: '#ffffff',
+  color: '#f8f9fa',
   anchor: 'top-left',
   marginRatio: 0.02,
-  fontSizeRatio: 0.035,
+  fontSizeRatio: 0.036,
+  stroke: '#0b1320',
+  strokeThickness: 4,
 };
 
 export class ScoreLabel extends Phaser.GameObjects.Text {
@@ -57,14 +68,19 @@ export class ScoreLabel extends Phaser.GameObjects.Text {
     const { x, y } = ScoreLabel.computePosition(viewportWidth, viewportHeight, resolvedConfig);
 
     super(scene, x, y, ScoreLabel.formatText(resolvedConfig.prefix, 0), {
-      fontFamily: 'sans-serif',
+      fontFamily: HUD_FONT_FAMILY,
       fontSize: `${fontSize}px`,
       color: resolvedConfig.color,
+      fontStyle: 'bold',
+      stroke: resolvedConfig.stroke,
+      strokeThickness: resolvedConfig.strokeThickness,
     });
 
     this.config = resolvedConfig;
     const { originX, originY } = ScoreLabel.computeOrigin(resolvedConfig);
     this.setOrigin(originX, originY);
+    this.setShadow(1, 2, '#000000', 3, true, true);
+    this.setDepth(HUD_DEPTH);
 
     scene.add.existing(this);
   }

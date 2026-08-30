@@ -91,6 +91,10 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  *     a Multi-Ball extra treats a bottom-edge exit as "spent" instead of
  *     re-serving, so `MainScene` can remove it without touching lives.
  *     The last remaining ball is flipped back to reserve-on-miss.
+ *
+ * DXB-13: Fire Ball is a distinct hot fill plus a larger translucent
+ * glow circle behind the ball. Visual only — pierce timing and collision
+ * are unchanged.
  */
 export interface BallConfig {
   color?: number;
@@ -138,8 +142,12 @@ const SLOW_EFFECT_MULTIPLIER = 0.6;
 /** DXB-12: Speed multiplier applied while a "fast ball" effect is active. */
 const FAST_EFFECT_MULTIPLIER = 1.45;
 
-/** DXB-12: Fill color while a Fire Ball effect is active. */
-const FIRE_BALL_COLOR = 0xff6b35;
+/** DXB-12/DXB-13: Fill / glow colors while a Fire Ball effect is active. */
+const FIRE_BALL_COLOR = 0xff3d00;
+const FIRE_BALL_STROKE = 0xffd166;
+const FIRE_GLOW_COLOR = 0xff8c00;
+const FIRE_GLOW_SCALE = 2.15;
+const PLAYFIELD_DEPTH = 10;
 
 type BallState = 'attached' | 'launched';
 type MissBehavior = 'reserve' | 'spend';
@@ -182,6 +190,8 @@ export class Ball extends Phaser.GameObjects.Arc {
    * the ball out of overlap) does not replay the cue every substep.
    */
   private overlappingPaddle = false;
+  /** DXB-13: Translucent halo shown only while Fire Ball is active. */
+  private readonly glow: Phaser.GameObjects.Arc;
 
   constructor(
     scene: Phaser.Scene,
@@ -205,6 +215,11 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.velocity = new Phaser.Math.Vector2(0, 0);
 
     scene.add.existing(this);
+    this.setDepth(PLAYFIELD_DEPTH);
+
+    this.glow = scene.add.circle(x, y, radius * FIRE_GLOW_SCALE, FIRE_GLOW_COLOR, 0.38);
+    this.glow.setVisible(false);
+    this.glow.setDepth(PLAYFIELD_DEPTH - 1);
 
     this.spaceKey = scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
   }
@@ -223,6 +238,7 @@ export class Ball extends Phaser.GameObjects.Arc {
 
     this.tickSpeedEffects(deltaMs);
     this.tickFireEffect(deltaMs);
+    this.syncFireGlow();
 
     if (this.serveState === 'attached') {
       this.followPaddle();
@@ -272,12 +288,13 @@ export class Ball extends Phaser.GameObjects.Arc {
   /**
    * DXB-12: Applies (or refreshes) a timed pierce flag. Catching a
    * second fire capsule while one is already active just extends the
-   * timer. The ball tints itself while active so the effect is readable
-   * without a new sprite; color reverts on expiry.
+   * timer. The ball tints itself and shows a glow while active so the
+   * effect is readable without a new sprite; color and glow revert on
+   * expiry.
    */
   applyFireEffect(durationMs: number): void {
     if (this.fireRemainingMs <= 0) {
-      this.setFillStyle(FIRE_BALL_COLOR);
+      this.applyFireVisuals(true);
     }
     this.fireRemainingMs = durationMs;
   }
@@ -330,6 +347,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.serveState = 'launched';
     this.missBehavior = 'spend';
     this.spent = false;
+    this.syncFireGlow();
   }
 
   /**
@@ -389,7 +407,30 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.fireRemainingMs -= deltaMs;
     if (this.fireRemainingMs <= 0) {
       this.fireRemainingMs = 0;
+      this.applyFireVisuals(false);
+    }
+  }
+
+  private applyFireVisuals(active: boolean): void {
+    if (active) {
+      this.setFillStyle(FIRE_BALL_COLOR);
+      this.setStrokeStyle(Math.max(2, this.radius * 0.38), FIRE_BALL_STROKE);
+      this.glow.setVisible(true);
+    } else {
       this.setFillStyle(this.config.color);
+      this.setStrokeStyle(0);
+      this.glow.setVisible(false);
+    }
+    this.syncFireGlow();
+  }
+
+  private syncFireGlow(): void {
+    this.glow.setPosition(this.x, this.y);
+    this.glow.setRadius(this.radius * FIRE_GLOW_SCALE);
+    if (this.spent || !this.visible) {
+      this.glow.setVisible(false);
+    } else if (this.fireRemainingMs > 0) {
+      this.glow.setVisible(true);
     }
   }
 
@@ -496,6 +537,10 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.viewportHeight = viewportHeight;
 
     this.setRadius(Ball.computeRadius(viewportWidth, viewportHeight, this.config));
+    if (this.fireRemainingMs > 0) {
+      this.setStrokeStyle(Math.max(2, this.radius * 0.38), FIRE_BALL_STROKE);
+    }
+    this.syncFireGlow();
 
     if (this.serveState === 'attached') {
       this.followPaddle();
@@ -516,6 +561,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     // Key instance for every `addKey(SPACE)` on this scene; destroying
     // it from an extra Multi-Ball would disarm launch on the remaining
     // serve ball. Scene shutdown already tears keyboard keys down.
+    this.glow.destroy();
     super.preDestroy();
   }
 
@@ -546,6 +592,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     if (this.missBehavior === 'spend') {
       this.spent = true;
       this.setVisible(false);
+      this.glow.setVisible(false);
       return;
     }
 

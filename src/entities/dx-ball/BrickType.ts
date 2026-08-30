@@ -11,6 +11,10 @@
  * Layouts are authored as compact row-strings (`N`/`C`/`M`/`B`/`.`) in
  * `levels.ts` and parsed here, keeping `BrickGridConfig` a plain-data
  * shape the same way DXB-08 kept `LevelConfig` as plain overrides.
+ *
+ * DXB-13 expands the visual fields so each type has a distinct recipe
+ * (clean solid / damaged cracks / metallic sheen / highlighted bonus)
+ * without changing hit counts, score, or drop policy.
  */
 
 export type BrickType = 'normal' | 'cracked' | 'metal' | 'bonus';
@@ -49,23 +53,23 @@ export const BRICK_TYPE_SPECS: Record<BrickType, BrickTypeSpec> = {
     hitsToDestroy: 2,
     awardsScore: true,
     powerupDrop: 'chance',
-    // White outline vs. un-stroked normal bricks; damaged state darkens fill.
-    strokeColor: 0xffffff,
-    crackedFillDarken: 0.45,
-    crackedStrokeColor: 0xffd166,
+    // Pale outline vs. un-stroked normal bricks; damaged state darkens fill.
+    strokeColor: 0xf1f3f5,
+    crackedFillDarken: 0.42,
+    crackedStrokeColor: 0xffc857,
   },
   metal: {
     hitsToDestroy: Number.POSITIVE_INFINITY,
     awardsScore: false,
     powerupDrop: 'never',
-    fillColor: 0x868e96,
-    strokeColor: 0xdee2e6,
+    fillColor: 0x8b95a1,
+    strokeColor: 0xe9ecef,
   },
   bonus: {
     hitsToDestroy: 1,
     awardsScore: true,
     powerupDrop: 'always',
-    fillColor: 0xc77dff,
+    fillColor: 0x9b5de5,
     strokeColor: 0xffe66d,
   },
 };
