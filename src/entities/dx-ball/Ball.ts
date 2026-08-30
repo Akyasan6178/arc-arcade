@@ -24,6 +24,11 @@ import type { BrickGrid } from '@entities/dx-ball/BrickGrid';
  * established, just extended to react to another entity's state. Brick
  * removal itself is owned by `BrickGrid`, not here.
  *
+ * DXB-04 adds the missing paddle collision in the same style: the ball
+ * asks `Paddle.checkBallCollision()` whether it's overlapping the paddle
+ * and, if so, bounces off it via `resolvePaddleCollision()`. Checked
+ * every launched frame, right before the brick check.
+ *
  * No scoring, lives, levels, audio, UI, or powerups here — that's
  * explicitly out of scope, per this task's own restrictions.
  */
@@ -108,10 +113,11 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.resolveWallCollisions();
 
     // A wall miss may have just called `returnToPaddle()`, flipping
-    // `serveState` back to `attached` — skip brick collision in that
-    // case, since the ball's position/velocity are no longer meaningful
-    // for this frame.
+    // `serveState` back to `attached` — skip paddle/brick collision in
+    // that case, since the ball's position/velocity are no longer
+    // meaningful for this frame.
     if (this.serveState === 'launched') {
+      this.resolvePaddleCollision();
       this.resolveBrickCollisions();
     }
   }
@@ -184,6 +190,22 @@ export class Ball extends Phaser.GameObjects.Arc {
 
     if (this.y - radius > this.viewportHeight) {
       this.returnToPaddle();
+    }
+  }
+
+  /**
+   * DXB-04: Asks the paddle whether this ball is overlapping it and, if
+   * so, bounces off it. Same axis-of-least-overlap reaction as
+   * `resolveBrickCollisions()`, just against a permanent target instead
+   * of one that gets removed.
+   */
+  private resolvePaddleCollision(): void {
+    const axis = this.paddle.checkBallCollision(this.x, this.y, this.radius);
+
+    if (axis === 'horizontal') {
+      this.velocity.x = -this.velocity.x;
+    } else if (axis === 'vertical') {
+      this.velocity.y = -this.velocity.y;
     }
   }
 

@@ -13,7 +13,11 @@ import Phaser from 'phaser';
  * Movement is speed-capped (smooth, not an instant teleport to the
  * pointer) and always clamped within the current viewport width.
  *
- * No ball/brick/collision logic lives here — that's separate future work.
+ * DXB-04 adds one piece of collision logic: `checkBallCollision()`, which
+ * answers whether a given ball circle overlaps the paddle and along which
+ * axis it should bounce (mirroring `BrickGrid.resolveBallCollision()`).
+ * The paddle only reports the overlap — reflecting velocity remains the
+ * ball's own responsibility, same as it is for walls and bricks.
  */
 export interface PaddleConfig {
   color?: number;
@@ -91,6 +95,28 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     const maxStep = maxSpeed * deltaSeconds;
     const step = Phaser.Math.Clamp(this.targetX - this.x, -maxStep, maxStep);
     this.setX(Phaser.Math.Clamp(this.x + step, minX, maxX));
+  }
+
+  /**
+   * DXB-04: Checks whether a ball's circle (center + radius) overlaps this
+   * paddle's rectangle and, if so, returns the axis to bounce along —
+   * mirroring `BrickGrid.resolveBallCollision()`'s axis-of-least-overlap
+   * approach. Unlike a brick, the paddle is never removed, so this only
+   * ever reports the axis; the ball (which owns velocity) is responsible
+   * for reflecting it.
+   */
+  checkBallCollision(ballX: number, ballY: number, ballRadius: number): 'horizontal' | 'vertical' | null {
+    const halfWidth = this.width / 2;
+    const halfHeight = this.height / 2;
+
+    const overlapX = halfWidth + ballRadius - Math.abs(ballX - this.x);
+    const overlapY = halfHeight + ballRadius - Math.abs(ballY - this.y);
+
+    if (overlapX <= 0 || overlapY <= 0) {
+      return null;
+    }
+
+    return overlapX < overlapY ? 'horizontal' : 'vertical';
   }
 
   /** Recomputes size and position for a new viewport size (e.g. on resize). */

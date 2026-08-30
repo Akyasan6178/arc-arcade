@@ -16,6 +16,11 @@ import { Brick } from '@entities/dx-ball/Brick';
  * (destroys + drops from the tracked list) the first one it overlaps.
  * Deliberately excluded from this task: scoring, lives, levels, audio,
  * UI, and powerups — none of that exists here or anywhere else yet.
+ *
+ * DXB-04 adds `isCleared()`, a trivial query the owning scene polls to
+ * detect the win condition (all bricks removed). No other state or
+ * behavior change — the grid still doesn't know or care what happens
+ * when it becomes empty.
  */
 export interface BrickGridConfig {
   rows?: number;
@@ -109,6 +114,11 @@ export class BrickGrid {
     }
 
     return null;
+  }
+
+  /** DXB-04: True once every brick has been removed — the win condition for a level. */
+  isCleared(): boolean {
+    return this.bricks.length === 0;
   }
 
   /** Recomputes every brick's size and position for a new viewport size (e.g. on resize). */
