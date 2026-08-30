@@ -15,6 +15,7 @@ be updated at the end of every task's closure workflow.
 - ✅ DXB-04 Gameplay Loop
 - ✅ DXB-05 Gameplay Polish
 - ✅ DXB-06 Score System
+- ✅ DXB-06A Balance Pass
 
 ## Technology Stack
 
@@ -45,10 +46,10 @@ src/
 
 ## Current Entities (`dx-ball/`)
 
-- `Paddle` — rectangle game object; responsive size/position; mouse/touch (pointer) + keyboard (arrow key) control with speed-capped smoothing; clamped to viewport width. Since DXB-04: `checkBallCollision(ballX, ballY, ballRadius)` reports which axis a ball overlapping it should bounce along. Since DXB-05: `computeHitOffset(x)` reports where on the paddle (`-1` left edge .. `1` right edge) a point sits, used to vary the ball's bounce angle.
+- `Paddle` — rectangle game object; responsive size/position; mouse/touch (pointer) + keyboard (arrow key) control with speed-capped smoothing; clamped to viewport width. Since DXB-04: `checkBallCollision(ballX, ballY, ballRadius)` reports which axis a ball overlapping it should bounce along. Since DXB-05: `computeHitOffset(x)` reports where on the paddle (`-1` left edge .. `1` right edge) a point sits, used to vary the ball's bounce angle. Since DXB-06A: default width narrowed ~20% (`widthRatio` 0.16 → 0.128), a tuning-only change.
 - `Ball` — circle game object; responsive size/speed; `attached` / `launched` serve state machine (Space to launch, exactly once per serve); bounces off left/right/top viewport edges; a bottom exit re-serves it above the paddle. Since DXB-03: bounces off bricks via `BrickGrid.resolveBallCollision()`. Since DXB-04: also bounces off the paddle via `Paddle.checkBallCollision()`, checked every launched frame right before the brick check. Since DXB-05: a paddle hit's bounce angle now varies by where on the paddle it landed (center = straight up, edges deviate up to 60°), and a launched frame's motion is split into small collision-checked substeps (capped to half the ball's radius each) instead of one big step, closing a tunneling gap at high speed.
 - `Brick` — single rectangle grid cell; owns its row/column identity. Since DXB-06: also carries a fixed `points` value, assigned once by `BrickGrid` at creation.
-- `BrickGrid` — owns the full set of `Brick`s (default 5 rows × 8 columns, one color per row); responsive layout; `resolveBallCollision()` checks a ball against every remaining brick and safely removes the first one it overlaps. Since DXB-04: `isCleared()` reports whether every brick has been removed (the win condition). Since DXB-06: also assigns each brick's `points` (row-weighted — back rows worth more) and accumulates a running `getScore()` total as bricks are destroyed.
+- `BrickGrid` — owns the full set of `Brick`s (default 5 rows × 8 columns, one color per row); responsive layout; `resolveBallCollision()` checks a ball against every remaining brick and safely removes the first one it overlaps. Since DXB-04: `isCleared()` reports whether every brick has been removed (the win condition). Since DXB-06: also assigns each brick's `points` (row-weighted — back rows worth more) and accumulates a running `getScore()` total as bricks are destroyed. Since DXB-06A: bricks sized slightly smaller (`gapRatio` 0.008 → 0.01, `rowHeightRatio` 0.035 → 0.03), a tuning-only change; row/column count and scoring formula unchanged.
 
 ## Current UI (`ui/`)
 
@@ -62,6 +63,7 @@ src/
 - `docs/progress/DXB-04.md`
 - `docs/progress/DXB-05.md`
 - `docs/progress/DXB-06.md`
+- `docs/progress/DXB-06A.md`
 - `docs/CURRENT_STATE.md` (this file)
 
 ## Repository
@@ -74,12 +76,16 @@ src/
 
 ## Last Completed Task
 
-DXB-06 Score System — row-weighted points per brick (back rows worth
-more), a live "Score"/"Best" HUD (`ui/ScoreLabel`), a best score
-persisted across restarts (`systems/HighScoreStore`), and the final score
-now shown in the win message. See `docs/progress/DXB-06.md` for full
-details. `npm run typecheck` and `npm run build` both verified passing,
-and the score HUD was manually verified in a running dev build.
+DXB-06A Balance Pass — a small, requester-scoped tuning pass (browser-
+automation live playtesting was planned but explicitly cancelled
+mid-session): paddle width narrowed ~20% (`Paddle.widthRatio` 0.16 →
+0.128) and brick size reduced slightly (`BrickGrid.gapRatio` 0.008 →
+0.01, `rowHeightRatio` 0.035 → 0.03). No gameplay systems, row/column
+counts, or the scoring formula changed. See `docs/progress/DXB-06A.md`
+for full details, including why live playtesting didn't happen this
+time. `npm run typecheck` and `npm run build` both verified passing (the
+shell required elevated ("all") permissions this session — a broken
+sandbox helper on this system, not a code issue).
 
 ## Next Recommended Task
 
@@ -87,4 +93,8 @@ A lives/game-over system — there is still no losing condition (a missed
 ball simply re-serves indefinitely), flagged as the natural next step by
 DXB-04, DXB-05, and DXB-06 alike. Visual scoring feedback (a "+N" popup
 or brief label flash on hit) is a smaller, optional polish item that
-could accompany it or come later.
+could accompany it or come later. If another balance pass is wanted
+first, DXB-06A's own values (narrower paddle, smaller bricks) still
+haven't been live-playtested against the unchanged ball/paddle speed and
+bounce-angle values — worth doing together in one pass rather than in
+isolation.

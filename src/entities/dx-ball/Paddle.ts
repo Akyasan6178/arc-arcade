@@ -23,6 +23,9 @@ import Phaser from 'phaser';
  * bounce angle by where on the paddle it landed (center vs edges) instead
  * of always leaving at a fixed angle — the paddle still only reports
  * geometry, it never touches velocity itself.
+ *
+ * DXB-06A (balance pass) narrows the default `widthRatio` by ~20% — no
+ * behavior/architecture change, just a tuning value.
  */
 export interface PaddleConfig {
   color?: number;
@@ -35,7 +38,9 @@ export interface PaddleConfig {
 
 const DEFAULT_CONFIG: Required<PaddleConfig> = {
   color: 0xffffff,
-  widthRatio: 0.16,
+  // DXB-06A: reduced from 0.16 (~20% narrower) as part of a balance pass —
+  // a slimmer paddle demands more precise positioning under the ball.
+  widthRatio: 0.128,
   heightRatio: 0.025,
   bottomOffsetRatio: 0.05,
   speedRatio: 1.2,

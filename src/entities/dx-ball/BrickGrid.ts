@@ -29,6 +29,11 @@ import { Brick } from '@entities/dx-ball/Brick';
  * removes a brick. `getScore()` is a trivial query for that total,
  * following the exact same "owning scene polls a getter" pattern
  * `isCleared()` already established — no event bus was introduced.
+ *
+ * DXB-06A (balance pass) nudges `gapRatio` up and `rowHeightRatio` down
+ * slightly, shrinking each brick a bit — no behavior/architecture change,
+ * just tuning values. Row/column count and the scoring formula are
+ * unchanged.
  */
 export interface BrickGridConfig {
   rows?: number;
@@ -58,8 +63,12 @@ const DEFAULT_CONFIG: Required<BrickGridConfig> = {
   colors: [0xe63946, 0xf3722c, 0xf9c74f, 0x90be6d, 0x4d96ff],
   topOffsetRatio: 0.08,
   sideMarginRatio: 0.05,
-  gapRatio: 0.008,
-  rowHeightRatio: 0.035,
+  // DXB-06A: both nudged up slightly (from 0.008/0.035) as part of a
+  // balance pass — a slightly wider gap shrinks each brick's computed
+  // width a bit, and a shorter row height shrinks its height, together
+  // making bricks slightly smaller without changing the row/column count.
+  gapRatio: 0.01,
+  rowHeightRatio: 0.03,
   basePointsPerRow: 10,
 };
 
