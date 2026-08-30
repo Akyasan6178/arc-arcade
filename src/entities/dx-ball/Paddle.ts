@@ -18,6 +18,11 @@ import Phaser from 'phaser';
  * axis it should bounce (mirroring `BrickGrid.resolveBallCollision()`).
  * The paddle only reports the overlap — reflecting velocity remains the
  * ball's own responsibility, same as it is for walls and bricks.
+ *
+ * DXB-05 adds `computeHitOffset()`, used by `Ball` to vary its paddle
+ * bounce angle by where on the paddle it landed (center vs edges) instead
+ * of always leaving at a fixed angle — the paddle still only reports
+ * geometry, it never touches velocity itself.
  */
 export interface PaddleConfig {
   color?: number;
@@ -117,6 +122,20 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     }
 
     return overlapX < overlapY ? 'horizontal' : 'vertical';
+  }
+
+  /**
+   * DXB-05: Normalized horizontal position of `x` relative to this
+   * paddle's center, from -1 (left edge) to 1 (right edge). Clamped so a
+   * hit anywhere on the paddle (including right at an edge, where overlap
+   * tolerance could put `x` a hair past it) always yields a valid,
+   * bounded offset. Used by `Ball` to vary its paddle-bounce angle by hit
+   * position — this method only reports geometry, same as
+   * `checkBallCollision()`.
+   */
+  computeHitOffset(x: number): number {
+    const halfWidth = this.width / 2;
+    return Phaser.Math.Clamp((x - this.x) / halfWidth, -1, 1);
   }
 
   /** Recomputes size and position for a new viewport size (e.g. on resize). */

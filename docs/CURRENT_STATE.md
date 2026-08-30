@@ -13,6 +13,7 @@ be updated at the end of every task's closure workflow.
 - ✅ DXB-02 Ball Core
 - ✅ DXB-03 Brick Core
 - ✅ DXB-04 Gameplay Loop
+- ✅ DXB-05 Gameplay Polish
 
 ## Technology Stack
 
@@ -42,8 +43,8 @@ src/
 
 ## Current Entities (`dx-ball/`)
 
-- `Paddle` — rectangle game object; responsive size/position; mouse/touch (pointer) + keyboard (arrow key) control with speed-capped smoothing; clamped to viewport width. Since DXB-04: `checkBallCollision(ballX, ballY, ballRadius)` reports which axis a ball overlapping it should bounce along.
-- `Ball` — circle game object; responsive size/speed; `attached` / `launched` serve state machine (Space to launch, exactly once per serve); bounces off left/right/top viewport edges; a bottom exit re-serves it above the paddle. Since DXB-03: bounces off bricks via `BrickGrid.resolveBallCollision()`. Since DXB-04: also bounces off the paddle via `Paddle.checkBallCollision()`, checked every launched frame right before the brick check.
+- `Paddle` — rectangle game object; responsive size/position; mouse/touch (pointer) + keyboard (arrow key) control with speed-capped smoothing; clamped to viewport width. Since DXB-04: `checkBallCollision(ballX, ballY, ballRadius)` reports which axis a ball overlapping it should bounce along. Since DXB-05: `computeHitOffset(x)` reports where on the paddle (`-1` left edge .. `1` right edge) a point sits, used to vary the ball's bounce angle.
+- `Ball` — circle game object; responsive size/speed; `attached` / `launched` serve state machine (Space to launch, exactly once per serve); bounces off left/right/top viewport edges; a bottom exit re-serves it above the paddle. Since DXB-03: bounces off bricks via `BrickGrid.resolveBallCollision()`. Since DXB-04: also bounces off the paddle via `Paddle.checkBallCollision()`, checked every launched frame right before the brick check. Since DXB-05: a paddle hit's bounce angle now varies by where on the paddle it landed (center = straight up, edges deviate up to 60°), and a launched frame's motion is split into small collision-checked substeps (capped to half the ball's radius each) instead of one big step, closing a tunneling gap at high speed.
 - `Brick` — single rectangle grid cell; owns only its row/column identity — no behavior of its own.
 - `BrickGrid` — owns the full set of `Brick`s (default 5 rows × 8 columns, one color per row); responsive layout; `resolveBallCollision()` checks a ball against every remaining brick and safely removes the first one it overlaps. Since DXB-04: `isCleared()` reports whether every brick has been removed (the win condition).
 
@@ -53,6 +54,7 @@ src/
 - `docs/progress/DXB-02.md`
 - `docs/progress/DXB-03.md` (backfilled retroactively — see its own note)
 - `docs/progress/DXB-04.md`
+- `docs/progress/DXB-05.md`
 - `docs/CURRENT_STATE.md` (this file)
 
 ## Repository
@@ -63,10 +65,13 @@ src/
 
 ## Last Completed Task
 
-DXB-04 Gameplay Loop — paddle/ball collision, win detection (all bricks
-cleared), and restart (Space → `scene.restart()`). See
-`docs/progress/DXB-04.md` for full details.
+DXB-05 Gameplay Polish — variable paddle bounce angle (hit position
+changes rebound angle, up to 60° from straight up) and a tunneling fix
+(launched-ball motion split into small collision-checked substeps). See
+`docs/progress/DXB-05.md` for full details, including a note that a full
+`npm run typecheck`/`npm run build` verification pass is still
+outstanding (local shell tool was unresponsive at closure).
 
 ## Next Recommended Task
 
-DXB-05 Score System
+DXB-06 Score System

@@ -29,6 +29,19 @@ import type { BrickGrid } from '@entities/dx-ball/BrickGrid';
  * and, if so, bounces off it via `resolvePaddleCollision()`. Checked
  * every launched frame, right before the brick check.
  *
+ * DXB-05 adds two gameplay-polish changes to a launched ball's motion:
+ *   - Variable paddle bounce angle: a top/bottom paddle hit
+ *     (`resolvePaddleCollision()`) no longer just flips vertical
+ *     velocity — it asks `Paddle.computeHitOffset()` where on the paddle
+ *     the ball landed and re-angles the bounce toward that edge (up to
+ *     `MAX_PADDLE_BOUNCE_ANGLE_DEG` from straight up), preserving speed.
+ *   - Tunneling fix: a launched frame's motion (`advanceLaunched()`) is
+ *     now split into one or more collision-checked substeps
+ *     (`stepLaunched()`), each capped to a small fraction of the ball's
+ *     own radius, so a fast ball can no longer skip clean through a thin
+ *     paddle/brick in a single frame without ever registering an
+ *     overlap — a risk documented since DXB-03/DXB-04.
+ *
  * No scoring, lives, levels, audio, UI, or powerups here — that's
  * explicitly out of scope, per this task's own restrictions.
  */
@@ -48,6 +61,29 @@ const DEFAULT_CONFIG: Required<BallConfig> = {
 
 /** Launch angle, in degrees (Phaser convention: 0 = +x/right, 90 = +y/down). Up-and-right. */
 const LAUNCH_ANGLE_DEG = -60;
+
+/**
+ * DXB-05: Max paddle-bounce deviation from straight up, in degrees,
+ * reached at the paddle's edges. A center hit stays at 0deg (straight
+ * up); hits toward an edge deviate toward that edge, up to this cap.
+ */
+const MAX_PADDLE_BOUNCE_ANGLE_DEG = 60;
+
+/**
+ * DXB-05: Per-substep travel cap, as a ratio of the ball's own radius.
+ * Keeps each collision-checked motion step small enough that a fast ball
+ * can't skip clean through a thin paddle/brick within one frame — the
+ * tunneling risk documented since DXB-03/DXB-04.
+ */
+const MAX_STEP_DISTANCE_RATIO = 0.5;
+
+/**
+ * DXB-05: Defensive cap on substeps per frame, guarding against an
+ * unbounded loop on an extreme delta spike (e.g. a backgrounded tab
+ * regaining focus). A ball could in theory still tunnel within that one
+ * extreme frame, but every ordinary frame stays far under this cap.
+ */
+const MAX_SUBSTEPS_PER_FRAME = 8;
 
 type BallState = 'attached' | 'launched';
 
@@ -106,7 +142,60 @@ export class Ball extends Phaser.GameObjects.Arc {
       return;
     }
 
-    const deltaSeconds = deltaMs / 1000;
+    this.advanceLaunched(deltaMs);
+  }
+
+  /**
+   * DXB-05: Advances a launched ball across `deltaMs`, split into one or
+   * more smaller substeps instead of a single position integration. At
+   * high enough speed relative to the paddle's/a brick's thin height, a
+   * single-step integration could move the ball clean through a solid in
+   * one frame without its end-of-frame position ever overlapping it
+   * (tunneling); capping each substep's travel distance to a small
+   * fraction of the ball's own radius closes that gap, since every
+   * intermediate position along the frame's motion now gets its own
+   * collision check.
+   */
+  private advanceLaunched(deltaMs: number): void {
+    let remainingMs = deltaMs;
+    let substeps = 0;
+
+    while (
+      remainingMs > 0 &&
+      this.serveState === 'launched' &&
+      substeps < MAX_SUBSTEPS_PER_FRAME
+    ) {
+      const stepMs = this.computeSafeStepMs(remainingMs);
+      this.stepLaunched(stepMs);
+      remainingMs -= stepMs;
+      substeps++;
+    }
+  }
+
+  /**
+   * Largest step (in ms, capped at `remainingMs`) the ball can travel
+   * before its next collision check, bounded so it moves at most
+   * `MAX_STEP_DISTANCE_RATIO * radius` during that step.
+   */
+  private computeSafeStepMs(remainingMs: number): number {
+    const speed = this.velocity.length();
+    if (speed <= 0) {
+      return remainingMs;
+    }
+
+    const maxDistancePerStep = this.radius * MAX_STEP_DISTANCE_RATIO;
+    const maxStepMs = (maxDistancePerStep / speed) * 1000;
+    return Math.min(remainingMs, maxStepMs);
+  }
+
+  /**
+   * One collision-checked motion step: integrates position by `stepMs`,
+   * then resolves wall, paddle, and brick collisions in that order — the
+   * same body a launched ball's full frame used to run once, now run
+   * once per substep instead.
+   */
+  private stepLaunched(stepMs: number): void {
+    const deltaSeconds = stepMs / 1000;
     this.x += this.velocity.x * deltaSeconds;
     this.y += this.velocity.y * deltaSeconds;
 
@@ -115,7 +204,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     // A wall miss may have just called `returnToPaddle()`, flipping
     // `serveState` back to `attached` — skip paddle/brick collision in
     // that case, since the ball's position/velocity are no longer
-    // meaningful for this frame.
+    // meaningful for this step.
     if (this.serveState === 'launched') {
       this.resolvePaddleCollision();
       this.resolveBrickCollisions();
@@ -198,6 +287,16 @@ export class Ball extends Phaser.GameObjects.Arc {
    * so, bounces off it. Same axis-of-least-overlap reaction as
    * `resolveBrickCollisions()`, just against a permanent target instead
    * of one that gets removed.
+   *
+   * DXB-05: a `'vertical'` hit (the paddle's top/bottom face — in
+   * practice always the top, since the ball approaches from above) no
+   * longer just flips vertical velocity. It now re-angles the bounce by
+   * where on the paddle the ball landed, via `computePaddleBounceVelocity()`,
+   * so the player has some control over where the ball goes next instead
+   * of every top hit simply mirroring whatever angle it arrived at. A
+   * `'horizontal'` hit (the paddle's side edge) is unchanged: still a
+   * plain reflection, since there's no meaningful "hit position" to vary
+   * on that axis.
    */
   private resolvePaddleCollision(): void {
     const axis = this.paddle.checkBallCollision(this.x, this.y, this.radius);
@@ -205,7 +304,8 @@ export class Ball extends Phaser.GameObjects.Arc {
     if (axis === 'horizontal') {
       this.velocity.x = -this.velocity.x;
     } else if (axis === 'vertical') {
-      this.velocity.y = -this.velocity.y;
+      const offset = this.paddle.computeHitOffset(this.x);
+      this.velocity.copy(Ball.computePaddleBounceVelocity(offset, this.velocity.length()));
     }
   }
 
@@ -253,5 +353,22 @@ export class Ball extends Phaser.GameObjects.Arc {
   private static computeLaunchVelocity(speed: number): Phaser.Math.Vector2 {
     const angle = Phaser.Math.DegToRad(LAUNCH_ANGLE_DEG);
     return new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle)).scale(speed);
+  }
+
+  /**
+   * DXB-05: Velocity for a paddle bounce at normalized hit `offset`
+   * (-1 = left edge, 0 = center, 1 = right edge), preserving `speed` and
+   * always angled upward. `offset` is scaled by
+   * `MAX_PADDLE_BOUNCE_ANGLE_DEG` to get the angle from straight up, so a
+   * center hit goes straight up and an edge hit deviates toward that edge.
+   */
+  private static computePaddleBounceVelocity(offset: number, speed: number): Phaser.Math.Vector2 {
+    const angleFromVerticalDeg = offset * MAX_PADDLE_BOUNCE_ANGLE_DEG;
+    const angleFromVerticalRad = Phaser.Math.DegToRad(angleFromVerticalDeg);
+
+    return new Phaser.Math.Vector2(
+      Math.sin(angleFromVerticalRad),
+      -Math.cos(angleFromVerticalRad),
+    ).scale(speed);
   }
 }

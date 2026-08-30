@@ -83,10 +83,14 @@ export class BrickGrid {
    * future one, can ever iterate over or touch an already-destroyed
    * brick — this is what makes the removal collision-safe.
    *
-   * At most one brick is removed per call: `Ball.update()` calls this
-   * once per frame, and a hit brick disappears immediately, so the same
-   * brick can never be double-hit and a ball can never destroy more than
-   * one brick in a single frame.
+   * At most one brick is removed per call, and a hit brick disappears
+   * immediately, so the same brick can never be double-hit within a
+   * call. `Ball` calls this once per collision-checked motion substep
+   * (DXB-05 splits a launched ball's per-frame motion into substeps to
+   * avoid tunneling; see `Ball.stepLaunched()`), so a fast ball *can*
+   * destroy more than one brick within a single frame — one per
+   * substep — which is correct: substeps exist precisely so every
+   * distinct overlap along the frame's motion gets its own check.
    */
   resolveBallCollision(
     ballX: number,
