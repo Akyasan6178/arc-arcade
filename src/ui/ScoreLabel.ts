@@ -23,6 +23,10 @@ import Phaser from 'phaser';
  * DXB-13: bold face, dark stroke, and a short drop shadow so every
  * corner label stays readable against the arcade backdrop. Prefix /
  * value / anchor behavior is unchanged.
+ *
+ * DXB-13A: `setValue` accepts an optional suffix so a label can show
+ * `Level 1 / 5` without a second widget. Score / Best / Lives still
+ * pass only the number.
  */
 export type ScoreLabelAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
@@ -56,6 +60,7 @@ const DEFAULT_CONFIG: Required<ScoreLabelConfig> = {
 export class ScoreLabel extends Phaser.GameObjects.Text {
   private readonly config: Required<ScoreLabelConfig>;
   private value = 0;
+  private suffix = '';
 
   constructor(
     scene: Phaser.Scene,
@@ -85,14 +90,19 @@ export class ScoreLabel extends Phaser.GameObjects.Text {
     scene.add.existing(this);
   }
 
-  /** Updates the displayed numeric value. No-ops if unchanged, avoiding a needless text-texture rebuild. */
-  setValue(value: number): void {
-    if (value === this.value) {
+  /**
+   * Updates the displayed numeric value (and optional suffix). No-ops if
+   * unchanged, avoiding a needless text-texture rebuild.
+   */
+  setValue(value: number, suffix?: string): void {
+    const nextSuffix = suffix ?? this.suffix;
+    if (value === this.value && nextSuffix === this.suffix) {
       return;
     }
 
     this.value = value;
-    this.setText(ScoreLabel.formatText(this.config.prefix, value));
+    this.suffix = nextSuffix;
+    this.setText(ScoreLabel.formatText(this.config.prefix, value, nextSuffix));
   }
 
   /** Recomputes position and font size for a new viewport size (e.g. on resize). */
@@ -102,8 +112,8 @@ export class ScoreLabel extends Phaser.GameObjects.Text {
     this.setFontSize(ScoreLabel.computeFontSize(viewportHeight, this.config));
   }
 
-  private static formatText(prefix: string, value: number): string {
-    return `${prefix}${value}`;
+  private static formatText(prefix: string, value: number, suffix = ''): string {
+    return `${prefix}${value}${suffix}`;
   }
 
   private static computeFontSize(

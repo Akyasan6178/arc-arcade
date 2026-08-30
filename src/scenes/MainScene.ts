@@ -22,6 +22,7 @@ import { ScoreLabel } from '@ui/ScoreLabel';
 import { ActiveEffectsLabel, type ActiveEffectDisplay } from '@ui/ActiveEffectsLabel';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { ModeLabel } from '@ui/ModeLabel';
+import { PauseOverlay, type PauseOverlayAction } from '@ui/PauseOverlay';
 
 /**
  * scenes/MainScene.ts
@@ -122,6 +123,11 @@ import { ModeLabel } from '@ui/ModeLabel';
  * gradually raises a progression speed fold on every live ball. Score,
  * lives, powerups, and audio keep their existing call sites; a
  * `ModeLabel` shows the active mode (plus the Time Attack clock).
+ *
+ * DXB-13A: ESC opens a `PauseOverlay` (Resume / Restart Run / Return
+ * To Mode Selection) from every gameplay state. The campaign is 5
+ * levels; the HUD shows `Level X / 5`. Score, lives, and high score
+ * still carry across the sequence on the same `BrickGrid`.
  */
 
 export interface MainSceneData {
@@ -168,6 +174,7 @@ export class MainScene extends Phaser.Scene {
   private levelLabel!: ScoreLabel;
   private effectsLabel!: ActiveEffectsLabel;
   private modeLabel!: ModeLabel;
+  private pauseOverlay!: PauseOverlay;
   private background!: ArcadeBackground;
   private bestScore = 0;
   private lives = STARTING_LIVES;
@@ -185,6 +192,8 @@ export class MainScene extends Phaser.Scene {
   private lost = false;
   /** DXB-14: Time Attack clock reached 0. Sibling to `won` / `lost`. */
   private timedOut = false;
+  /** DXB-13A: True while the ESC pause overlay is open. */
+  private paused = false;
   /** DXB-08: True between a level being cleared and the player continuing to the next one. */
   private transitioning = false;
   private winText?: Phaser.GameObjects.Text;
@@ -207,6 +216,7 @@ export class MainScene extends Phaser.Scene {
     this.won = false;
     this.lost = false;
     this.timedOut = false;
+    this.paused = false;
     this.transitioning = false;
     this.lives = STARTING_LIVES;
     this.lastMissCount = 0;
@@ -249,16 +259,18 @@ export class MainScene extends Phaser.Scene {
     });
     this.livesLabel.setValue(this.lives);
     this.levelLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
-      prefix: 'Level: ',
+      prefix: 'Level ',
       color: '#90e0ef',
       anchor: 'bottom-right',
+      fontSizeRatio: 0.032,
     });
-    this.levelLabel.setValue(this.currentLevelIndex + 1);
+    this.refreshLevelLabel();
     this.modeLabel = new ModeLabel(this, snapshot.width, snapshot.height);
     this.refreshModeLabel();
     this.effectsLabel = new ActiveEffectsLabel(this, snapshot.width, snapshot.height, {
       topRatio: 0.055,
     });
+    this.pauseOverlay = new PauseOverlay(this, snapshot.width, snapshot.height);
 
     // The pattern every future game should follow: subscribe once, then
     // reposition/rescale whatever depends on viewport size whenever it
@@ -281,10 +293,14 @@ export class MainScene extends Phaser.Scene {
         // AudioManager missing/unavailable — ignore the toggle.
       }
     });
+
+    // DXB-13A: ESC opens (or closes) the pause overlay from every
+    // gameplay state, including win / game-over / time-up / level clear.
+    this.input.keyboard?.on('keydown-ESC', () => this.togglePauseMenu());
   }
 
   update(_time: number, delta: number): void {
-    if (this.won || this.lost || this.timedOut) {
+    if (this.paused || this.won || this.lost || this.timedOut) {
       return;
     }
 
@@ -632,7 +648,7 @@ export class MainScene extends Phaser.Scene {
   }
 
   private continueAfterLevelClear(): void {
-    if (this.timedOut || this.won || this.lost) {
+    if (this.paused || this.timedOut || this.won || this.lost) {
       return;
     }
 
@@ -668,7 +684,7 @@ export class MainScene extends Phaser.Scene {
     this.effectsLabel.setEffects([]);
 
     this.lastMissCount = 0;
-    this.levelLabel.setValue(this.currentLevelIndex + 1);
+    this.refreshLevelLabel();
     this.transitioning = false;
   }
 
@@ -689,7 +705,7 @@ export class MainScene extends Phaser.Scene {
     this.winText = this.createCenteredMessage(
       width,
       height,
-      `YOU WIN\nAll ${LEVELS.length} levels cleared — Score: ${finalScore}\nPress Space to play again\nPress Esc to change mode`,
+      `YOU WIN\nAll ${LEVELS.length} levels cleared — Score: ${finalScore}\nPress Space to play again\nPress Esc for menu`,
     );
 
     this.bindEndOfRunInput();
@@ -711,7 +727,7 @@ export class MainScene extends Phaser.Scene {
     this.gameOverText = this.createCenteredMessage(
       width,
       height,
-      `GAME OVER\nScore: ${finalScore}\nPress Space to try again\nPress Esc to change mode`,
+      `GAME OVER\nScore: ${finalScore}\nPress Space to try again\nPress Esc for menu`,
     );
 
     this.bindEndOfRunInput();
@@ -738,18 +754,81 @@ export class MainScene extends Phaser.Scene {
     this.timeUpText = this.createCenteredMessage(
       width,
       height,
-      `TIME'S UP\nScore: ${finalScore}\nPress Space to play again\nPress Esc to change mode`,
+      `TIME'S UP\nScore: ${finalScore}\nPress Space to play again\nPress Esc for menu`,
     );
 
     this.bindEndOfRunInput();
   }
 
-  /** Space replays the same mode; Esc returns to mode select. */
+  /** Space replays the same mode. Esc is the global pause menu (see `togglePauseMenu`). */
   private bindEndOfRunInput(): void {
     this.input.keyboard?.off('keydown-SPACE');
-    this.input.keyboard?.off('keydown-ESC');
-    this.input.keyboard?.once('keydown-SPACE', () => this.scene.restart({ mode: this.mode }));
-    this.input.keyboard?.once('keydown-ESC', () => this.scene.start(SceneKeys.ModeSelect));
+    this.input.keyboard?.once('keydown-SPACE', () => {
+      if (this.paused) {
+        return;
+      }
+      this.scene.restart({ mode: this.mode });
+    });
+  }
+
+  private refreshLevelLabel(): void {
+    this.levelLabel.setValue(this.currentLevelIndex + 1, ` / ${LEVELS.length}`);
+  }
+
+  /**
+   * DXB-13A: ESC from any gameplay state. A second ESC (or Resume)
+   * closes the overlay. Opening the menu unbinds Space continue/restart
+   * so SelectMenu confirm cannot also advance a level or restart a run.
+   */
+  private togglePauseMenu(): void {
+    if (this.paused) {
+      this.closePauseMenu();
+      return;
+    }
+
+    this.openPauseMenu();
+  }
+
+  private openPauseMenu(): void {
+    this.paused = true;
+    this.input.keyboard?.off('keydown-SPACE');
+    this.pauseOverlay.show((action) => this.handlePauseAction(action));
+  }
+
+  private closePauseMenu(): void {
+    this.pauseOverlay.hide();
+    this.paused = false;
+    this.rebindPausedSpace();
+  }
+
+  private handlePauseAction(action: PauseOverlayAction): void {
+    switch (action) {
+      case 'resume':
+        this.closePauseMenu();
+        break;
+      case 'restart':
+        this.pauseOverlay.hide();
+        this.paused = false;
+        this.scene.restart({ mode: this.mode });
+        break;
+      case 'mode-select':
+        this.pauseOverlay.hide();
+        this.paused = false;
+        this.scene.start(SceneKeys.ModeSelect);
+        break;
+    }
+  }
+
+  /** Restores Space continue/restart after the pause menu closes. */
+  private rebindPausedSpace(): void {
+    if (this.won || this.lost || this.timedOut) {
+      this.bindEndOfRunInput();
+      return;
+    }
+
+    if (this.transitioning) {
+      this.input.keyboard?.once('keydown-SPACE', () => this.continueAfterLevelClear());
+    }
   }
 
   /**
@@ -797,6 +876,7 @@ export class MainScene extends Phaser.Scene {
     this.levelLabel.resize(snapshot.width, snapshot.height);
     this.modeLabel.resize(snapshot.width, snapshot.height);
     this.effectsLabel.resize(snapshot.width, snapshot.height);
+    this.pauseOverlay.resize(snapshot.width, snapshot.height);
 
     // The win/game-over/level-transition message is still shown (and
     // still responsive) while it's up, so it needs to follow resizes the

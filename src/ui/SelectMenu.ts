@@ -24,6 +24,8 @@ export interface SelectMenuConfig {
   titleFontSizeRatio?: number;
   descriptionFontSizeRatio?: number;
   rowHeightRatio?: number;
+  /** Draw depth. Pause overlays pass a value above gameplay HUD / messages. */
+  depth?: number;
 }
 
 const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
@@ -37,6 +39,7 @@ const DEFAULT_CONFIG: Required<SelectMenuConfig> = {
   titleFontSizeRatio: 0.042,
   descriptionFontSizeRatio: 0.022,
   rowHeightRatio: 0.11,
+  depth: HUD_DEPTH,
 };
 
 interface SelectMenuRow {
@@ -55,6 +58,11 @@ export class SelectMenu<T extends string = string> {
   private viewportHeight = 0;
   private originY = 0;
   private confirmed = false;
+  private destroyed = false;
+  private readonly onUp = (): void => this.moveSelection(-1);
+  private readonly onDown = (): void => this.moveSelection(1);
+  private readonly onEnter = (): void => this.confirm();
+  private readonly onSpace = (): void => this.confirm();
 
   constructor(
     scene: Phaser.Scene,
@@ -87,7 +95,7 @@ export class SelectMenu<T extends string = string> {
         })
         .setOrigin(0.5, 0)
         .setShadow(1, 2, '#000000', 3, true, true)
-        .setDepth(HUD_DEPTH)
+        .setDepth(this.config.depth)
         .setInteractive({ useHandCursor: true });
 
       const description = scene.add
@@ -102,8 +110,13 @@ export class SelectMenu<T extends string = string> {
         })
         .setOrigin(0.5, 0)
         .setShadow(1, 2, '#000000', 2, true, true)
-        .setDepth(HUD_DEPTH)
-        .setInteractive({ useHandCursor: true });
+        .setDepth(this.config.depth);
+
+      if (option.description) {
+        description.setInteractive({ useHandCursor: true });
+      } else {
+        description.setVisible(false);
+      }
 
       const selectIndex = i;
       title.on('pointerover', () => this.setSelectedIndex(selectIndex));
@@ -119,7 +132,32 @@ export class SelectMenu<T extends string = string> {
     this.bindKeyboard();
   }
 
+  /** Removes keyboard listeners and texts so a later overlay cannot steal Space. */
+  destroy(): void {
+    if (this.destroyed) {
+      return;
+    }
+
+    this.destroyed = true;
+    this.confirmed = true;
+    const keyboard = this.scene.input.keyboard;
+    keyboard?.off('keydown-UP', this.onUp);
+    keyboard?.off('keydown-DOWN', this.onDown);
+    keyboard?.off('keydown-ENTER', this.onEnter);
+    keyboard?.off('keydown-SPACE', this.onSpace);
+
+    for (const row of this.rows) {
+      row.title.destroy();
+      row.description.destroy();
+    }
+    this.rows.length = 0;
+  }
+
   resize(viewportWidth: number, viewportHeight: number, originY: number): void {
+    if (this.destroyed) {
+      return;
+    }
+
     this.viewportWidth = viewportWidth;
     this.viewportHeight = viewportHeight;
     this.originY = originY;
@@ -132,14 +170,14 @@ export class SelectMenu<T extends string = string> {
       return;
     }
 
-    keyboard.on('keydown-UP', () => this.moveSelection(-1));
-    keyboard.on('keydown-DOWN', () => this.moveSelection(1));
-    keyboard.on('keydown-ENTER', () => this.confirm());
-    keyboard.on('keydown-SPACE', () => this.confirm());
+    keyboard.on('keydown-UP', this.onUp);
+    keyboard.on('keydown-DOWN', this.onDown);
+    keyboard.on('keydown-ENTER', this.onEnter);
+    keyboard.on('keydown-SPACE', this.onSpace);
   }
 
   private moveSelection(delta: number): void {
-    if (this.confirmed || this.options.length === 0) {
+    if (this.destroyed || this.confirmed || this.options.length === 0) {
       return;
     }
 
@@ -148,7 +186,7 @@ export class SelectMenu<T extends string = string> {
   }
 
   private setSelectedIndex(index: number): void {
-    if (this.confirmed || index === this.selectedIndex) {
+    if (this.destroyed || this.confirmed || index === this.selectedIndex) {
       return;
     }
 
@@ -157,7 +195,7 @@ export class SelectMenu<T extends string = string> {
   }
 
   private confirm(): void {
-    if (this.confirmed) {
+    if (this.destroyed || this.confirmed) {
       return;
     }
 

@@ -29,6 +29,10 @@ import type { BallConfig } from '@entities/dx-ball/Ball';
  * mixes cracked, metal obstacles, and bonus (guaranteed-drop) bricks
  * into the existing 7×9 ramp. Spacing / points / ball speed are
  * unchanged from DXB-08.
+ *
+ * DXB-13A adds levels 4-5 (campaign is now 5). Level 4 leans on metal
+ * corridors. Level 5 mixes every current type (normal, cracked, metal,
+ * bonus). Score / lives still carry on the same `BrickGrid` instance.
  */
 export interface LevelConfig {
   brickGrid?: BrickGridConfig;
@@ -73,5 +77,43 @@ export const LEVELS: readonly LevelConfig[] = [
       ],
     },
     ball: { speedRatio: 0.76 },
+  },
+  // Level 4: heavier metal — corridors and bounce cages, still clearable.
+  {
+    brickGrid: {
+      gapRatio: 0.012,
+      rowHeightRatio: 0.024,
+      basePointsPerRow: 16,
+      layout: [
+        'MMNMNMNMM',
+        'NMMNNNMMN',
+        'CMNMNMNMC',
+        'MMNNNNNMM',
+        'NNNMNMNNN',
+        'CMNCNCNMC',
+        'NNNMNMNNN',
+        'NNNNCNNNN',
+      ],
+    },
+    ball: { speedRatio: 0.82 },
+  },
+  // Level 5: mixed field of every current brick type.
+  {
+    brickGrid: {
+      gapRatio: 0.011,
+      rowHeightRatio: 0.024,
+      basePointsPerRow: 18,
+      layout: [
+        'CMBNNMBMC',
+        'NCNMBMNCN',
+        'BNCNCNCNB',
+        'MNNCCCNNM',
+        'CNCBNBCNC',
+        'BNNMNMNNB',
+        'NCBMNMBCN',
+        'NNNBCBNNN',
+      ],
+    },
+    ball: { speedRatio: 0.88 },
   },
 ];

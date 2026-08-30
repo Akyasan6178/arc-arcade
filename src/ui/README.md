@@ -17,7 +17,8 @@ Currently:
   DXB-07 added the two bottom corners as anchor options and put that
   reuse into practice — DX-Ball's lives counter is a third `ScoreLabel`
   instance (`Lives: `, bottom-left). DXB-13 adds a shared bold typeface,
-  dark stroke, and drop shadow so every corner stays readable.
+  dark stroke, and drop shadow so every corner stays readable. DXB-13A
+  lets `setValue` take an optional suffix (`Level 1 / 5`).
 - `ActiveEffectsLabel.ts` — DXB-12's second shared widget. A centered
   top-of-viewport `Text` listing active effects and remaining duration
   (or a count suffix for untimed effects). Hidden when the list is empty.
@@ -32,4 +33,8 @@ Currently:
   other HUD widgets. Not DX-Ball-specific.
 - `SelectMenu.ts` — DXB-14's reusable vertical option list (arrows,
   Space / Enter, click). Caller supplies options and an `onSelect`
-  callback. Not DX-Ball-specific.
+  callback. DXB-13A adds `destroy()` (so a pause overlay can unbind
+  Space) and a configurable `depth`. Not DX-Ball-specific.
+- `PauseOverlay.ts` — DXB-13A's reusable pause/menu overlay. Dims the
+  playfield, shows a title, and hosts a `SelectMenu`. Hidden until
+  `show()`. Not DX-Ball-specific.
