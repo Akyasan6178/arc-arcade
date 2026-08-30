@@ -8,13 +8,19 @@ import Phaser from 'phaser';
  * sizing/positioning/layout math lives in `BrickGrid`, which owns the
  * full set of bricks the same way `MainScene` owns `Paddle`/`Ball`.
  *
- * No hit points, destruction, or ball collision here — that's separate
- * future work (mirroring DXB-01/DXB-02's own precedent of leaving
- * paddle/ball collision out of their "core" entity tasks).
+ * No destruction or ball collision here — that's owned by `BrickGrid`
+ * (mirroring DXB-01/DXB-02's own precedent of leaving paddle/ball
+ * collision out of their "core" entity tasks).
+ *
+ * DXB-06 adds `points`: this brick's fixed score value, assigned once at
+ * construction by `BrickGrid` (which decides the row-based scoring rule)
+ * and never mutated afterwards — the brick just carries it, the same way
+ * it carries `row`/`column`.
  */
 export class Brick extends Phaser.GameObjects.Rectangle {
   readonly row: number;
   readonly column: number;
+  readonly points: number;
 
   constructor(
     scene: Phaser.Scene,
@@ -25,11 +31,13 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     width: number,
     height: number,
     color: number,
+    points: number,
   ) {
     super(scene, x, y, width, height, color);
 
     this.row = row;
     this.column = column;
+    this.points = points;
 
     scene.add.existing(this);
   }

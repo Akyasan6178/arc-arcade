@@ -21,6 +21,14 @@ import { Brick } from '@entities/dx-ball/Brick';
  * detect the win condition (all bricks removed). No other state or
  * behavior change — the grid still doesn't know or care what happens
  * when it becomes empty.
+ *
+ * DXB-06 adds scoring: each brick is assigned a fixed `points` value at
+ * creation (row-based — rows further from the paddle are worth more,
+ * the classic Arkanoid/DX-Ball convention), and `resolveBallCollision()`
+ * now also accumulates those points into a running total whenever it
+ * removes a brick. `getScore()` is a trivial query for that total,
+ * following the exact same "owning scene polls a getter" pattern
+ * `isCleared()` already established — no event bus was introduced.
  */
 export interface BrickGridConfig {
   rows?: number;
@@ -35,6 +43,13 @@ export interface BrickGridConfig {
   gapRatio?: number;
   /** Each brick's height, as a ratio of viewport height. */
   rowHeightRatio?: number;
+  /**
+   * DXB-06: Points awarded for destroying one brick in the row closest to
+   * the paddle (row `rows - 1`), the lowest-value row. Each row further
+   * from the paddle (lower row index) is worth one more multiple of this
+   * — row 0 (the top/back row) is worth `rows * basePointsPerRow`.
+   */
+  basePointsPerRow?: number;
 }
 
 const DEFAULT_CONFIG: Required<BrickGridConfig> = {
@@ -45,6 +60,7 @@ const DEFAULT_CONFIG: Required<BrickGridConfig> = {
   sideMarginRatio: 0.05,
   gapRatio: 0.008,
   rowHeightRatio: 0.035,
+  basePointsPerRow: 10,
 };
 
 interface GridLayout {
@@ -59,6 +75,7 @@ export class BrickGrid {
   private readonly scene: Phaser.Scene;
   private readonly config: Required<BrickGridConfig>;
   private readonly bricks: Brick[];
+  private score = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -110,6 +127,7 @@ export class BrickGrid {
       }
 
       this.bricks.splice(i, 1);
+      this.score += brick.points;
       brick.destroy();
 
       // The axis with the *smaller* overlap is the one the ball just
@@ -123,6 +141,11 @@ export class BrickGrid {
   /** DXB-04: True once every brick has been removed — the win condition for a level. */
   isCleared(): boolean {
     return this.bricks.length === 0;
+  }
+
+  /** DXB-06: Running total of points earned from every brick destroyed so far this level. */
+  getScore(): number {
+    return this.score;
   }
 
   /** Recomputes every brick's size and position for a new viewport size (e.g. on resize). */
@@ -142,16 +165,37 @@ export class BrickGrid {
 
     for (let row = 0; row < this.config.rows; row++) {
       const color = this.config.colors[row % this.config.colors.length];
+      const points = BrickGrid.computePointsForRow(row, this.config);
 
       for (let column = 0; column < this.config.columns; column++) {
         const { x, y } = BrickGrid.computeCellPosition(row, column, layout);
         bricks.push(
-          new Brick(this.scene, row, column, x, y, layout.brickWidth, layout.brickHeight, color),
+          new Brick(
+            this.scene,
+            row,
+            column,
+            x,
+            y,
+            layout.brickWidth,
+            layout.brickHeight,
+            color,
+            points,
+          ),
         );
       }
     }
 
     return bricks;
+  }
+
+  /**
+   * DXB-06: Points value for every brick in `row`. Row 0 (the back row,
+   * furthest from the paddle) is worth the most, decreasing by one
+   * `basePointsPerRow` multiple per row toward the paddle — the last row
+   * (`rows - 1`) is worth exactly one multiple.
+   */
+  private static computePointsForRow(row: number, config: Required<BrickGridConfig>): number {
+    return (config.rows - row) * config.basePointsPerRow;
   }
 
   private static computeLayout(

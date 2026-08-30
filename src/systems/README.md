@@ -22,3 +22,7 @@ Currently:
   `GameViewport.get()` accessor (`width`, `height`, `centerX`, `centerY`,
   `isPortrait`, `isLandscape`, `safeArea`, `onChange(listener)`) that any
   scene/system/entity in any future game can read.
+- `HighScoreStore.ts` — DXB-06 save/score persistence. A tiny static
+  `get(key)` / `set(key, value)` wrapper around `localStorage`, keyed by
+  a caller-provided string so each game picks its own key without this
+  file knowing anything about that game's scoring rules.
