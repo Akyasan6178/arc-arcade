@@ -1,0 +1,135 @@
+import Phaser from 'phaser';
+
+/**
+ * entities/dx-ball/Paddle.ts
+ *
+ * DXB-01: Core paddle entity for DX-Ball. A rectangle game object that
+ * owns its own visual representation, responsive sizing/positioning, and
+ * horizontal movement controls:
+ *   - Mouse (desktop) / touch (mobile) — the paddle follows the pointer's
+ *     x position. Phaser's unified pointer events cover both without
+ *     separate code paths.
+ *   - Keyboard fallback — Left/Right arrow keys.
+ * Movement is speed-capped (smooth, not an instant teleport to the
+ * pointer) and always clamped within the current viewport width.
+ *
+ * No ball/brick/collision logic lives here — that's separate future work.
+ */
+export interface PaddleConfig {
+  color?: number;
+  widthRatio?: number;
+  heightRatio?: number;
+  bottomOffsetRatio?: number;
+  /** Max travel speed, in viewport-widths per second. */
+  speedRatio?: number;
+}
+
+const DEFAULT_CONFIG: Required<PaddleConfig> = {
+  color: 0xffffff,
+  widthRatio: 0.16,
+  heightRatio: 0.025,
+  bottomOffsetRatio: 0.05,
+  speedRatio: 1.2,
+};
+
+export class Paddle extends Phaser.GameObjects.Rectangle {
+  private readonly config: Required<PaddleConfig>;
+  private readonly cursorKeys?: Phaser.Types.Input.Keyboard.CursorKeys;
+  private readonly handlePointerMove: (pointer: Phaser.Input.Pointer) => void;
+
+  private viewportWidth: number;
+  /** Desired paddle center x, driven by pointer/touch/keyboard input. */
+  private targetX: number;
+
+  constructor(
+    scene: Phaser.Scene,
+    viewportWidth: number,
+    viewportHeight: number,
+    config: PaddleConfig = {},
+  ) {
+    const resolvedConfig: Required<PaddleConfig> = { ...DEFAULT_CONFIG, ...config };
+    const { width, height } = Paddle.computeSize(viewportWidth, viewportHeight, resolvedConfig);
+    const { x, y } = Paddle.computePosition(viewportWidth, viewportHeight, height, resolvedConfig);
+
+    super(scene, x, y, width, height, resolvedConfig.color);
+
+    this.config = resolvedConfig;
+    this.viewportWidth = viewportWidth;
+    this.targetX = x;
+
+    scene.add.existing(this);
+
+    // `pointermove` covers mouse movement on desktop and finger drags on
+    // touch devices alike — Phaser normalizes both into the same event.
+    this.handlePointerMove = (pointer: Phaser.Input.Pointer): void => {
+      this.targetX = pointer.x;
+    };
+    scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.handlePointerMove);
+
+    this.cursorKeys = scene.input.keyboard?.createCursorKeys();
+  }
+
+  /**
+   * Advances paddle movement by one frame. Must be called every frame
+   * (e.g. from the owning scene's `update`) for pointer-follow, keyboard
+   * input, and speed-capped smoothing to work.
+   */
+  update(deltaMs: number): void {
+    const deltaSeconds = deltaMs / 1000;
+    const maxSpeed = this.viewportWidth * this.config.speedRatio;
+    const halfWidth = this.width / 2;
+    const minX = halfWidth;
+    const maxX = this.viewportWidth - halfWidth;
+
+    if (this.cursorKeys?.left.isDown) {
+      this.targetX -= maxSpeed * deltaSeconds;
+    } else if (this.cursorKeys?.right.isDown) {
+      this.targetX += maxSpeed * deltaSeconds;
+    }
+    this.targetX = Phaser.Math.Clamp(this.targetX, minX, maxX);
+
+    const maxStep = maxSpeed * deltaSeconds;
+    const step = Phaser.Math.Clamp(this.targetX - this.x, -maxStep, maxStep);
+    this.setX(Phaser.Math.Clamp(this.x + step, minX, maxX));
+  }
+
+  /** Recomputes size and position for a new viewport size (e.g. on resize). */
+  resize(viewportWidth: number, viewportHeight: number): void {
+    this.viewportWidth = viewportWidth;
+
+    const { width, height } = Paddle.computeSize(viewportWidth, viewportHeight, this.config);
+    const { y } = Paddle.computePosition(viewportWidth, viewportHeight, height, this.config);
+
+    this.setSize(width, height);
+    this.setPosition(Phaser.Math.Clamp(this.x, width / 2, viewportWidth - width / 2), y);
+    this.targetX = Phaser.Math.Clamp(this.targetX, width / 2, viewportWidth - width / 2);
+  }
+
+  protected preDestroy(): void {
+    this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.handlePointerMove);
+    super.preDestroy();
+  }
+
+  private static computeSize(
+    viewportWidth: number,
+    viewportHeight: number,
+    config: Required<PaddleConfig>,
+  ): { width: number; height: number } {
+    return {
+      width: viewportWidth * config.widthRatio,
+      height: viewportHeight * config.heightRatio,
+    };
+  }
+
+  private static computePosition(
+    viewportWidth: number,
+    viewportHeight: number,
+    paddleHeight: number,
+    config: Required<PaddleConfig>,
+  ): { x: number; y: number } {
+    return {
+      x: viewportWidth / 2,
+      y: viewportHeight - viewportHeight * config.bottomOffsetRatio - paddleHeight / 2,
+    };
+  }
+}
