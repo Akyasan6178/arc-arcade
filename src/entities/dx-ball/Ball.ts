@@ -97,8 +97,9 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * are unchanged.
  *
  * DXB-14: `setProgressionMultiplier()` folds an extra speed scale into
- * launch / resize / travel speed (used by Endless). Slow / fast still
- * apply on top. The ball does not know game modes exist.
+ * launch / resize / travel speed (Endless ramp; DXB-21 also Time Attack's
+ * constant fold). Slow / fast still apply on top. The ball does not know
+ * game modes exist.
  *
  * DXB-16: `applySkin()` accepts visual tokens from the owning scene.
  * Fire Ball still overrides fill/glow while active, then restores the
@@ -189,9 +190,10 @@ export class Ball extends Phaser.GameObjects.Arc {
   /** DXB-09/DXB-12: Current speed multiplier — slow, fast, or `1`. */
   private speedMultiplier = 1;
   /**
-   * DXB-14: Extra speed fold from Endless progression. Classic / Time
-   * Attack leave this at `1`. Independent of slow/fast so those
-   * powerups still apply on top. The ball does not know game modes.
+   * DXB-14/DXB-21: Extra speed fold from the owning scene (Endless ramp,
+   * Time Attack constant). Classic leaves this at `1`. Independent of
+   * slow/fast so those powerups still apply on top. The ball does not
+   * know game modes.
    */
   private progressionMultiplier = 1;
   /** DXB-09: Milliseconds remaining on the current slow effect, if any. */

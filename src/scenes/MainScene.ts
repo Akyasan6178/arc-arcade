@@ -13,6 +13,7 @@ import {
   TIME_ATTACK_DURATION_MS,
   ENDLESS_SPEED_RAMP_CAP,
   computeEndlessSpeedMultiplier,
+  computeModeSpeedMultiplier,
   formatTimeAttackClock,
   getGameModeInfo,
   isGameModeId,
@@ -173,6 +174,11 @@ import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins'
  * destroyed, per-mode personal bests, overall highest score, and
  * live play time, and submits a finished run's score to that mode's
  * local Top 10. Pause / end-of-run still own the existing overlays.
+ *
+ * DXB-21 is a playtest balance pass only: Fire Ball lasts 7s (was 10s),
+ * Multi Ball extras split ±10° (was ±20°), Time Attack applies a 1.15×
+ * speed fold (timer still 90s), and Endless ramps at +0.15%/s (was
+ * +0.4%/s, cap still 2×). No new systems, types, or content.
  */
 
 export interface MainSceneData {
@@ -186,12 +192,12 @@ const STARTING_LIVES = 3;
 /** DXB-09: How long widen-paddle / slow-ball last, in ms — preserved from the original timed pair. */
 const POWERUP_EFFECT_DURATION_MS = 8000;
 
-/** DXB-12: Per-type durations. Instant effects use `0`. */
+/** DXB-12: Per-type durations. Instant effects use `0`. DXB-21 shortened Fire Ball. */
 const POWERUP_DURATION_MS: Record<PowerupType, number> = {
   'widen-paddle': POWERUP_EFFECT_DURATION_MS,
   'slow-ball': POWERUP_EFFECT_DURATION_MS,
   'extra-life': 0,
-  'fire-ball': 10000,
+  'fire-ball': 7000,
   'multi-ball': 0,
   'small-paddle': 15000,
   'fast-ball': 10000,
@@ -200,8 +206,8 @@ const POWERUP_DURATION_MS: Record<PowerupType, number> = {
 /** DXB-12: Multi Ball always tops up to this many balls, never more. */
 const MULTI_BALL_TOTAL = 3;
 
-/** DXB-12: Heading offsets (degrees) applied to extras split from a launched ball. */
-const MULTI_BALL_SPLIT_ANGLES_DEG = [-20, 20];
+/** DXB-12/DXB-21: Heading offsets (degrees) applied to extras split from a launched ball. */
+const MULTI_BALL_SPLIT_ANGLES_DEG = [-10, 10] as const;
 
 /** DXB-17: Flush accumulated play time to localStorage at this interval. */
 const PLAY_TIME_FLUSH_MS = 5000;
@@ -317,6 +323,7 @@ export class MainScene extends Phaser.Scene {
       ),
     ];
     this.applyBallSkin(this.balls[0]);
+    this.applyModeSpeed(this.balls[0]);
     this.powerupManager = new PowerupManager(this, snapshot.width, snapshot.height, this.paddle, {
       palette: this.theme.powerups,
     });
@@ -621,7 +628,7 @@ export class MainScene extends Phaser.Scene {
     const level = this.getCurrentLevel();
     const ball = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
     this.applyBallSkin(ball);
-    this.applyEndlessSpeed(ball);
+    this.applyModeSpeed(ball);
     return ball;
   }
 
@@ -665,12 +672,17 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  private applyEndlessSpeed(ball: Ball): void {
-    if (this.mode !== 'endless') {
+  /**
+   * DXB-14/DXB-21: Writes the mode speed fold onto a ball. Classic is a
+   * no-op (stays at `1`). Time Attack is the constant 1.15×. Endless is
+   * the play-time ramp. The ball still does not know modes exist.
+   */
+  private applyModeSpeed(ball: Ball): void {
+    if (this.mode === 'classic') {
       return;
     }
 
-    ball.setProgressionMultiplier(computeEndlessSpeedMultiplier(this.runElapsedMs));
+    ball.setProgressionMultiplier(computeModeSpeedMultiplier(this.mode, this.runElapsedMs));
   }
 
   private refreshModeLabel(): void {
@@ -782,16 +794,17 @@ export class MainScene extends Phaser.Scene {
       const extra = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
       extra.copyEffectsFrom(source);
       this.applyBallSkin(extra);
-      this.applyEndlessSpeed(extra);
+      this.applyModeSpeed(extra);
+
+      const splitDeg =
+        MULTI_BALL_SPLIT_ANGLES_DEG[i % MULTI_BALL_SPLIT_ANGLES_DEG.length];
 
       if (launched) {
-        const split = sourceVelocity.clone().rotate(
-          Phaser.Math.DegToRad(MULTI_BALL_SPLIT_ANGLES_DEG[i] ?? (i % 2 === 0 ? -20 : 20)),
-        );
+        const split = sourceVelocity.clone().rotate(Phaser.Math.DegToRad(splitDeg));
         extra.becomeExtra(source.x, source.y, split.x, split.y);
       } else {
         const speed = source.getTravelSpeed();
-        const angleDeg = -60 + (MULTI_BALL_SPLIT_ANGLES_DEG[i] ?? (i % 2 === 0 ? -20 : 20));
+        const angleDeg = -60 + splitDeg;
         const angle = Phaser.Math.DegToRad(angleDeg);
         extra.becomeExtra(source.x, source.y, Math.cos(angle) * speed, Math.sin(angle) * speed);
       }

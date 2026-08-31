@@ -6,6 +6,10 @@
  * names the modes, their HUD labels, Time Attack's duration, and
  * Endless's speed ramp. It does not own a run, a scene, or any HUD
  * widget. `BrickGrid` / `Ball` / `Paddle` never import it.
+ *
+ * DXB-21 retunes Time Attack's base speed fold and Endless's ramp
+ * rate from playtest feedback. Duration stays 90s; the cap stays 2×.
+ * No new modes.
  */
 
 export type GameModeId = 'classic' | 'time-attack' | 'endless';
@@ -34,14 +38,23 @@ export const GAME_MODES: readonly GameModeInfo[] = [
   },
 ];
 
-/** DXB-14: Time Attack duration — a placeholder tuning value, not playtested. */
+/** DXB-14: Time Attack duration. DXB-21 left this at 90s. */
 export const TIME_ATTACK_DURATION_MS = 90_000;
 
 /**
- * DXB-14: Endless adds this much extra speed per second of play time
- * (`1 + seconds * ramp`, capped). Placeholder, not playtested.
+ * DXB-21: Time Attack multiplies base travel speed by this constant so
+ * a 90-second run has more scoring chances. Classic stays at `1`.
+ * Slow / fast still apply on top via the ball's own multiplier.
  */
-export const ENDLESS_SPEED_RAMP_PER_SECOND = 0.004;
+export const TIME_ATTACK_SPEED_MULTIPLIER = 1.15;
+
+/**
+ * DXB-14/DXB-21: Endless adds this much extra speed per second of play
+ * time (`1 + seconds * ramp`, capped). DXB-21 reduced the original
+ * `0.004` so the 2× cap lands around 11 minutes instead of ~4, which
+ * was the level-4 wall.
+ */
+export const ENDLESS_SPEED_RAMP_PER_SECOND = 0.0015;
 
 /** DXB-14: Hard cap on the Endless progression multiplier. */
 export const ENDLESS_SPEED_RAMP_CAP = 2;
@@ -62,8 +75,23 @@ export function formatTimeAttackClock(remainingMs: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-/** Endless speed multiplier for `elapsedMs` of play time. Classic / Time Attack stay at `1`. */
+/** Endless speed multiplier for `elapsedMs` of play time. */
 export function computeEndlessSpeedMultiplier(elapsedMs: number): number {
   const seconds = Math.max(0, elapsedMs) / 1000;
   return Math.min(ENDLESS_SPEED_RAMP_CAP, 1 + seconds * ENDLESS_SPEED_RAMP_PER_SECOND);
+}
+
+/**
+ * DXB-21: Mode speed fold applied to a live ball. Classic is `1`;
+ * Time Attack is a constant; Endless ramps with play time. The ball
+ * still does not know modes exist — the owning scene writes the fold.
+ */
+export function computeModeSpeedMultiplier(mode: GameModeId, elapsedMs: number): number {
+  if (mode === 'endless') {
+    return computeEndlessSpeedMultiplier(elapsedMs);
+  }
+  if (mode === 'time-attack') {
+    return TIME_ATTACK_SPEED_MULTIPLIER;
+  }
+  return 1;
 }
