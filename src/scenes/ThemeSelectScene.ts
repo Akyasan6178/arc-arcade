@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SceneKeys } from '@systems/SceneKeys';
 import { GameViewport, type ViewportSnapshot } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
+import { playDxBallThemeMusic } from '@entities/dx-ball/audioCues';
 import {
   THEME_INFOS,
   getTheme,
@@ -66,6 +67,7 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(current.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, current.backdrop);
+    playDxBallThemeMusic(currentId);
     this.titleText = createMenuTitle(this, snapshot, current.hud.title);
     this.subtitleText = createMenuSubtitle(this, snapshot, current.hud.subtitle, 'SELECT THEME');
     this.hintText = createMenuHint(this, snapshot, current.hud.hint, 'Tap a theme to choose');
@@ -136,6 +138,7 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.subtitleText.setColor(theme.hud.subtitle);
     this.hintText.setColor(theme.hud.hint);
     this.backButton?.setColor(theme.menu.color, theme.menu.highlightColor);
+    playDxBallThemeMusic(id);
   }
 
   private createBackButton(snapshot: ViewportSnapshot, color: string): TextButton {

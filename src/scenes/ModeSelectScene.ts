@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SceneKeys } from '@systems/SceneKeys';
 import { GameViewport, type ViewportSnapshot } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
+import { playDxBallThemeMusic } from '@entities/dx-ball/audioCues';
 import { GAME_MODES, type GameModeId } from '@entities/dx-ball/GameMode';
 import { getTheme } from '@entities/dx-ball/Theme';
 import { loadPlayableThemeId } from '@entities/dx-ball/Progress';
@@ -60,6 +61,7 @@ export class ModeSelectScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
+    playDxBallThemeMusic(theme.id);
     this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
     this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'SELECT MODE');
     this.themeHintText = this.createThemeHint(snapshot, theme.label, theme.hud.hint);

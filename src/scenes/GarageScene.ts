@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SceneKeys, type SceneKey } from '@systems/SceneKeys';
 import { GameViewport, type ViewportSnapshot } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
+import { playDxBallThemeMusic } from '@entities/dx-ball/audioCues';
 import {
   getBallSkinLabel,
   getBallUnlockRows,
@@ -103,6 +104,7 @@ export class GarageScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
+    playDxBallThemeMusic(theme.id);
     this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
     this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'GARAGE');
     this.hintText = createMenuHint(this, snapshot, theme.hud.hint, '', 'center');
@@ -314,6 +316,7 @@ export class GarageScene extends Phaser.Scene {
     const theme = getTheme(id);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
     this.background.applyTheme(theme.backdrop);
+    playDxBallThemeMusic(id);
     this.titleText.setColor(theme.hud.title);
     this.subtitleText.setColor(theme.hud.subtitle);
     this.hintText.setColor(theme.hud.hint);
@@ -340,6 +343,9 @@ export class GarageScene extends Phaser.Scene {
       backdrop: {
         topColor: theme.backdrop.topColor,
         bottomColor: theme.backdrop.bottomColor,
+        style: theme.backdrop.style,
+        gridColor: theme.backdrop.gridColor,
+        starColor: theme.backdrop.starColor,
       },
     });
   }

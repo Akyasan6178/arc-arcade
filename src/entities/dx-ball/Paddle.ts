@@ -44,6 +44,10 @@ import Phaser from 'phaser';
  * DXB-16: `applySkin()` accepts visual tokens from the owning scene
  * (fill / stroke / a light motif overlay). Size, speed, and collision
  * are unchanged — this paddle still does not know unlocks exist.
+ *
+ * DXB-22: motif overlays animate with Phaser Graphics (no GIF files).
+ * Crystal shimmers, Titan gets a metallic sweep, Pulse rings beat,
+ * Reactor's core glows, Obsidian has a dark aura. Collision is unchanged.
  */
 export interface PaddleSkinVisual {
   fill: number;
@@ -95,6 +99,8 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
   private smallRemainingMs = 0;
   /** DXB-16: Cosmetic overlay; the rectangle remains the collision body. */
   private readonly overlay: Phaser.GameObjects.Graphics;
+  /** DXB-22: Idle motif animation clock. */
+  private fxTimeMs = 0;
   private skin: PaddleSkinVisual = {
     fill: DEFAULT_CONFIG.color,
     stroke: DEFAULT_CONFIG.color,
@@ -161,6 +167,7 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     const step = Phaser.Math.Clamp(this.targetX - this.x, -maxStep, maxStep);
     this.setX(Phaser.Math.Clamp(this.x + step, minX, maxX));
     this.overlay.setPosition(this.x, this.y);
+    this.tickMotif(deltaMs);
   }
 
   /**
@@ -335,6 +342,18 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     this.redrawMotif();
   }
 
+  private tickMotif(deltaMs: number): void {
+    if (this.skin.motif === 'flat' || this.skin.motif === 'bands') {
+      return;
+    }
+    this.fxTimeMs += deltaMs;
+    this.redrawMotif();
+  }
+
+  private wave(periodMs: number): number {
+    return 0.5 + 0.5 * Math.sin(this.fxTimeMs / periodMs);
+  }
+
   private redrawMotif(): void {
     this.overlay.clear();
     const halfWidth = this.width / 2;
@@ -348,23 +367,34 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
         break;
       }
       case 'glow': {
-        this.overlay.fillStyle(this.skin.motifColor, 0.28);
+        this.overlay.fillStyle(this.skin.motifColor, 0.2 + 0.18 * this.wave(240));
         this.overlay.fillRoundedRect(
-          -halfWidth - 4,
-          -halfHeight - 4,
-          this.width + 8,
-          this.height + 8,
-          Math.max(2, this.height * 0.35),
+          -halfWidth - 6,
+          -halfHeight - 6,
+          this.width + 12,
+          this.height + 12,
+          Math.max(2, this.height * 0.4),
         );
         break;
       }
       case 'core': {
+        const glow = 0.18 + 0.22 * this.wave(160);
+        this.overlay.fillStyle(this.skin.motifColor, glow);
+        this.overlay.fillRoundedRect(
+          -halfWidth * 0.72,
+          -halfHeight * 0.85,
+          this.width * 0.72,
+          this.height * 0.85,
+          Math.max(2, this.height * 0.25),
+        );
+        const coreW = this.width * (0.42 + 0.18 * this.wave(160));
         this.overlay.fillStyle(this.skin.motifColor, 0.95);
-        this.overlay.fillRect(-halfWidth * 0.55, -Math.max(1, this.height * 0.12), this.width * 0.55, Math.max(2, this.height * 0.24));
+        this.overlay.fillRect(-coreW / 2, -Math.max(1, this.height * 0.12), coreW, Math.max(2, this.height * 0.28));
         break;
       }
       case 'crystal': {
-        this.overlay.fillStyle(this.skin.motifColor, 0.55);
+        const shimmer = 0.4 + 0.4 * this.wave(220);
+        this.overlay.fillStyle(this.skin.motifColor, shimmer);
         this.overlay.fillTriangle(
           0,
           -halfHeight * 0.95,
@@ -373,7 +403,7 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
           halfWidth * 0.22,
           halfHeight * 0.2,
         );
-        this.overlay.fillStyle(this.skin.motifColor, 0.85);
+        this.overlay.fillStyle(this.skin.motifColor, 0.7 + 0.25 * this.wave(180));
         this.overlay.fillTriangle(
           -halfWidth * 0.72,
           0,
@@ -390,6 +420,9 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
           halfWidth * 0.18,
           halfHeight * 0.55,
         );
+        const hx = Math.sin(this.fxTimeMs / 380) * halfWidth * 0.65;
+        this.overlay.fillStyle(0xffffff, 0.1 + 0.22 * this.wave(140));
+        this.overlay.fillRect(hx - 3, -halfHeight, 6, this.height);
         break;
       }
       case 'plates': {
@@ -399,18 +432,24 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
         this.overlay.fillRect(-halfWidth * 0.82, -plateH / 2, plateW, plateH);
         this.overlay.fillRect(-plateW / 2, -plateH / 2, plateW, plateH);
         this.overlay.fillRect(halfWidth * 0.82 - plateW, -plateH / 2, plateW, plateH);
+        const sweep = (Math.sin(this.fxTimeMs / 320) + 1) / 2;
+        const shineX = -halfWidth * 0.82 + sweep * (this.width * 0.82);
+        this.overlay.fillStyle(0xf8ead4, 0.18 + 0.35 * this.wave(320));
+        this.overlay.fillRect(shineX, -plateH / 2, Math.max(3, plateW * 0.45), plateH);
         break;
       }
       case 'pulse': {
-        this.overlay.lineStyle(Math.max(1.5, this.height * 0.18), this.skin.motifColor, 0.9);
+        const beat = this.wave(180);
+        const outer = 0.78 + 0.12 * beat;
+        this.overlay.lineStyle(Math.max(1.5, this.height * 0.18), this.skin.motifColor, 0.45 + 0.5 * beat);
         this.overlay.strokeRoundedRect(
-          -halfWidth * 0.78,
-          -halfHeight * 0.55,
-          this.width * 0.78,
-          this.height * 0.55,
+          -halfWidth * outer,
+          -halfHeight * (0.5 + 0.2 * beat),
+          this.width * outer,
+          this.height * (0.5 + 0.2 * beat),
           Math.max(2, this.height * 0.28),
         );
-        this.overlay.lineStyle(Math.max(1, this.height * 0.12), this.skin.motifColor, 0.45);
+        this.overlay.lineStyle(Math.max(1, this.height * 0.12), this.skin.motifColor, 0.3 + 0.4 * (1 - beat));
         this.overlay.strokeRoundedRect(
           -halfWidth * 0.5,
           -halfHeight * 0.28,
@@ -418,10 +457,27 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
           this.height * 0.28,
           Math.max(1, this.height * 0.18),
         );
+        this.overlay.lineStyle(Math.max(1, this.height * 0.1), this.skin.motifColor, 0.12 + 0.28 * beat);
+        this.overlay.strokeRoundedRect(
+          -halfWidth * 0.95,
+          -halfHeight * 0.9,
+          this.width * 0.95,
+          this.height * 0.9,
+          Math.max(2, this.height * 0.32),
+        );
         break;
       }
       case 'shard': {
-        this.overlay.fillStyle(this.skin.motifColor, 0.95);
+        const aura = 0.1 + 0.16 * this.wave(260);
+        this.overlay.fillStyle(0x2e1065, aura);
+        this.overlay.fillRoundedRect(
+          -halfWidth - 8,
+          -halfHeight - 8,
+          this.width + 16,
+          this.height + 16,
+          Math.max(3, this.height * 0.45),
+        );
+        this.overlay.fillStyle(this.skin.motifColor, 0.85 + 0.1 * this.wave(260));
         this.overlay.fillTriangle(
           -halfWidth * 0.15,
           -halfHeight * 0.95,
@@ -430,7 +486,7 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
           -halfWidth * 0.15,
           halfHeight * 0.95,
         );
-        this.overlay.fillStyle(this.skin.motifColor, 0.4);
+        this.overlay.fillStyle(this.skin.motifColor, 0.35 + 0.2 * this.wave(200));
         this.overlay.fillRect(-halfWidth * 0.88, -halfHeight * 0.2, this.width * 0.28, Math.max(2, this.height * 0.4));
         break;
       }

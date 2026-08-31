@@ -20,7 +20,8 @@ import { DX_BALL_AUDIO_MANIFEST } from '@assets/dx-ball/audio-manifest';
  * `loaderror` event, never a thrown exception, and `AudioManager`
  * already checks its cache before ever trying to play a key — so an
  * empty or partially-failed manifest is a fully safe, expected state,
- * not a startup error.
+ * not a startup error. DXB-22 theme music uses the same path: named
+ * keys with synthesized fallbacks until real files are added.
  */
 export class PreloadScene extends Phaser.Scene {
   constructor() {

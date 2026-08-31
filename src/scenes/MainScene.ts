@@ -8,7 +8,7 @@ import { BrickGrid } from '@entities/dx-ball/BrickGrid';
 import { LEVELS, type LevelConfig } from '@entities/dx-ball/levels';
 import { PowerupManager } from '@entities/dx-ball/PowerupManager';
 import type { PowerupType } from '@entities/dx-ball/Powerup';
-import { playDxBallSfx } from '@entities/dx-ball/audioCues';
+import { playDxBallSfx, playDxBallThemeMusic } from '@entities/dx-ball/audioCues';
 import {
   TIME_ATTACK_DURATION_MS,
   ENDLESS_SPEED_RAMP_CAP,
@@ -26,6 +26,7 @@ import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { ModeLabel } from '@ui/ModeLabel';
 import { PauseOverlay, type PauseOverlayAction } from '@ui/PauseOverlay';
 import { ResultOverlay } from '@ui/ResultOverlay';
+import { CatchFlash } from '@ui/CatchFlash';
 import { TextButton } from '@ui/TextButton';
 import {
   MENU_LAYOUT,
@@ -209,6 +210,17 @@ const MULTI_BALL_TOTAL = 3;
 /** DXB-12/DXB-21: Heading offsets (degrees) applied to extras split from a launched ball. */
 const MULTI_BALL_SPLIT_ANGLES_DEG = [-10, 10] as const;
 
+/** DXB-22: Lightweight collection flashes. Visual only — dispatch is unchanged. */
+const POWERUP_COLLECT_FLASH: Record<PowerupType, number> = {
+  'extra-life': 0x4ade80,
+  'fire-ball': 0xff7a18,
+  'multi-ball': 0x3b82f6,
+  'slow-ball': 0x22d3ee,
+  'fast-ball': 0xfb7185,
+  'widen-paddle': 0x86efac,
+  'small-paddle': 0xf97316,
+};
+
 /** DXB-17: Flush accumulated play time to localStorage at this interval. */
 const PLAY_TIME_FLUSH_MS = 5000;
 
@@ -230,10 +242,13 @@ export class MainScene extends Phaser.Scene {
   private modeLabel!: ModeLabel;
   private pauseOverlay!: PauseOverlay;
   private resultOverlay!: ResultOverlay;
+  private catchFlash!: CatchFlash;
   private pauseButton?: TextButton;
   private background!: ArcadeBackground;
   private theme!: ThemeDefinition;
   private bestScore = 0;
+  /** DXB-22: Best at run start, so "NEW BEST" is not true of every finished run. */
+  private startingBestScore = 0;
   private lives = STARTING_LIVES;
   private lastMissCount = 0;
   /** DXB-16: Last score already folded into lifetime progress this run. */
@@ -292,6 +307,7 @@ export class MainScene extends Phaser.Scene {
     this.runSubmitted = false;
     this.lastEndlessMultiplier = 1;
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
+    this.startingBestScore = this.bestScore;
     this.theme = getTheme(loadPlayableThemeId());
     recordGamePlayed();
 
@@ -377,7 +393,9 @@ export class MainScene extends Phaser.Scene {
     });
     this.resultOverlay = new ResultOverlay(this, snapshot.width, snapshot.height);
     this.resultOverlay.applyTheme(this.theme.overlay);
+    this.catchFlash = new CatchFlash(this, snapshot.width, snapshot.height);
     this.pauseButton = this.createPauseButton(snapshot);
+    playDxBallThemeMusic(this.theme.id);
 
     // The pattern every future game should follow: subscribe once, then
     // reposition/rescale whatever depends on viewport size whenever it
@@ -394,6 +412,7 @@ export class MainScene extends Phaser.Scene {
       this.submitRunIfNeeded();
       this.pauseButton?.destroy();
       this.pauseButton = undefined;
+      this.catchFlash?.destroy();
     });
 
     // DXB-10: global audio mute toggle. A keybinding rather than a HUD
@@ -519,6 +538,7 @@ export class MainScene extends Phaser.Scene {
 
     for (const type of this.powerupManager.consumeCaughtPowerups()) {
       recordPowerupCollected();
+      this.catchFlash.flash(POWERUP_COLLECT_FLASH[type]);
       this.applyPowerupEffect(type);
     }
   }
@@ -838,10 +858,13 @@ export class MainScene extends Phaser.Scene {
     this.transitioning = true;
 
     const clearedLevelNumber = this.currentLevelIndex + 1;
+    const finalScore = this.brickGrid.getScore();
     this.resultOverlay.show(
       {
         tone: 'info',
+        kicker: getGameModeInfo(this.mode).label,
         title: `LEVEL ${clearedLevelNumber} CLEARED`,
+        reward: this.resultReward(finalScore),
         body: `Get ready for Level ${clearedLevelNumber + 1}`,
         hint: 'Tap to continue',
       },
@@ -917,8 +940,10 @@ export class MainScene extends Phaser.Scene {
     this.resultOverlay.show(
       {
         tone: 'victory',
-        title: 'YOU WIN',
-        body: `All ${LEVELS.length} levels cleared\nScore: ${finalScore}`,
+        kicker: 'Classic Mode',
+        title: 'VICTORY',
+        reward: this.resultReward(finalScore),
+        body: `All ${LEVELS.length} levels cleared`,
         hint: 'Tap to play again  ·  Pause for menu',
       },
       () => this.restartRunFromOverlay(),
@@ -939,15 +964,31 @@ export class MainScene extends Phaser.Scene {
     this.submitRunIfNeeded();
 
     const finalScore = this.brickGrid.getScore();
-    this.resultOverlay.show(
-      {
-        tone: 'defeat',
-        title: 'GAME OVER',
-        body: `Score: ${finalScore}`,
-        hint: 'Tap to try again  ·  Pause for menu',
-      },
-      () => this.restartRunFromOverlay(),
-    );
+    if (this.mode === 'endless') {
+      this.resultOverlay.show(
+        {
+          tone: 'info',
+          kicker: 'Endless',
+          title: 'RUN COMPLETE',
+          reward: this.resultReward(finalScore),
+          body: `Reached Level ${this.currentLevelIndex + 1}`,
+          hint: 'Tap to try again  ·  Pause for menu',
+        },
+        () => this.restartRunFromOverlay(),
+      );
+    } else {
+      this.resultOverlay.show(
+        {
+          tone: 'defeat',
+          kicker: getGameModeInfo(this.mode).label,
+          title: 'GAME OVER',
+          reward: this.resultReward(finalScore),
+          body: 'No lives remaining',
+          hint: 'Tap to try again  ·  Pause for menu',
+        },
+        () => this.restartRunFromOverlay(),
+      );
+    }
 
     this.bindEndOfRunInput();
   }
@@ -971,9 +1012,11 @@ export class MainScene extends Phaser.Scene {
     const finalScore = this.brickGrid.getScore();
     this.resultOverlay.show(
       {
-        tone: 'defeat',
+        tone: 'info',
+        kicker: 'Time Attack',
         title: "TIME'S UP",
-        body: `Score: ${finalScore}`,
+        reward: this.resultReward(finalScore),
+        body: 'Clock expired',
         hint: 'Tap to play again  ·  Pause for menu',
       },
       () => this.restartRunFromOverlay(),
@@ -1118,6 +1161,14 @@ export class MainScene extends Phaser.Scene {
     this.effectsLabel.resize(snapshot.width, snapshot.height);
     this.pauseOverlay.resize(snapshot.width, snapshot.height);
     this.resultOverlay.resize(snapshot.width, snapshot.height);
+    this.catchFlash.resize(snapshot.width, snapshot.height);
     this.layoutPauseButton(snapshot);
+  }
+
+  private resultReward(score: number): string {
+    if (score > this.startingBestScore) {
+      return `NEW BEST  ${score}`;
+    }
+    return `Score  ${score}`;
   }
 }

@@ -104,7 +104,12 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * DXB-16: `applySkin()` accepts visual tokens from the owning scene.
  * Fire Ball still overrides fill/glow while active, then restores the
  * equipped skin. Collision, pierce, and speed are unchanged.
+ *
+ * DXB-22: idle skins animate glow / core / a light energy shell. Fire
+ * Ball still fully overrides appearance while its timer is running.
  */
+
+export type BallSkinFx = 'none' | 'plasma' | 'ember' | 'quantum' | 'frost' | 'void' | 'corona' | 'nova';
 
 export interface BallSkinVisual {
   fill: number;
@@ -116,6 +121,7 @@ export interface BallSkinVisual {
   coreColor: number;
   coreAlpha: number;
   coreScale: number;
+  fx?: BallSkinFx;
 }
 
 export interface BallConfig {
@@ -223,6 +229,10 @@ export class Ball extends Phaser.GameObjects.Arc {
   private readonly glow: Phaser.GameObjects.Arc;
   /** DXB-19: Optional inner core for cosmetic skins. Hidden during Fire Ball. */
   private readonly core: Phaser.GameObjects.Arc;
+  /** DXB-22: Idle energy shell (Nova / Solar / Ice Core). Hidden during Fire Ball. */
+  private readonly shell: Phaser.GameObjects.Arc;
+  /** DXB-22: Idle / fire visual clock. */
+  private fxTimeMs = 0;
   /** DXB-16: Equipped cosmetic; Fire Ball temporarily overrides it. */
   private skin: BallSkinVisual = {
     fill: DEFAULT_CONFIG.color,
@@ -234,6 +244,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     coreColor: DEFAULT_CONFIG.color,
     coreAlpha: 0,
     coreScale: 0.4,
+    fx: 'none',
   };
 
   constructor(
@@ -268,6 +279,11 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.core.setVisible(false);
     this.core.setDepth(PLAYFIELD_DEPTH + 1);
 
+    this.shell = scene.add.circle(x, y, radius * 1.7, DEFAULT_CONFIG.color, 0);
+    this.shell.setStrokeStyle(2, DEFAULT_CONFIG.color, 0);
+    this.shell.setVisible(false);
+    this.shell.setDepth(PLAYFIELD_DEPTH - 1);
+
     this.spaceKey = scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
   }
 
@@ -285,7 +301,7 @@ export class Ball extends Phaser.GameObjects.Arc {
 
     this.tickSpeedEffects(deltaMs);
     this.tickFireEffect(deltaMs);
-    this.syncFireGlow();
+    this.tickCosmetic(deltaMs);
 
     if (this.serveState === 'attached') {
       this.followPaddle();
@@ -520,21 +536,108 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.glow.setFillStyle(this.skin.glowColor, this.skin.glowAlpha);
     this.glow.setVisible(this.skin.glowAlpha > 0 && !this.spent);
     this.core.setFillStyle(this.skin.coreColor, this.skin.coreAlpha);
+    this.tickCosmetic(0);
+  }
+
+  private tickCosmetic(deltaMs: number): void {
+    this.fxTimeMs += deltaMs;
     this.syncFireGlow();
+    if (this.spent || !this.visible) {
+      this.shell.setVisible(false);
+      return;
+    }
+
+    if (this.fireRemainingMs > 0) {
+      const pulse = 0.3 + 0.12 * Math.sin(this.fxTimeMs / 80);
+      this.glow.setFillStyle(FIRE_GLOW_COLOR, pulse);
+      this.glow.setRadius(this.radius * (FIRE_GLOW_SCALE + 0.18 * Math.sin(this.fxTimeMs / 70)));
+      this.shell.setVisible(false);
+      return;
+    }
+
+    const fx = this.skin.fx ?? 'none';
+    const wave = (period: number) => 0.5 + 0.5 * Math.sin(this.fxTimeMs / period);
+    let glowScale = this.skin.glowScale;
+    let glowAlpha = this.skin.glowAlpha;
+    let coreAlpha = this.skin.coreAlpha;
+    let shellScale = 0;
+    let shellAlpha = 0;
+
+    switch (fx) {
+      case 'plasma':
+        glowScale *= 1 + 0.08 * wave(260);
+        glowAlpha *= 0.75 + 0.35 * wave(260);
+        break;
+      case 'ember':
+        glowScale *= 1.04 + 0.14 * wave(150);
+        glowAlpha *= 0.7 + 0.4 * wave(150);
+        break;
+      case 'quantum':
+        glowScale *= 1 + 0.1 * wave(320);
+        glowAlpha *= 0.72 + 0.38 * wave(200);
+        break;
+      case 'frost':
+        glowScale *= 1.06 + 0.16 * wave(280);
+        glowAlpha *= 0.7 + 0.4 * wave(280);
+        coreAlpha = Math.min(1, coreAlpha * (0.85 + 0.2 * wave(280)));
+        shellScale = 1.85 + 0.2 * wave(280);
+        shellAlpha = 0.22 + 0.2 * wave(280);
+        break;
+      case 'void':
+        glowScale *= 1.1 + 0.2 * wave(340);
+        glowAlpha *= 0.65 + 0.45 * wave(340);
+        shellScale = 2.15 + 0.18 * wave(340);
+        shellAlpha = 0.18 + 0.22 * wave(220);
+        break;
+      case 'corona':
+        glowScale *= 1.12 + 0.22 * wave(160);
+        glowAlpha *= 0.68 + 0.42 * wave(160);
+        coreAlpha = Math.min(1, coreAlpha * (0.8 + 0.25 * wave(120)));
+        shellScale = 2.05 + 0.28 * wave(160);
+        shellAlpha = 0.2 + 0.28 * wave(160);
+        break;
+      case 'nova':
+        glowScale *= 1.08 + 0.2 * wave(140);
+        glowAlpha *= 0.65 + 0.5 * wave(140);
+        coreAlpha = Math.min(1, coreAlpha * (0.75 + 0.3 * wave(140)));
+        shellScale = 1.95 + 0.35 * wave(140);
+        shellAlpha = 0.28 + 0.4 * wave(140);
+        break;
+      default:
+        break;
+    }
+
+    this.glow.setFillStyle(this.skin.glowColor, glowAlpha);
+    this.glow.setRadius(this.radius * glowScale);
+    this.glow.setVisible(glowAlpha > 0);
+    this.core.setFillStyle(this.skin.coreColor, coreAlpha);
+    this.core.setVisible(coreAlpha > 0);
+    this.shell.setPosition(this.x, this.y);
+    if (shellAlpha > 0) {
+      this.shell.setFillStyle(this.skin.glowColor, 0);
+      this.shell.setStrokeStyle(Math.max(1.5, this.radius * 0.2), this.skin.glowColor, shellAlpha);
+      this.shell.setRadius(this.radius * shellScale);
+      this.shell.setVisible(true);
+    } else {
+      this.shell.setVisible(false);
+    }
   }
 
   private syncFireGlow(): void {
     this.glow.setPosition(this.x, this.y);
     this.core.setPosition(this.x, this.y);
+    this.shell.setPosition(this.x, this.y);
     const scale = this.fireRemainingMs > 0 ? FIRE_GLOW_SCALE : this.skin.glowScale;
     this.glow.setRadius(this.radius * scale);
     this.core.setRadius(this.radius * this.skin.coreScale);
     if (this.spent || !this.visible) {
       this.glow.setVisible(false);
       this.core.setVisible(false);
+      this.shell.setVisible(false);
     } else if (this.fireRemainingMs > 0) {
       this.glow.setVisible(true);
       this.core.setVisible(false);
+      this.shell.setVisible(false);
     } else {
       this.glow.setVisible(this.skin.glowAlpha > 0);
       this.core.setVisible(this.skin.coreAlpha > 0);
@@ -675,6 +778,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     // serve ball. Scene shutdown already tears keyboard keys down.
     this.glow.destroy();
     this.core.destroy();
+    this.shell.destroy();
     super.preDestroy();
   }
 
@@ -710,6 +814,7 @@ export class Ball extends Phaser.GameObjects.Arc {
       this.setVisible(false);
       this.glow.setVisible(false);
       this.core.setVisible(false);
+      this.shell.setVisible(false);
       return;
     }
 

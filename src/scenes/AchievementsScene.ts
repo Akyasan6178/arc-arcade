@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SceneKeys, type SceneKey } from '@systems/SceneKeys';
 import { GameViewport, type ViewportSnapshot } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
+import { playDxBallThemeMusic } from '@entities/dx-ball/audioCues';
 import { getAchievementRows, loadPlayableThemeId } from '@entities/dx-ball/Progress';
 import { getTheme } from '@entities/dx-ball/Theme';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
@@ -65,6 +66,7 @@ export class AchievementsScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
+    playDxBallThemeMusic(theme.id);
     this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
     this.subtitleText = createMenuSubtitle(
       this,

@@ -11,6 +11,9 @@ import type { BallSkinId, PaddleSkinId } from '@entities/dx-ball/Progress';
  * DXB-19 adds Crystal / Titan / Pulse / Obsidian paddles and Ice Core /
  * Dark Matter / Solar / Nova balls. Existing Classic / Carbon / Neon /
  * Reactor and Classic / Plasma / Inferno / Quantum tokens are unchanged.
+ *
+ * DXB-22: ball skins name an idle `fx` token so gameplay and Garage
+ * preview can animate without new skin ids. Fire Ball still overrides.
  */
 
 export type PaddleSkinMotif =
@@ -31,6 +34,8 @@ export interface PaddleSkinVisual {
   motifColor: number;
 }
 
+export type BallSkinFx = 'none' | 'plasma' | 'ember' | 'quantum' | 'frost' | 'void' | 'corona' | 'nova';
+
 export interface BallSkinVisual {
   fill: number;
   stroke: number;
@@ -41,6 +46,8 @@ export interface BallSkinVisual {
   coreColor: number;
   coreAlpha: number;
   coreScale: number;
+  /** DXB-22: idle animation kind. Fire Ball still wins while active. */
+  fx: BallSkinFx;
 }
 
 const PADDLE_SKINS: Record<PaddleSkinId, PaddleSkinVisual> = {
@@ -113,6 +120,7 @@ const BALL_SKINS: Record<BallSkinId, BallSkinVisual> = {
     coreColor: 0xffcc00,
     coreAlpha: 0,
     coreScale: 0.4,
+    fx: 'none',
   },
   plasma: {
     fill: 0x7c3aed,
@@ -124,6 +132,7 @@ const BALL_SKINS: Record<BallSkinId, BallSkinVisual> = {
     coreColor: 0xe0e7ff,
     coreAlpha: 0,
     coreScale: 0.4,
+    fx: 'plasma',
   },
   inferno: {
     fill: 0xff6b35,
@@ -135,6 +144,7 @@ const BALL_SKINS: Record<BallSkinId, BallSkinVisual> = {
     coreColor: 0xffe066,
     coreAlpha: 0,
     coreScale: 0.4,
+    fx: 'ember',
   },
   quantum: {
     fill: 0x22d3ee,
@@ -146,6 +156,7 @@ const BALL_SKINS: Record<BallSkinId, BallSkinVisual> = {
     coreColor: 0xe0e7ff,
     coreAlpha: 0,
     coreScale: 0.4,
+    fx: 'quantum',
   },
   'ice-core': {
     fill: 0x7dd3fc,
@@ -157,6 +168,7 @@ const BALL_SKINS: Record<BallSkinId, BallSkinVisual> = {
     coreColor: 0xffffff,
     coreAlpha: 0.95,
     coreScale: 0.42,
+    fx: 'frost',
   },
   'dark-matter': {
     fill: 0x1e1028,
@@ -168,6 +180,7 @@ const BALL_SKINS: Record<BallSkinId, BallSkinVisual> = {
     coreColor: 0xf0abfc,
     coreAlpha: 0.9,
     coreScale: 0.32,
+    fx: 'void',
   },
   solar: {
     fill: 0xfacc15,
@@ -179,6 +192,7 @@ const BALL_SKINS: Record<BallSkinId, BallSkinVisual> = {
     coreColor: 0xfff7ed,
     coreAlpha: 0.95,
     coreScale: 0.38,
+    fx: 'corona',
   },
   nova: {
     fill: 0xf472b6,
@@ -190,6 +204,7 @@ const BALL_SKINS: Record<BallSkinId, BallSkinVisual> = {
     coreColor: 0xffffff,
     coreAlpha: 0.92,
     coreScale: 0.28,
+    fx: 'nova',
   },
 };
 

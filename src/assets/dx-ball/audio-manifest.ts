@@ -2,24 +2,22 @@
  * assets/dx-ball/audio-manifest.ts
  *
  * DXB-10: The designated place for DX-Ball's *real* audio asset files
- * once any exist — exactly the "e.g. `assets/dx-ball/manifest.ts`" shape
- * this folder's own README already anticipated. `PreloadScene` loads
- * every entry here via `this.load.audio(entry.key, entry.url)`; nothing
- * else needs to change when a real file is added later — `AudioManager`
- * already prefers a real asset over its synthesized fallback the moment
- * one is loaded under the same key (see `systems/AudioManager.ts`'s own
- * doc comment).
+ * once any exist. `PreloadScene` loads every entry here via
+ * `this.load.audio(entry.key, entry.url)`; `AudioManager` prefers a
+ * cached asset over its synthesized fallback the moment one exists.
  *
- * Intentionally empty for now — no binary audio files exist anywhere in
- * this project yet, the same "no asset pipeline yet" state every other
- * entity's plain-shape visuals have already documented since DXB-01.
- * Every DX-Ball sound effect today plays through `AudioManager`'s
- * synthesized fallback path instead (see `entities/dx-ball/audioCues.ts`).
+ * DXB-22: music keys are named below. The array stays empty until real
+ * files exist — missing assets are the expected state, and theme beds
+ * play through `AudioManager.playMusic`'s synthesized `MusicLoopSpec`
+ * fallback (see `entities/dx-ball/audioCues.ts`). Dropping files under
+ * these keys later requires no call-site changes:
  *
- * `category` previews the seam a future music system would use: a
- * `'music'` entry, still loaded and cached the same way, just played
- * looped instead of one-shot — not implemented here, per this task's own
- * restrictions.
+ *   dx-ball-music-neon-arcade     (synthwave)
+ *   dx-ball-music-space           (ambient space)
+ *   dx-ball-music-laboratory      (sci-fi laboratory)
+ *   dx-ball-music-retro-grid      (chiptune)
+ *   dx-ball-music-frozen-core     (cold ambient)
+ *   dx-ball-music-inferno         (high-energy arcade)
  */
 export interface AudioManifestEntry {
   key: string;
