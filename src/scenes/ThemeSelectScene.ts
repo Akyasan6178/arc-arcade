@@ -15,26 +15,26 @@ import {
 } from '@entities/dx-ball/Progress';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { SelectMenu } from '@ui/SelectMenu';
+import { TextButton } from '@ui/TextButton';
+import { bindOptionalMenuShortcuts } from '@scenes/menuNavigation';
 
 /**
  * scenes/ThemeSelectScene.ts
  *
- * DXB-15: Pre-run theme picker. Sits between `PreloadScene` and
- * `ModeSelectScene` so every session starts with an explicit visual
- * identity. Owns no gameplay — it paints a live-preview backdrop, a
- * title, and a `SelectMenu`, then starts `ModeSelectScene`.
+ * DXB-15: Pre-run theme picker. Sits between the Hub (DXB-18A) and
+ * `ModeSelectScene` so a Play session still starts with an explicit
+ * visual identity. Owns no gameplay — it paints a live-preview backdrop,
+ * a title, a `SelectMenu`, and a visible Back button to the Hub.
  *
- * Returning here from ModeSelect (Esc) lets the player change theme
- * without starting a run. U opens the unlockables / achievements
- * catalog (DXB-16). S opens statistics / leaderboards (DXB-17).
- * G opens the garage / collection hub (DXB-18).
- * Locked themes can be previewed but not confirmed.
+ * Locked themes can be previewed but not confirmed. Optional G / S / U
+ * shortcuts still open Garage / Stats / Achievements.
  */
 export class ThemeSelectScene extends Phaser.Scene {
   private background!: ArcadeBackground;
   private titleText!: Phaser.GameObjects.Text;
   private subtitleText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
+  private backButton?: TextButton;
   private menu!: SelectMenu<ThemeId>;
   private unsubscribeViewport?: () => void;
 
@@ -54,6 +54,7 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.titleText = this.createTitle(snapshot.width, snapshot.height, current.hud);
     this.subtitleText = this.createSubtitle(snapshot.width, snapshot.height, current.hud);
     this.hintText = this.createHint(snapshot.width, snapshot.height, current.hud);
+    this.backButton = this.createBackButton(snapshot.width, snapshot.height, current.menu.color);
     this.menu = new SelectMenu(
       this,
       snapshot.width,
@@ -80,7 +81,11 @@ export class ThemeSelectScene extends Phaser.Scene {
     );
 
     this.unsubscribeViewport = viewport.onChange((next) => this.handleViewportChange(next));
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubscribeViewport?.());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.unsubscribeViewport?.();
+      this.backButton?.destroy();
+      this.backButton = undefined;
+    });
 
     this.input.keyboard?.on('keydown-M', () => {
       try {
@@ -90,17 +95,11 @@ export class ThemeSelectScene extends Phaser.Scene {
       }
     });
 
-    this.input.keyboard?.on('keydown-U', () => {
-      this.scene.start(SceneKeys.Unlockables, { from: SceneKeys.ThemeSelect });
+    this.input.keyboard?.on('keydown-ESC', () => {
+      this.scene.start(SceneKeys.Hub);
     });
 
-    this.input.keyboard?.on('keydown-S', () => {
-      this.scene.start(SceneKeys.Stats, { from: SceneKeys.ThemeSelect });
-    });
-
-    this.input.keyboard?.on('keydown-G', () => {
-      this.scene.start(SceneKeys.Garage, { from: SceneKeys.ThemeSelect });
-    });
+    bindOptionalMenuShortcuts(this, SceneKeys.ThemeSelect);
   }
 
   private confirmTheme(id: ThemeId): void {
@@ -118,6 +117,7 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.titleText.setColor(theme.hud.title);
     this.subtitleText.setColor(theme.hud.subtitle);
     this.hintText.setColor(theme.hud.hint);
+    this.backButton?.setColor(theme.menu.color, theme.menu.highlightColor);
   }
 
   private createTitle(
@@ -170,21 +170,42 @@ export class ThemeSelectScene extends Phaser.Scene {
     const fontSize = Math.round(viewportHeight * 0.022);
     return this.add
       .text(
-        viewportWidth / 2,
-        viewportHeight * 0.9,
-        'Arrows to preview  ·  Space / Enter / click to choose  ·  U unlockables  ·  S stats  ·  G garage',
+        viewportWidth * 0.92,
+        viewportHeight * 0.955,
+        'Arrows to preview  ·  tap to choose',
         {
           fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
           fontSize: `${fontSize}px`,
           color: hud.hint,
-          align: 'center',
+          align: 'right',
           stroke: '#0b1320',
           strokeThickness: 3,
         },
       )
-      .setOrigin(0.5, 1)
+      .setOrigin(1, 1)
       .setShadow(1, 2, '#000000', 3, true, true)
       .setDepth(20);
+  }
+
+  private createBackButton(
+    viewportWidth: number,
+    viewportHeight: number,
+    color: string,
+  ): TextButton {
+    return new TextButton(
+      this,
+      viewportWidth * 0.08,
+      viewportHeight * 0.955,
+      '← Back',
+      () => this.scene.start(SceneKeys.Hub),
+      {
+        color,
+        originX: 0,
+        originY: 1,
+        fontSize: Math.round(viewportHeight * 0.022),
+        align: 'left',
+      },
+    );
   }
 
   private handleViewportChange(snapshot: ViewportSnapshot): void {
@@ -197,8 +218,11 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.22);
     this.subtitleText.setFontSize(Math.round(snapshot.height * 0.032));
 
-    this.hintText.setPosition(snapshot.width / 2, snapshot.height * 0.9);
-    this.hintText.setFontSize(Math.round(snapshot.height * 0.022));
+    this.hintText.setPosition(snapshot.width * 0.92, snapshot.height * 0.955);
+    this.hintText.setFontSize(Math.round(snapshot.height * 0.018));
+
+    this.backButton?.setPosition(snapshot.width * 0.08, snapshot.height * 0.955);
+    this.backButton?.setFontSize(Math.round(snapshot.height * 0.022));
 
     this.menu.resize(
       snapshot.width,

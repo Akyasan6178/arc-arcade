@@ -17,9 +17,10 @@ that belongs in `entities/` (per-game actors) or a future per-game module.
 Currently:
 
 - `SceneKeys.ts` — string keys used to register and start scenes
-  (`Boot`, `Preload`, `ThemeSelect` since DXB-15, `ModeSelect` since
-  DXB-14, `Unlockables` since DXB-16, `Stats` since DXB-17, `Garage`
-  since DXB-18, `Main`).
+  (`Boot`, `Preload`, `Hub` since DXB-18A, `ThemeSelect` since DXB-15,
+  `ModeSelect` since DXB-14, `Achievements` since DXB-18A, `Stats`
+  since DXB-17, `Garage` since DXB-18, `Settings` since DXB-18A,
+  `Main`).
 - `GameViewport.ts` — ARC-01 responsive-viewport service. Wraps Phaser's
   Scale Manager plus browser orientation/safe-area concerns into a single
   `GameViewport.get()` accessor (`width`, `height`, `centerX`, `centerY`,

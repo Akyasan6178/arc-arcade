@@ -11,8 +11,8 @@ import { DX_BALL_AUDIO_MANIFEST } from '@assets/dx-ball/audio-manifest';
  * register its own asset manifest (see `src/assets/`).
  *
  * No gameplay or UI logic belongs here — only loading and a hand-off to
- * ThemeSelectScene once everything is ready (DXB-15; ModeSelect then
- * MainScene start after theme and mode are chosen).
+ * HubScene once everything is ready (DXB-18A; ThemeSelect then
+ * ModeSelect then MainScene start after Play is chosen).
  *
  * DXB-10: loads every entry in `DX_BALL_AUDIO_MANIFEST` (currently empty
  * — no real audio files exist yet) via `this.load.audio()`. A load
@@ -36,6 +36,6 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.scene.start(SceneKeys.ThemeSelect);
+    this.scene.start(SceneKeys.Hub);
   }
 }

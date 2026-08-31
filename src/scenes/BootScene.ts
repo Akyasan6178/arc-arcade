@@ -7,8 +7,9 @@ import { SceneKeys } from '@systems/SceneKeys';
  * `scenes/` contains Phaser Scene classes: the lifecycle containers that
  * drive what's on screen (booting, preloading, menus, gameplay, ...).
  * Each future arcade game will add its own gameplay scene(s) here while
- * reusing this same Boot -> Preload -> ThemeSelect -> ModeSelect -> Main
- * pipeline (Unlockables, Stats, and Garage are side screens, not in the boot chain).
+ * reusing this same Boot -> Preload -> Hub -> (Play: ThemeSelect ->
+ * ModeSelect -> Main) pipeline (Achievements, Stats, Garage, and
+ * Settings are side screens from the Hub, not in the boot chain).
  *
  * BootScene is the very first scene to run. Its only job is extremely
  * lightweight setup that must happen before we can even show a loading

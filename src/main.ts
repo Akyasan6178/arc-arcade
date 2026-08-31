@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { BootScene } from '@scenes/BootScene';
 import { PreloadScene } from '@scenes/PreloadScene';
+import { HubScene } from '@scenes/HubScene';
 import { ThemeSelectScene } from '@scenes/ThemeSelectScene';
 import { ModeSelectScene } from '@scenes/ModeSelectScene';
-import { UnlockablesScene } from '@scenes/UnlockablesScene';
+import { AchievementsScene } from '@scenes/AchievementsScene';
 import { StatsScene } from '@scenes/StatsScene';
 import { GarageScene } from '@scenes/GarageScene';
+import { SettingsScene } from '@scenes/SettingsScene';
 import { MainScene } from '@scenes/MainScene';
 import { GameViewport } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
@@ -15,11 +17,12 @@ import { AudioManager } from '@systems/AudioManager';
  *
  * Application entry point. Creates the single Phaser.Game instance shared
  * by every game built on this foundation and registers the base scene
- * pipeline (Boot -> Preload -> ThemeSelect -> ModeSelect -> Main). Individual games
- * plug additional scenes into this same array as they're built. DXB-16
- * also registers `UnlockablesScene`, opened from ThemeSelect / ModeSelect.
- * DXB-17 also registers `StatsScene`, opened from the same two screens.
- * DXB-18 also registers `GarageScene`, opened from the same two screens.
+ * pipeline (Boot -> Preload -> Hub -> Play: ThemeSelect -> ModeSelect ->
+ * Main). Individual games plug additional scenes into this same array as
+ * they're built. DXB-16's achievements catalog is now `AchievementsScene`,
+ * opened from the Hub. DXB-17 registers `StatsScene`. DXB-18 registers
+ * `GarageScene`. DXB-18A registers `HubScene` and `SettingsScene` so
+ * every side screen is reachable from visible buttons.
  *
  * ARC-01: `scale` is configured with Phaser.Scale.RESIZE so the canvas
  * always fills its parent container (`#app`, styled to 100% of the
@@ -48,11 +51,13 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [
     BootScene,
     PreloadScene,
+    HubScene,
     ThemeSelectScene,
     ModeSelectScene,
-    UnlockablesScene,
+    AchievementsScene,
     StatsScene,
     GarageScene,
+    SettingsScene,
     MainScene,
   ],
 };

@@ -6,7 +6,6 @@ import {
   getBallSkinLabel,
   getBallUnlockRows,
   getCollectionCompletion,
-  getCollectionCompletionRows,
   getPaddleSkinLabel,
   getPaddleUnlockRows,
   getThemeLabel,
@@ -17,9 +16,6 @@ import {
   isPaddleSkinUnlocked,
   isThemeUnlocked,
   loadBallSkinId,
-  loadFavoriteBallSkinId,
-  loadFavoritePaddleSkinId,
-  loadFavoriteThemeId,
   loadPaddleSkinId,
   loadPlayableThemeId,
   saveBallSkinId,
@@ -30,27 +26,28 @@ import {
   type BallSkinId,
   type PaddleSkinId,
   type ProgressRow,
-  type StatDisplayRow,
 } from '@entities/dx-ball/Progress';
 import { getTheme, isThemeId, saveThemeId, type ThemeId } from '@entities/dx-ball/Theme';
 import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
-import { SelectMenu } from '@ui/SelectMenu';
 import { ProgressList } from '@ui/ProgressList';
-import { StatsList } from '@ui/StatsList';
 import { CollectionPreview } from '@ui/CollectionPreview';
+import { TabBar } from '@ui/TabBar';
+import { TextButton } from '@ui/TextButton';
+import { resolveMenuReturn } from '@scenes/menuNavigation';
 
 /**
  * scenes/GarageScene.ts
  *
- * DXB-18: Dedicated collection / customization hub. Owns no gameplay —
- * it paints the saved theme, a live preview of the highlighted theme /
- * paddle / ball, catalogs with locked / unlocked / equip / favorite
- * state, and collection completion percents. Esc from a catalog returns
- * to the hub; Esc from the hub returns to ThemeSelect or ModeSelect.
+ * DXB-18: Dedicated collection / customization hub. DXB-18A: visible
+ * Themes / Paddles / Balls tabs plus a Back button so the catalogs are
+ * reachable without a nested hub or keyboard. Owns no gameplay — it
+ * paints a live preview, locked / unlocked / equip / favorite state, and
+ * collection percents. Esc and Back return to the Hub (or ThemeSelect /
+ * ModeSelect if opened from there).
  */
 
-type CatalogId = 'themes' | 'paddles' | 'balls' | 'collection';
+type CatalogId = 'themes' | 'paddles' | 'balls';
 
 export interface GarageSceneData {
   from?: SceneKey;
@@ -61,12 +58,13 @@ export class GarageScene extends Phaser.Scene {
   private titleText!: Phaser.GameObjects.Text;
   private subtitleText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
-  private hubMenu?: SelectMenu<CatalogId>;
+  private tabBar?: TabBar<CatalogId>;
   private catalogList?: ProgressList;
-  private statsList?: StatsList;
   private preview?: CollectionPreview;
-  private view: 'hub' | CatalogId = 'hub';
-  private returnTo: SceneKey = SceneKeys.ThemeSelect;
+  private backButton?: TextButton;
+  private favoriteButton?: TextButton;
+  private view: CatalogId = 'themes';
+  private returnTo: SceneKey = SceneKeys.Hub;
   private previewThemeId: ThemeId = 'neon-arcade';
   private previewPaddleId: PaddleSkinId = 'classic';
   private previewBallId: BallSkinId = 'classic';
@@ -77,10 +75,7 @@ export class GarageScene extends Phaser.Scene {
   }
 
   init(data: GarageSceneData = {}): void {
-    this.returnTo =
-      data.from === SceneKeys.ModeSelect || data.from === SceneKeys.ThemeSelect
-        ? data.from
-        : SceneKeys.ThemeSelect;
+    this.returnTo = resolveMenuReturn(data.from);
   }
 
   create(): void {
@@ -89,7 +84,7 @@ export class GarageScene extends Phaser.Scene {
     this.resetPreviewToEquipped();
     const theme = getTheme(this.previewThemeId);
 
-    this.view = 'hub';
+    this.view = 'themes';
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
@@ -102,13 +97,43 @@ export class GarageScene extends Phaser.Scene {
       snapshot.height,
       GarageScene.previewOriginY(snapshot.height),
     );
+    this.tabBar = new TabBar(
+      this,
+      snapshot.width,
+      snapshot.height,
+      GarageScene.tabOriginY(snapshot.height),
+      [
+        { id: 'themes', title: 'Themes' },
+        { id: 'paddles', title: 'Paddles' },
+        { id: 'balls', title: 'Balls' },
+      ],
+      (id) => this.showCatalog(id),
+      {
+        initialId: 'themes',
+        color: theme.menu.color,
+        highlightColor: theme.menu.highlightColor,
+        mutedColor: theme.menu.mutedColor,
+      },
+    );
+    this.backButton = this.createBackButton(snapshot.width, snapshot.height, theme.menu.color);
+    this.favoriteButton = this.createFavoriteButton(
+      snapshot.width,
+      snapshot.height,
+      theme.menu.highlightColor,
+    );
 
-    this.showHub();
+    this.showCatalog('themes');
 
     this.unsubscribeViewport = viewport.onChange((next) => this.handleViewportChange(next));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribeViewport?.();
-      this.clearMenus();
+      this.clearCatalog();
+      this.tabBar?.destroy();
+      this.tabBar = undefined;
+      this.backButton?.destroy();
+      this.backButton = undefined;
+      this.favoriteButton?.destroy();
+      this.favoriteButton = undefined;
       this.preview?.destroy();
       this.preview = undefined;
     });
@@ -121,7 +146,7 @@ export class GarageScene extends Phaser.Scene {
       }
     });
 
-    this.input.keyboard?.on('keydown-ESC', () => this.handleEscape());
+    this.input.keyboard?.on('keydown-ESC', () => this.goBack());
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
       if (event.key === 'f' || event.key === 'F') {
         this.handleFavorite();
@@ -129,20 +154,11 @@ export class GarageScene extends Phaser.Scene {
     });
   }
 
-  private handleEscape(): void {
-    if (this.view !== 'hub') {
-      this.showHub();
-      return;
-    }
-
+  private goBack(): void {
     this.scene.start(this.returnTo);
   }
 
   private handleFavorite(): void {
-    if (this.view === 'hub' || this.view === 'collection') {
-      return;
-    }
-
     const rowId = this.catalogList?.getSelectedId();
     if (!rowId) {
       return;
@@ -151,103 +167,26 @@ export class GarageScene extends Phaser.Scene {
     if (this.view === 'themes' && isThemeId(rowId)) {
       toggleFavoriteThemeId(rowId);
       this.catalogList?.setItems(this.catalogRows(this.view));
+      this.refreshCollectionSubtitle();
       return;
     }
 
     if (this.view === 'paddles' && isPaddleSkinId(rowId)) {
       toggleFavoritePaddleSkinId(rowId);
       this.catalogList?.setItems(this.catalogRows(this.view));
+      this.refreshCollectionSubtitle();
       return;
     }
 
     if (this.view === 'balls' && isBallSkinId(rowId)) {
       toggleFavoriteBallSkinId(rowId);
       this.catalogList?.setItems(this.catalogRows(this.view));
+      this.refreshCollectionSubtitle();
     }
   }
 
-  private showHub(): void {
-    this.clearMenus();
-    this.view = 'hub';
-    this.resetPreviewToEquipped();
-    this.applyThemePreview(this.previewThemeId);
-    this.refreshPreview(false);
-    this.subtitleText.setText('GARAGE');
-    this.hintText.setText('Arrows to move  ·  Space / Enter / click to open  ·  Esc to return');
-
-    const { width, height } = GameViewport.get().getSnapshot();
-    const theme = getTheme(this.previewThemeId);
-    const collection = getCollectionCompletion();
-    const favoriteTheme = loadFavoriteThemeId();
-    const favoritePaddle = loadFavoritePaddleSkinId();
-    const favoriteBall = loadFavoriteBallSkinId();
-
-    this.hubMenu = new SelectMenu(
-      this,
-      width,
-      height,
-      GarageScene.menuOriginY(height),
-      [
-        {
-          id: 'themes',
-          title: 'Theme Collection',
-          description: GarageScene.hubDescription(
-            collection.themesUnlocked,
-            collection.themesTotal,
-            collection.themesPercent,
-            favoriteTheme ? getThemeLabel(favoriteTheme) : null,
-          ),
-        },
-        {
-          id: 'paddles',
-          title: 'Paddle Collection',
-          description: GarageScene.hubDescription(
-            collection.paddlesUnlocked,
-            collection.paddlesTotal,
-            collection.paddlesPercent,
-            favoritePaddle ? getPaddleSkinLabel(favoritePaddle) : null,
-          ),
-        },
-        {
-          id: 'balls',
-          title: 'Ball Collection',
-          description: GarageScene.hubDescription(
-            collection.ballsUnlocked,
-            collection.ballsTotal,
-            collection.ballsPercent,
-            favoriteBall ? getBallSkinLabel(favoriteBall) : null,
-          ),
-        },
-        {
-          id: 'collection',
-          title: 'Collection Completion',
-          description: `${collection.totalPercent}% total  ·  ${collection.unlockedCount} / ${collection.totalCount} cosmetics`,
-        },
-      ],
-      (id) => this.openHub(id),
-      {
-        color: theme.menu.color,
-        highlightColor: theme.menu.highlightColor,
-        descriptionColor: theme.menu.descriptionColor,
-        mutedColor: theme.menu.mutedColor,
-        rowHeightRatio: 0.082,
-        titleFontSizeRatio: 0.032,
-        descriptionFontSizeRatio: 0.016,
-      },
-    );
-  }
-
-  private openHub(id: CatalogId): void {
-    if (id === 'collection') {
-      this.showCollection();
-      return;
-    }
-
-    this.showCatalog(id);
-  }
-
-  private showCatalog(id: Exclude<CatalogId, 'collection'>): void {
-    this.clearMenus();
+  private showCatalog(id: CatalogId): void {
+    this.clearCatalog();
     this.view = id;
 
     const { width, height } = GameViewport.get().getSnapshot();
@@ -258,8 +197,8 @@ export class GarageScene extends Phaser.Scene {
       rows.findIndex((row) => row.equipped),
     );
 
-    this.subtitleText.setText(GarageScene.catalogTitle(id));
-    this.hintText.setText('Arrows to preview  ·  Space to equip unlocked  ·  F to favorite  ·  Esc back');
+    this.refreshCollectionSubtitle();
+    this.hintText.setText('');
 
     this.catalogList = new ProgressList(
       this,
@@ -278,9 +217,9 @@ export class GarageScene extends Phaser.Scene {
         mutedColor: theme.menu.mutedColor,
         completeColor: theme.hud.lives,
         completeLabel: 'UNLOCKED',
-        rowHeightRatio: 0.078,
-        titleFontSizeRatio: 0.026,
-        descriptionFontSizeRatio: 0.015,
+        rowHeightRatio: 0.07,
+        titleFontSizeRatio: 0.024,
+        descriptionFontSizeRatio: 0.014,
       },
     );
 
@@ -290,39 +229,14 @@ export class GarageScene extends Phaser.Scene {
     }
   }
 
-  private showCollection(): void {
-    this.clearMenus();
-    this.view = 'collection';
-    this.resetPreviewToEquipped();
-    this.applyThemePreview(this.previewThemeId);
-    this.refreshPreview(false);
-    this.subtitleText.setText('COLLECTION');
-    this.hintText.setText('Arrows to move  ·  Esc back');
-    this.createStatsList(getCollectionCompletionRows(), 0.07);
-  }
-
-  private createStatsList(items: readonly StatDisplayRow[], rowHeightRatio: number): void {
-    const { width, height } = GameViewport.get().getSnapshot();
-    const theme = getTheme(this.previewThemeId);
-    this.statsList = new StatsList(
-      this,
-      width,
-      height,
-      GarageScene.catalogOriginY(height),
-      items,
-      {
-        color: theme.menu.color,
-        highlightColor: theme.menu.highlightColor,
-        valueColor: theme.menu.descriptionColor,
-        mutedColor: theme.menu.mutedColor,
-        rowHeightRatio,
-        titleFontSizeRatio: 0.026,
-        valueFontSizeRatio: 0.02,
-      },
+  private refreshCollectionSubtitle(): void {
+    const collection = getCollectionCompletion();
+    this.subtitleText.setText(
+      `GARAGE  ·  ${collection.totalPercent}%  (${collection.unlockedCount} / ${collection.totalCount})`,
     );
   }
 
-  private equipFromCatalog(catalog: Exclude<CatalogId, 'collection'>, rowId: string): void {
+  private equipFromCatalog(catalog: CatalogId, rowId: string): void {
     if (catalog === 'themes' && isThemeId(rowId)) {
       saveThemeId(rowId);
       this.previewThemeId = rowId;
@@ -348,7 +262,7 @@ export class GarageScene extends Phaser.Scene {
     }
   }
 
-  private previewCatalogItem(catalog: Exclude<CatalogId, 'collection'>, rowId: string): void {
+  private previewCatalogItem(catalog: CatalogId, rowId: string): void {
     if (catalog === 'themes' && isThemeId(rowId)) {
       this.previewThemeId = rowId;
       this.applyThemePreview(rowId);
@@ -368,7 +282,7 @@ export class GarageScene extends Phaser.Scene {
     }
   }
 
-  private catalogRows(id: Exclude<CatalogId, 'collection'>): ProgressRow[] {
+  private catalogRows(id: CatalogId): ProgressRow[] {
     switch (id) {
       case 'themes':
         return getThemeUnlockRows(loadPlayableThemeId());
@@ -392,6 +306,8 @@ export class GarageScene extends Phaser.Scene {
     this.titleText.setColor(theme.hud.title);
     this.subtitleText.setColor(theme.hud.subtitle);
     this.hintText.setColor(theme.hud.hint);
+    this.backButton?.setColor(theme.menu.color, theme.menu.highlightColor);
+    this.favoriteButton?.setColor(theme.menu.highlightColor, theme.hud.title);
     this.preview?.applyTheme({
       panel: theme.overlay.panel,
       panelStroke: theme.overlay.panelStroke,
@@ -417,13 +333,47 @@ export class GarageScene extends Phaser.Scene {
     });
   }
 
-  private clearMenus(): void {
-    this.hubMenu?.destroy();
-    this.hubMenu = undefined;
+  private clearCatalog(): void {
     this.catalogList?.destroy();
     this.catalogList = undefined;
-    this.statsList?.destroy();
-    this.statsList = undefined;
+  }
+
+  private createBackButton(viewportWidth: number, viewportHeight: number, color: string): TextButton {
+    return new TextButton(
+      this,
+      viewportWidth * 0.08,
+      viewportHeight * 0.955,
+      '← Back',
+      () => this.goBack(),
+      {
+        color,
+        originX: 0,
+        originY: 1,
+        fontSize: Math.round(viewportHeight * 0.02),
+        align: 'left',
+      },
+    );
+  }
+
+  private createFavoriteButton(
+    viewportWidth: number,
+    viewportHeight: number,
+    color: string,
+  ): TextButton {
+    return new TextButton(
+      this,
+      viewportWidth * 0.92,
+      viewportHeight * 0.955,
+      '★ Favorite',
+      () => this.handleFavorite(),
+      {
+        color,
+        originX: 1,
+        originY: 1,
+        fontSize: Math.round(viewportHeight * 0.02),
+        align: 'right',
+      },
+    );
   }
 
   private createTitle(
@@ -431,9 +381,9 @@ export class GarageScene extends Phaser.Scene {
     viewportHeight: number,
     color: string,
   ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.07);
+    const fontSize = Math.round(viewportHeight * 0.06);
     return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.05, 'DX-BALL', {
+      .text(viewportWidth / 2, viewportHeight * 0.035, 'DX-BALL', {
         fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
         fontSize: `${fontSize}px`,
         color,
@@ -452,9 +402,9 @@ export class GarageScene extends Phaser.Scene {
     viewportHeight: number,
     color: string,
   ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.028);
+    const fontSize = Math.round(viewportHeight * 0.022);
     return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.135, 'GARAGE', {
+      .text(viewportWidth / 2, viewportHeight * 0.105, 'GARAGE', {
         fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
         fontSize: `${fontSize}px`,
         color,
@@ -473,9 +423,9 @@ export class GarageScene extends Phaser.Scene {
     viewportHeight: number,
     color: string,
   ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.018);
+    const fontSize = Math.round(viewportHeight * 0.016);
     return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.955, '', {
+      .text(viewportWidth / 2, viewportHeight * 0.90, '', {
         fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
         fontSize: `${fontSize}px`,
         color,
@@ -492,31 +442,21 @@ export class GarageScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background.resize(snapshot.width, snapshot.height);
 
-    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.05);
-    this.titleText.setFontSize(Math.round(snapshot.height * 0.07));
+    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.035);
+    this.titleText.setFontSize(Math.round(snapshot.height * 0.06));
 
-    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.135);
-    this.subtitleText.setFontSize(Math.round(snapshot.height * 0.028));
+    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.105);
+    this.subtitleText.setFontSize(Math.round(snapshot.height * 0.022));
 
-    this.hintText.setPosition(snapshot.width / 2, snapshot.height * 0.955);
-    this.hintText.setFontSize(Math.round(snapshot.height * 0.018));
+    this.hintText.setPosition(snapshot.width / 2, snapshot.height * 0.90);
+    this.hintText.setFontSize(Math.round(snapshot.height * 0.016));
 
+    this.tabBar?.resize(snapshot.width, snapshot.height, GarageScene.tabOriginY(snapshot.height));
+    this.backButton?.setPosition(snapshot.width * 0.08, snapshot.height * 0.955);
+    this.backButton?.setFontSize(Math.round(snapshot.height * 0.02));
+    this.favoriteButton?.setPosition(snapshot.width * 0.92, snapshot.height * 0.955);
+    this.favoriteButton?.setFontSize(Math.round(snapshot.height * 0.02));
     this.preview?.resize(snapshot.width, snapshot.height, GarageScene.previewOriginY(snapshot.height));
-
-    if (this.view === 'hub') {
-      this.hubMenu?.resize(snapshot.width, snapshot.height, GarageScene.menuOriginY(snapshot.height));
-      return;
-    }
-
-    if (this.view === 'collection') {
-      this.statsList?.resize(
-        snapshot.width,
-        snapshot.height,
-        GarageScene.catalogOriginY(snapshot.height),
-      );
-      return;
-    }
-
     this.catalogList?.resize(
       snapshot.width,
       snapshot.height,
@@ -524,33 +464,12 @@ export class GarageScene extends Phaser.Scene {
     );
   }
 
-  private static catalogTitle(id: Exclude<CatalogId, 'collection'>): string {
-    switch (id) {
-      case 'themes':
-        return 'THEMES';
-      case 'paddles':
-        return 'PADDLE SKINS';
-      case 'balls':
-        return 'BALL SKINS';
-    }
-  }
-
-  private static hubDescription(
-    unlocked: number,
-    total: number,
-    pct: number,
-    favoriteLabel: string | null,
-  ): string {
-    const base = `${unlocked} / ${total} unlocked  ·  ${pct}%`;
-    return favoriteLabel ? `${base}  ·  Favorite: ${favoriteLabel}` : base;
-  }
-
-  private static menuOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.2;
+  private static tabOriginY(viewportHeight: number): number {
+    return viewportHeight * 0.155;
   }
 
   private static catalogOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.185;
+    return viewportHeight * 0.21;
   }
 
   private static previewOriginY(viewportHeight: number): number {

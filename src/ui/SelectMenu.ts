@@ -108,6 +108,7 @@ export class SelectMenu<T extends string = string> {
           strokeThickness: 5,
         })
         .setOrigin(0.5, 0)
+        .setPadding(8, 6, 8, 6)
         .setShadow(1, 2, '#000000', 3, true, true)
         .setDepth(this.config.depth)
         .setInteractive({ useHandCursor: true });
