@@ -5,6 +5,7 @@ import { ThemeSelectScene } from '@scenes/ThemeSelectScene';
 import { ModeSelectScene } from '@scenes/ModeSelectScene';
 import { UnlockablesScene } from '@scenes/UnlockablesScene';
 import { StatsScene } from '@scenes/StatsScene';
+import { GarageScene } from '@scenes/GarageScene';
 import { MainScene } from '@scenes/MainScene';
 import { GameViewport } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
@@ -18,6 +19,7 @@ import { AudioManager } from '@systems/AudioManager';
  * plug additional scenes into this same array as they're built. DXB-16
  * also registers `UnlockablesScene`, opened from ThemeSelect / ModeSelect.
  * DXB-17 also registers `StatsScene`, opened from the same two screens.
+ * DXB-18 also registers `GarageScene`, opened from the same two screens.
  *
  * ARC-01: `scale` is configured with Phaser.Scale.RESIZE so the canvas
  * always fills its parent container (`#app`, styled to 100% of the
@@ -50,6 +52,7 @@ const config: Phaser.Types.Core.GameConfig = {
     ModeSelectScene,
     UnlockablesScene,
     StatsScene,
+    GarageScene,
     MainScene,
   ],
 };

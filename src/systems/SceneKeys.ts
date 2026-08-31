@@ -10,7 +10,7 @@
  * This file centralizes scene key strings so scenes can reference each
  * other (e.g. `this.scene.start(SceneKeys.Main)`) without hardcoding and
  * risking typos scattered across the codebase. DXB-16 adds `Unlockables`.
- * DXB-17 adds `Stats`.
+ * DXB-17 adds `Stats`. DXB-18 adds `Garage`.
  */
 export const SceneKeys = {
   Boot: 'BootScene',
@@ -19,6 +19,7 @@ export const SceneKeys = {
   ModeSelect: 'ModeSelectScene',
   Unlockables: 'UnlockablesScene',
   Stats: 'StatsScene',
+  Garage: 'GarageScene',
   Main: 'MainScene',
 } as const;
 

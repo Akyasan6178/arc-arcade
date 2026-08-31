@@ -8,7 +8,7 @@ import { SceneKeys } from '@systems/SceneKeys';
  * drive what's on screen (booting, preloading, menus, gameplay, ...).
  * Each future arcade game will add its own gameplay scene(s) here while
  * reusing this same Boot -> Preload -> ThemeSelect -> ModeSelect -> Main
- * pipeline (Unlockables and Stats are side screens, not in the boot chain).
+ * pipeline (Unlockables, Stats, and Garage are side screens, not in the boot chain).
  *
  * BootScene is the very first scene to run. Its only job is extremely
  * lightweight setup that must happen before we can even show a loading

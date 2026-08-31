@@ -1,7 +1,7 @@
 import { JsonStore } from '@systems/JsonStore';
 import { ThemeStore } from '@systems/ThemeStore';
 import { HighScoreStore } from '@systems/HighScoreStore';
-import { loadThemeId, type ThemeId } from '@entities/dx-ball/Theme';
+import { isThemeId, loadThemeId, type ThemeId } from '@entities/dx-ball/Theme';
 import type { GameModeId } from '@entities/dx-ball/GameMode';
 
 /**
@@ -21,6 +21,10 @@ import type { GameModeId } from '@entities/dx-ball/GameMode';
  * highest scores per mode, bricks destroyed, play time). Leaderboards
  * are a sibling file (`Leaderboards.ts`) with their own key so Top 10
  * lists cannot corrupt unlock counters.
+ *
+ * DXB-18: equipped cosmetics stay on the existing theme / paddle / ball
+ * keys. One favorite of each lives under a sibling `dx-ball-favorites`
+ * blob so a malformed favorite cannot wipe unlock counters.
  */
 
 export type PaddleSkinId = 'classic' | 'carbon' | 'neon' | 'reactor';
@@ -81,11 +85,37 @@ export interface ProgressRow {
   unlocked: boolean;
   complete: boolean;
   equipped?: boolean;
+  /** DXB-18: At most one favorite per catalog. Independent of equipped. */
+  favorite?: boolean;
+}
+
+/** DXB-18: Cosmetic collection completion (themes / paddles / balls only). */
+export interface CollectionCompletion {
+  themesPercent: number;
+  paddlesPercent: number;
+  ballsPercent: number;
+  totalPercent: number;
+  themesUnlocked: number;
+  themesTotal: number;
+  paddlesUnlocked: number;
+  paddlesTotal: number;
+  ballsUnlocked: number;
+  ballsTotal: number;
+  unlockedCount: number;
+  totalCount: number;
+}
+
+/** DXB-18: One favorite per cosmetic catalog. Null means none set. */
+export interface CollectionFavorites {
+  theme: ThemeId | null;
+  paddle: PaddleSkinId | null;
+  ball: BallSkinId | null;
 }
 
 const PROGRESS_STORAGE_KEY = 'dx-ball-progress';
 const PADDLE_SKIN_STORAGE_KEY = 'dx-ball-paddle-skin';
 const BALL_SKIN_STORAGE_KEY = 'dx-ball-ball-skin';
+const FAVORITES_STORAGE_KEY = 'dx-ball-favorites';
 /** Same key `MainScene` uses for the in-run Best HUD (DXB-06). */
 const HIGH_SCORE_STORAGE_KEY = 'dx-ball-high-score';
 
@@ -108,6 +138,7 @@ const EMPTY_STATS: DxBallStats = {
 };
 
 let cached: DxBallStats | null = null;
+let cachedFavorites: CollectionFavorites | null = null;
 
 function clampNonNegInt(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
@@ -179,6 +210,7 @@ function countRow(
   current: number,
   target: number,
   equipped?: boolean,
+  favorite?: boolean,
 ): ProgressRow {
   const unlocked = current >= target;
   return {
@@ -191,6 +223,7 @@ function countRow(
     unlocked,
     complete: unlocked,
     equipped,
+    favorite,
   };
 }
 
@@ -200,6 +233,7 @@ function flagRow(
   requirement: string,
   done: boolean,
   equipped?: boolean,
+  favorite?: boolean,
 ): ProgressRow {
   return {
     id,
@@ -211,6 +245,7 @@ function flagRow(
     unlocked: done,
     complete: done,
     equipped,
+    favorite,
   };
 }
 
@@ -302,6 +337,110 @@ export function saveBallSkinId(id: BallSkinId): void {
     return;
   }
   ThemeStore.set(BALL_SKIN_STORAGE_KEY, id);
+}
+
+function normalizeFavorites(raw: Partial<CollectionFavorites> | null | undefined): CollectionFavorites {
+  const themeCandidate = raw?.theme;
+  const paddleCandidate = raw?.paddle;
+  const ballCandidate = raw?.ball;
+  const theme = isThemeId(themeCandidate) && isThemeUnlocked(themeCandidate) ? themeCandidate : null;
+  const paddle =
+    isPaddleSkinId(paddleCandidate) && isPaddleSkinUnlocked(paddleCandidate) ? paddleCandidate : null;
+  const ball = isBallSkinId(ballCandidate) && isBallSkinUnlocked(ballCandidate) ? ballCandidate : null;
+  return { theme, paddle, ball };
+}
+
+export function loadFavorites(): CollectionFavorites {
+  if (cachedFavorites) {
+    return cachedFavorites;
+  }
+  cachedFavorites = normalizeFavorites(JsonStore.get<Partial<CollectionFavorites>>(FAVORITES_STORAGE_KEY));
+  return cachedFavorites;
+}
+
+function saveFavorites(next: CollectionFavorites): void {
+  cachedFavorites = next;
+  JsonStore.set(FAVORITES_STORAGE_KEY, next);
+}
+
+export function loadFavoriteThemeId(): ThemeId | null {
+  return loadFavorites().theme;
+}
+
+export function loadFavoritePaddleSkinId(): PaddleSkinId | null {
+  return loadFavorites().paddle;
+}
+
+export function loadFavoriteBallSkinId(): BallSkinId | null {
+  return loadFavorites().ball;
+}
+
+/**
+ * DXB-18: Sets `id` as the sole favorite theme. Passing the current
+ * favorite again clears it. Locked ids are ignored.
+ */
+export function toggleFavoriteThemeId(id: ThemeId): void {
+  if (!isThemeUnlocked(id)) {
+    return;
+  }
+  const current = { ...loadFavorites() };
+  current.theme = current.theme === id ? null : id;
+  saveFavorites(current);
+}
+
+export function toggleFavoritePaddleSkinId(id: PaddleSkinId): void {
+  if (!isPaddleSkinUnlocked(id)) {
+    return;
+  }
+  const current = { ...loadFavorites() };
+  current.paddle = current.paddle === id ? null : id;
+  saveFavorites(current);
+}
+
+export function toggleFavoriteBallSkinId(id: BallSkinId): void {
+  if (!isBallSkinUnlocked(id)) {
+    return;
+  }
+  const current = { ...loadFavorites() };
+  current.ball = current.ball === id ? null : id;
+  saveFavorites(current);
+}
+
+export function getThemeLabel(id: ThemeId): string {
+  switch (id) {
+    case 'neon-arcade':
+      return 'Neon Arcade';
+    case 'space':
+      return 'Space';
+    case 'laboratory':
+      return 'Laboratory';
+  }
+}
+
+export function getPaddleSkinLabel(id: PaddleSkinId): string {
+  switch (id) {
+    case 'classic':
+      return 'Classic Paddle';
+    case 'carbon':
+      return 'Carbon Paddle';
+    case 'neon':
+      return 'Neon Paddle';
+    case 'reactor':
+      return 'Reactor Paddle';
+  }
+}
+
+export function getBallSkinLabel(id: BallSkinId): string {
+  switch (id) {
+    case 'classic':
+      return 'Classic Ball';
+    case 'plasma':
+      return 'Plasma Ball';
+    case 'inferno':
+      return 'Inferno Ball';
+    case 'quantum':
+      return 'Quantum Ball';
+  }
 }
 
 export function recordLifetimeScoreDelta(delta: number): void {
@@ -414,6 +553,7 @@ export function getStats(): DxBallStats {
 
 export function getThemeUnlockRows(equippedId: ThemeId): ProgressRow[] {
   const stats = loadStats();
+  const favoriteId = loadFavoriteThemeId();
   return [
     flagRow(
       'neon-arcade',
@@ -421,6 +561,7 @@ export function getThemeUnlockRows(equippedId: ThemeId): ProgressRow[] {
       'Unlocked by default.',
       true,
       equippedId === 'neon-arcade',
+      favoriteId === 'neon-arcade',
     ),
     flagRow(
       'space',
@@ -428,6 +569,7 @@ export function getThemeUnlockRows(equippedId: ThemeId): ProgressRow[] {
       'Complete Classic Mode.',
       stats.classicCompleted,
       equippedId === 'space',
+      favoriteId === 'space',
     ),
     countRow(
       'laboratory',
@@ -436,14 +578,23 @@ export function getThemeUnlockRows(equippedId: ThemeId): ProgressRow[] {
       stats.lifetimeScore,
       25_000,
       equippedId === 'laboratory',
+      favoriteId === 'laboratory',
     ),
   ];
 }
 
 export function getPaddleUnlockRows(equippedId: PaddleSkinId): ProgressRow[] {
   const stats = loadStats();
+  const favoriteId = loadFavoritePaddleSkinId();
   return [
-    flagRow('classic', 'Classic Paddle', 'Unlocked by default.', true, equippedId === 'classic'),
+    flagRow(
+      'classic',
+      'Classic Paddle',
+      'Unlocked by default.',
+      true,
+      equippedId === 'classic',
+      favoriteId === 'classic',
+    ),
     countRow(
       'carbon',
       'Carbon Paddle',
@@ -451,6 +602,7 @@ export function getPaddleUnlockRows(equippedId: PaddleSkinId): ProgressRow[] {
       stats.powerupsCollected,
       100,
       equippedId === 'carbon',
+      favoriteId === 'carbon',
     ),
     countRow(
       'neon',
@@ -459,6 +611,7 @@ export function getPaddleUnlockRows(equippedId: PaddleSkinId): ProgressRow[] {
       stats.timeAttackBestScore,
       15_000,
       equippedId === 'neon',
+      favoriteId === 'neon',
     ),
     countRow(
       'reactor',
@@ -467,14 +620,23 @@ export function getPaddleUnlockRows(equippedId: PaddleSkinId): ProgressRow[] {
       stats.fireBallBricksDestroyed,
       250,
       equippedId === 'reactor',
+      favoriteId === 'reactor',
     ),
   ];
 }
 
 export function getBallUnlockRows(equippedId: BallSkinId): ProgressRow[] {
   const stats = loadStats();
+  const favoriteId = loadFavoriteBallSkinId();
   return [
-    flagRow('classic', 'Classic Ball', 'Unlocked by default.', true, equippedId === 'classic'),
+    flagRow(
+      'classic',
+      'Classic Ball',
+      'Unlocked by default.',
+      true,
+      equippedId === 'classic',
+      favoriteId === 'classic',
+    ),
     countRow(
       'plasma',
       'Plasma Ball',
@@ -482,6 +644,7 @@ export function getBallUnlockRows(equippedId: BallSkinId): ProgressRow[] {
       stats.multiBallActivations,
       50,
       equippedId === 'plasma',
+      favoriteId === 'plasma',
     ),
     countRow(
       'inferno',
@@ -490,6 +653,7 @@ export function getBallUnlockRows(equippedId: BallSkinId): ProgressRow[] {
       stats.fireBallBricksDestroyed,
       500,
       equippedId === 'inferno',
+      favoriteId === 'inferno',
     ),
     countRow(
       'quantum',
@@ -498,6 +662,7 @@ export function getBallUnlockRows(equippedId: BallSkinId): ProgressRow[] {
       stats.endlessMaxLevel,
       20,
       equippedId === 'quantum',
+      favoriteId === 'quantum',
     ),
   ];
 }
@@ -656,6 +821,58 @@ export function getProgressSummary(): ProgressSummary {
     achievementsComplete,
     achievementsTotal: achievementRows.length,
   };
+}
+
+export function getCollectionCompletion(): CollectionCompletion {
+  const themeRows = getThemeUnlockRows(loadPlayableThemeId());
+  const paddleRows = getPaddleUnlockRows(loadPaddleSkinId());
+  const ballRows = getBallUnlockRows(loadBallSkinId());
+  const themesUnlocked = countUnlocked(themeRows);
+  const paddlesUnlocked = countUnlocked(paddleRows);
+  const ballsUnlocked = countUnlocked(ballRows);
+  const unlockedCount = themesUnlocked + paddlesUnlocked + ballsUnlocked;
+  const totalCount = themeRows.length + paddleRows.length + ballRows.length;
+
+  return {
+    themesPercent: percent(themesUnlocked, themeRows.length),
+    paddlesPercent: percent(paddlesUnlocked, paddleRows.length),
+    ballsPercent: percent(ballsUnlocked, ballRows.length),
+    totalPercent: percent(unlockedCount, totalCount),
+    themesUnlocked,
+    themesTotal: themeRows.length,
+    paddlesUnlocked,
+    paddlesTotal: paddleRows.length,
+    ballsUnlocked,
+    ballsTotal: ballRows.length,
+    unlockedCount,
+    totalCount,
+  };
+}
+
+export function getCollectionCompletionRows(): StatDisplayRow[] {
+  const collection = getCollectionCompletion();
+  return [
+    {
+      id: 'themes',
+      title: 'Theme Collection',
+      value: `${collection.themesPercent}%  (${collection.themesUnlocked} / ${collection.themesTotal})`,
+    },
+    {
+      id: 'paddles',
+      title: 'Paddle Collection',
+      value: `${collection.paddlesPercent}%  (${collection.paddlesUnlocked} / ${collection.paddlesTotal})`,
+    },
+    {
+      id: 'balls',
+      title: 'Ball Collection',
+      value: `${collection.ballsPercent}%  (${collection.ballsUnlocked} / ${collection.ballsTotal})`,
+    },
+    {
+      id: 'total',
+      title: 'Total Collection',
+      value: `${collection.totalPercent}%  (${collection.unlockedCount} / ${collection.totalCount})`,
+    },
+  ];
 }
 
 export function getProgressSummaryRows(): StatDisplayRow[] {

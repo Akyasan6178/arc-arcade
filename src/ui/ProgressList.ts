@@ -9,6 +9,10 @@ import type { ProgressRow } from '@entities/dx-ball/Progress';
  * requirement, percent, locked/unlocked). Arrow keys move; Space /
  * Enter / click confirm an unlocked selectable row. Locked rows can be
  * highlighted so the requirement is readable, but they do not confirm.
+ *
+ * DXB-18: `onHighlight` fires when the highlight moves (garage live
+ * preview). `favorite` on a row is shown next to equipped. `getSelectedId()`
+ * lets a scene favorite the highlighted item without confirming it.
  */
 
 export interface ProgressListConfig {
@@ -25,12 +29,16 @@ export interface ProgressListConfig {
   selectable?: boolean;
   /** Label used at 100% (UNLOCKED for cosmetics, COMPLETE for achievements). */
   completeLabel?: string;
+  /** DXB-18: Index highlighted when the list is created. */
+  initialIndex?: number;
+  /** DXB-18: Fires when the highlight moves, before confirm. */
+  onHighlight?: (id: string) => void;
 }
 
 const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
 const HUD_DEPTH = 20;
 
-const DEFAULT_CONFIG: Required<ProgressListConfig> = {
+const DEFAULT_CONFIG: Required<Omit<ProgressListConfig, 'onHighlight' | 'initialIndex'>> = {
   color: '#c5d0dc',
   highlightColor: '#f8f9fa',
   descriptionColor: '#90e0ef',
@@ -52,7 +60,8 @@ interface ProgressListRow {
 export class ProgressList {
   private readonly scene: Phaser.Scene;
   private readonly onSelect: (id: string) => void;
-  private readonly config: Required<ProgressListConfig>;
+  private readonly config: Required<Omit<ProgressListConfig, 'onHighlight' | 'initialIndex'>> &
+    Pick<ProgressListConfig, 'onHighlight' | 'initialIndex'>;
   private readonly visualRows: ProgressListRow[] = [];
   private items: readonly ProgressRow[] = [];
   private selectedIndex = 0;
@@ -81,6 +90,11 @@ export class ProgressList {
     this.viewportHeight = viewportHeight;
     this.originY = originY;
     this.items = items;
+    this.selectedIndex = Phaser.Math.Clamp(
+      config.initialIndex ?? 0,
+      0,
+      Math.max(0, items.length - 1),
+    );
 
     for (let i = 0; i < items.length; i++) {
       const title = scene.add
@@ -125,6 +139,11 @@ export class ProgressList {
     this.layout();
     this.refreshHighlight();
     this.bindKeyboard();
+  }
+
+  /** Highlighted row id, or undefined when the list is empty. */
+  getSelectedId(): string | undefined {
+    return this.items[this.selectedIndex]?.id;
   }
 
   setItems(items: readonly ProgressRow[]): void {
@@ -195,6 +214,10 @@ export class ProgressList {
 
     this.selectedIndex = index;
     this.refreshHighlight();
+    const id = this.items[index]?.id;
+    if (id) {
+      this.config.onHighlight?.(id);
+    }
   }
 
   private confirm(): void {
@@ -260,8 +283,15 @@ export class ProgressList {
   }
 
   private static statusLabel(item: ProgressRow, completeLabel: string): string {
+    const marks: string[] = [];
     if (item.equipped) {
-      return 'EQUIPPED';
+      marks.push('EQUIPPED');
+    }
+    if (item.favorite) {
+      marks.push('FAVORITE');
+    }
+    if (marks.length > 0) {
+      return marks.join('  ·  ');
     }
     if (item.complete || item.unlocked) {
       return `${completeLabel}  100%`;

@@ -47,8 +47,13 @@ Currently:
   Not DX-Ball-specific.
 - `ProgressList.ts` — DXB-16's reusable catalog list (title + locked /
   unlocked / percent / equipped). Space confirms only unlocked
-  selectable rows. Not DX-Ball-specific beyond the `ProgressRow` shape.
+  selectable rows. DXB-18 adds `onHighlight`, `initialIndex`,
+  `getSelectedId()`, and a FAVORITE badge. Not DX-Ball-specific beyond
+  the `ProgressRow` shape.
 - `StatsList.ts` — DXB-17's reusable read-only label/value list
   (statistics, personal bests, leaderboards, progress summary).
   Arrow keys highlight; there is no confirm. Not DX-Ball-specific
   beyond the `StatDisplayRow` shape.
+- `CollectionPreview.ts` — DXB-18's live preview stage (themed
+  swatch + paddle / ball cosmetics). Caller supplies visual tokens.
+  No gameplay. Not DX-Ball-specific.

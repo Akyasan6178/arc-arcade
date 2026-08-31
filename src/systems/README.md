@@ -18,7 +18,8 @@ Currently:
 
 - `SceneKeys.ts` — string keys used to register and start scenes
   (`Boot`, `Preload`, `ThemeSelect` since DXB-15, `ModeSelect` since
-  DXB-14, `Unlockables` since DXB-16, `Stats` since DXB-17, `Main`).
+  DXB-14, `Unlockables` since DXB-16, `Stats` since DXB-17, `Garage`
+  since DXB-18, `Main`).
 - `GameViewport.ts` — ARC-01 responsive-viewport service. Wraps Phaser's
   Scale Manager plus browser orientation/safe-area concerns into a single
   `GameViewport.get()` accessor (`width`, `height`, `centerX`, `centerY`,
@@ -45,5 +46,5 @@ Currently:
   Knows nothing about palettes; `entities/dx-ball/Theme.ts` owns those.
 - `JsonStore.ts` — DXB-16 JSON persistence. Tiny static `get<T>(key)` /
   `set(key, value)` wrapper around `localStorage`. Knows nothing about
-  achievements, unlocks, statistics, or leaderboards;
+  achievements, unlocks, statistics, leaderboards, or favorites;
   `entities/dx-ball/Progress.ts` and `Leaderboards.ts` own those.
