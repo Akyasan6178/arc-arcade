@@ -25,7 +25,7 @@ import Phaser from 'phaser';
  * value / anchor behavior is unchanged.
  *
  * DXB-13A: `setValue` accepts an optional suffix so a label can show
- * `Level 1 / 5` without a second widget. Score / Best / Lives still
+ * `Level 1 / 10` without a second widget. Score / Best / Lives still
  * pass only the number.
  */
 export type ScoreLabelAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';

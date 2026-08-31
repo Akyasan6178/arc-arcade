@@ -9,11 +9,18 @@ import Phaser from 'phaser';
  *
  * DXB-15: accepts a backdrop theme (colors + style). Neon keeps the
  * original grid; Space leans on a denser starfield; Laboratory uses a
- * hex/circuit motif. Callers pass tokens; this widget does not import
- * DX-Ball theme data.
+ * hex/circuit motif. DXB-19 adds CRT scanlines (retro), frost shards
+ * (frozen), and ember vents (inferno). Callers pass tokens; this
+ * widget does not import DX-Ball theme data.
  */
 
-export type ArcadeBackdropStyle = 'neon' | 'space' | 'laboratory';
+export type ArcadeBackdropStyle =
+  | 'neon'
+  | 'space'
+  | 'laboratory'
+  | 'retro'
+  | 'frozen'
+  | 'inferno';
 
 export interface ArcadeBackdropTheme {
   style?: ArcadeBackdropStyle;
@@ -78,6 +85,12 @@ export class ArcadeBackground extends Phaser.GameObjects.Graphics {
       this.drawSpaceField(width, height, gridColor, starColor);
     } else if (style === 'laboratory') {
       this.drawLaboratoryField(width, height, gridColor, starColor);
+    } else if (style === 'retro') {
+      this.drawRetroField(width, height, gridColor, starColor);
+    } else if (style === 'frozen') {
+      this.drawFrozenField(width, height, gridColor, starColor);
+    } else if (style === 'inferno') {
+      this.drawInfernoField(width, height, gridColor, starColor);
     } else {
       this.drawNeonField(width, height, gridColor, starColor);
     }
@@ -154,6 +167,72 @@ export class ArcadeBackground extends Phaser.GameObjects.Graphics {
     for (let i = 0; i < 20; i++) {
       this.fillStyle(starColor, 0.18 + hash(i, 3) * 0.28);
       this.fillRect(hash(i, 1) * width, hash(i, 2) * height, 3, 3);
+    }
+  }
+
+  private drawRetroField(width: number, height: number, gridColor: number, starColor: number): void {
+    const gap = Math.max(18, Math.min(width, height) * 0.036);
+    this.lineStyle(2, gridColor, 0.16);
+    for (let x = 0; x <= width; x += gap) {
+      this.beginPath();
+      this.moveTo(x, 0);
+      this.lineTo(x, height);
+      this.strokePath();
+    }
+    this.lineStyle(1, gridColor, 0.22);
+    for (let y = 0; y <= height; y += Math.max(6, height * 0.018)) {
+      this.beginPath();
+      this.moveTo(0, y);
+      this.lineTo(width, y);
+      this.strokePath();
+    }
+    for (let i = 0; i < 28; i++) {
+      this.fillStyle(starColor, 0.22 + hash(i, 3) * 0.4);
+      this.fillRect(hash(i, 1) * width, hash(i, 2) * height, hash(i, 4) < 0.3 ? 4 : 2, 2);
+    }
+  }
+
+  private drawFrozenField(width: number, height: number, gridColor: number, starColor: number): void {
+    const size = Math.max(26, Math.min(width, height) * 0.07);
+    this.lineStyle(1, gridColor, 0.22);
+    for (let i = 0; i < 14; i++) {
+      const x = hash(i, 1) * width;
+      const y = hash(i, 2) * height;
+      this.strokeCircle(x, y, size * (0.35 + hash(i, 3) * 0.45));
+      this.beginPath();
+      this.moveTo(x - size * 0.55, y);
+      this.lineTo(x + size * 0.55, y);
+      this.moveTo(x, y - size * 0.55);
+      this.lineTo(x, y + size * 0.55);
+      this.strokePath();
+    }
+    for (let i = 0; i < 40; i++) {
+      this.fillStyle(starColor, 0.18 + hash(i, 4) * 0.5);
+      this.fillCircle(hash(i, 1) * width, hash(i, 2) * height, hash(i, 3) < 0.2 ? 2.2 : 1);
+    }
+  }
+
+  private drawInfernoField(width: number, height: number, gridColor: number, starColor: number): void {
+    this.fillStyle(gridColor, 0.1);
+    this.fillCircle(width * 0.5, height * 1.05, Math.min(width, height) * 0.42);
+    this.fillStyle(starColor, 0.08);
+    this.fillCircle(width * 0.22, height * 0.92, Math.min(width, height) * 0.18);
+    this.fillCircle(width * 0.8, height * 0.88, Math.min(width, height) * 0.16);
+
+    this.lineStyle(2, gridColor, 0.18);
+    for (let i = 0; i < 6; i++) {
+      const y = height * (0.55 + i * 0.08);
+      this.beginPath();
+      this.moveTo(0, y);
+      this.lineTo(width * 0.5, y - height * 0.03);
+      this.lineTo(width, y);
+      this.strokePath();
+    }
+
+    for (let i = 0; i < 48; i++) {
+      const lift = hash(i, 2);
+      this.fillStyle(starColor, 0.2 + hash(i, 3) * 0.55);
+      this.fillCircle(hash(i, 1) * width, height * (0.35 + lift * 0.65), hash(i, 4) < 0.25 ? 2.4 : 1.1);
     }
   }
 }

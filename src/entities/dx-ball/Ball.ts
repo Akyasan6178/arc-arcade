@@ -112,6 +112,9 @@ export interface BallSkinVisual {
   glowColor: number;
   glowAlpha: number;
   glowScale: number;
+  coreColor: number;
+  coreAlpha: number;
+  coreScale: number;
 }
 
 export interface BallConfig {
@@ -216,6 +219,8 @@ export class Ball extends Phaser.GameObjects.Arc {
   private overlappingPaddle = false;
   /** DXB-13: Translucent halo shown only while Fire Ball is active. */
   private readonly glow: Phaser.GameObjects.Arc;
+  /** DXB-19: Optional inner core for cosmetic skins. Hidden during Fire Ball. */
+  private readonly core: Phaser.GameObjects.Arc;
   /** DXB-16: Equipped cosmetic; Fire Ball temporarily overrides it. */
   private skin: BallSkinVisual = {
     fill: DEFAULT_CONFIG.color,
@@ -224,6 +229,9 @@ export class Ball extends Phaser.GameObjects.Arc {
     glowColor: FIRE_GLOW_COLOR,
     glowAlpha: 0,
     glowScale: FIRE_GLOW_SCALE,
+    coreColor: DEFAULT_CONFIG.color,
+    coreAlpha: 0,
+    coreScale: 0.4,
   };
 
   constructor(
@@ -253,6 +261,10 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.glow = scene.add.circle(x, y, radius * FIRE_GLOW_SCALE, FIRE_GLOW_COLOR, 0.38);
     this.glow.setVisible(false);
     this.glow.setDepth(PLAYFIELD_DEPTH - 1);
+
+    this.core = scene.add.circle(x, y, radius * 0.4, DEFAULT_CONFIG.color, 0);
+    this.core.setVisible(false);
+    this.core.setDepth(PLAYFIELD_DEPTH + 1);
 
     this.spaceKey = scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
   }
@@ -505,19 +517,25 @@ export class Ball extends Phaser.GameObjects.Arc {
     }
     this.glow.setFillStyle(this.skin.glowColor, this.skin.glowAlpha);
     this.glow.setVisible(this.skin.glowAlpha > 0 && !this.spent);
+    this.core.setFillStyle(this.skin.coreColor, this.skin.coreAlpha);
     this.syncFireGlow();
   }
 
   private syncFireGlow(): void {
     this.glow.setPosition(this.x, this.y);
+    this.core.setPosition(this.x, this.y);
     const scale = this.fireRemainingMs > 0 ? FIRE_GLOW_SCALE : this.skin.glowScale;
     this.glow.setRadius(this.radius * scale);
+    this.core.setRadius(this.radius * this.skin.coreScale);
     if (this.spent || !this.visible) {
       this.glow.setVisible(false);
+      this.core.setVisible(false);
     } else if (this.fireRemainingMs > 0) {
       this.glow.setVisible(true);
+      this.core.setVisible(false);
     } else {
       this.glow.setVisible(this.skin.glowAlpha > 0);
+      this.core.setVisible(this.skin.coreAlpha > 0);
     }
   }
 
@@ -654,6 +672,7 @@ export class Ball extends Phaser.GameObjects.Arc {
     // it from an extra Multi-Ball would disarm launch on the remaining
     // serve ball. Scene shutdown already tears keyboard keys down.
     this.glow.destroy();
+    this.core.destroy();
     super.preDestroy();
   }
 
@@ -688,6 +707,7 @@ export class Ball extends Phaser.GameObjects.Arc {
       this.spent = true;
       this.setVisible(false);
       this.glow.setVisible(false);
+      this.core.setVisible(false);
       return;
     }
 

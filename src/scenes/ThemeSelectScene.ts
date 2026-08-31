@@ -27,7 +27,9 @@ import { bindOptionalMenuShortcuts } from '@scenes/menuNavigation';
  * a title, a `SelectMenu`, and a visible Back button to the Hub.
  *
  * Locked themes can be previewed but not confirmed. Optional G / S / U
- * shortcuts still open Garage / Stats / Achievements.
+ * shortcuts still open Garage / Stats / Achievements. DXB-19: the list
+ * is `THEME_INFOS` (six themes); row height is compacted so every
+ * option stays on-screen without a new navigation path.
  */
 export class ThemeSelectScene extends Phaser.Scene {
   private background!: ArcadeBackground;
@@ -77,6 +79,9 @@ export class ThemeSelectScene extends Phaser.Scene {
         highlightColor: current.menu.highlightColor,
         descriptionColor: current.menu.descriptionColor,
         mutedColor: current.menu.mutedColor,
+        titleFontSizeRatio: 0.03,
+        descriptionFontSizeRatio: 0.016,
+        rowHeightRatio: 0.1,
       },
     );
 
@@ -125,9 +130,9 @@ export class ThemeSelectScene extends Phaser.Scene {
     viewportHeight: number,
     hud: { title: string },
   ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.08);
+    const fontSize = Math.round(viewportHeight * 0.055);
     return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.12, 'DX-BALL', {
+      .text(viewportWidth / 2, viewportHeight * 0.03, 'DX-BALL', {
         fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
         fontSize: `${fontSize}px`,
         color: hud.title,
@@ -146,9 +151,9 @@ export class ThemeSelectScene extends Phaser.Scene {
     viewportHeight: number,
     hud: { subtitle: string },
   ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.032);
+    const fontSize = Math.round(viewportHeight * 0.026);
     return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.22, 'SELECT THEME', {
+      .text(viewportWidth / 2, viewportHeight * 0.095, 'SELECT THEME', {
         fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
         fontSize: `${fontSize}px`,
         color: hud.subtitle,
@@ -212,11 +217,11 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background.resize(snapshot.width, snapshot.height);
 
-    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.12);
-    this.titleText.setFontSize(Math.round(snapshot.height * 0.08));
+    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.03);
+    this.titleText.setFontSize(Math.round(snapshot.height * 0.055));
 
-    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.22);
-    this.subtitleText.setFontSize(Math.round(snapshot.height * 0.032));
+    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.095);
+    this.subtitleText.setFontSize(Math.round(snapshot.height * 0.026));
 
     this.hintText.setPosition(snapshot.width * 0.92, snapshot.height * 0.955);
     this.hintText.setFontSize(Math.round(snapshot.height * 0.018));
@@ -232,6 +237,6 @@ export class ThemeSelectScene extends Phaser.Scene {
   }
 
   private static menuOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.34;
+    return viewportHeight * 0.145;
   }
 }

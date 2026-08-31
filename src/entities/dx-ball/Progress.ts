@@ -25,10 +25,32 @@ import type { GameModeId } from '@entities/dx-ball/GameMode';
  * DXB-18: equipped cosmetics stay on the existing theme / paddle / ball
  * keys. One favorite of each lives under a sibling `dx-ball-favorites`
  * blob so a malformed favorite cannot wipe unlock counters.
+ *
+ * DXB-19: content tables grow (themes / paddles / balls) and Classic
+ * completions are counted so Retro Grid can gate on two clears. Old
+ * saves without `classicCompletions` seed it from `classicCompleted`
+ * (true → 1). Unlocks stay derived from stats. Collection percents
+ * count rows, they are not hardcoded.
  */
 
-export type PaddleSkinId = 'classic' | 'carbon' | 'neon' | 'reactor';
-export type BallSkinId = 'classic' | 'plasma' | 'inferno' | 'quantum';
+export type PaddleSkinId =
+  | 'classic'
+  | 'carbon'
+  | 'neon'
+  | 'reactor'
+  | 'crystal'
+  | 'titan'
+  | 'pulse'
+  | 'obsidian';
+export type BallSkinId =
+  | 'classic'
+  | 'plasma'
+  | 'inferno'
+  | 'quantum'
+  | 'ice-core'
+  | 'dark-matter'
+  | 'solar'
+  | 'nova';
 
 export interface DxBallStats {
   lifetimeScore: number;
@@ -37,6 +59,8 @@ export interface DxBallStats {
   fireBallBricksDestroyed: number;
   multiBallActivations: number;
   classicCompleted: boolean;
+  /** DXB-19: Classic victory count. Seeded from `classicCompleted` on old saves. */
+  classicCompletions: number;
   classicPerfect: boolean;
   timeAttackBestScore: number;
   endlessMaxLevel: number;
@@ -126,6 +150,7 @@ const EMPTY_STATS: DxBallStats = {
   fireBallBricksDestroyed: 0,
   multiBallActivations: 0,
   classicCompleted: false,
+  classicCompletions: 0,
   classicPerfect: false,
   timeAttackBestScore: 0,
   endlessMaxLevel: 0,
@@ -159,7 +184,11 @@ function normalizeStats(raw: Partial<DxBallStats> | null | undefined): DxBallSta
     multiBallActivations: clampNonNegInt(
       raw?.multiBallActivations ?? EMPTY_STATS.multiBallActivations,
     ),
-    classicCompleted: raw?.classicCompleted === true,
+    classicCompleted: raw?.classicCompleted === true || clampNonNegInt(raw?.classicCompletions) >= 1,
+    classicCompletions: Math.max(
+      clampNonNegInt(raw?.classicCompletions),
+      raw?.classicCompleted === true ? 1 : 0,
+    ),
     classicPerfect: raw?.classicPerfect === true,
     timeAttackBestScore: clampNonNegInt(
       raw?.timeAttackBestScore ?? EMPTY_STATS.timeAttackBestScore,
@@ -179,13 +208,24 @@ function loadStats(): DxBallStats {
     return cached;
   }
 
-  cached = normalizeStats(JsonStore.get<Partial<DxBallStats>>(PROGRESS_STORAGE_KEY));
+  const raw = JsonStore.get<Partial<DxBallStats>>(PROGRESS_STORAGE_KEY);
+  cached = normalizeStats(raw);
 
   // DXB-17: seed overall highest from the pre-existing Best HUD store so
   // a player who never ran after this task still sees their old best.
   const storedBest = HighScoreStore.get(HIGH_SCORE_STORAGE_KEY);
+  let dirty = false;
   if (storedBest > cached.highestScore) {
     cached.highestScore = storedBest;
+    dirty = true;
+  }
+
+  // DXB-19: persist seeded `classicCompletions` without wiping other fields.
+  if (raw && typeof raw.classicCompletions !== 'number' && cached.classicCompletions > 0) {
+    dirty = true;
+  }
+
+  if (dirty) {
     JsonStore.set(PROGRESS_STORAGE_KEY, cached);
   }
 
@@ -251,13 +291,20 @@ function flagRow(
 
 export function isThemeUnlocked(id: ThemeId): boolean {
   const stats = loadStats();
-  if (id === 'neon-arcade') {
-    return true;
+  switch (id) {
+    case 'neon-arcade':
+      return true;
+    case 'space':
+      return stats.classicCompleted;
+    case 'laboratory':
+      return stats.lifetimeScore >= 25_000;
+    case 'retro-grid':
+      return stats.classicCompletions >= 2;
+    case 'frozen-core':
+      return stats.endlessMaxLevel >= 25;
+    case 'inferno':
+      return stats.fireBallBricksDestroyed >= 1_000;
   }
-  if (id === 'space') {
-    return stats.classicCompleted;
-  }
-  return stats.lifetimeScore >= 25_000;
 }
 
 export function isPaddleSkinUnlocked(id: PaddleSkinId): boolean {
@@ -271,6 +318,14 @@ export function isPaddleSkinUnlocked(id: PaddleSkinId): boolean {
       return stats.timeAttackBestScore >= 15_000;
     case 'reactor':
       return stats.fireBallBricksDestroyed >= 250;
+    case 'crystal':
+      return stats.powerupsCollected >= 500;
+    case 'titan':
+      return stats.metalBricksHit >= 1_000;
+    case 'pulse':
+      return stats.timeAttackBestScore >= 30_000;
+    case 'obsidian':
+      return stats.classicPerfect;
   }
 }
 
@@ -285,6 +340,14 @@ export function isBallSkinUnlocked(id: BallSkinId): boolean {
       return stats.fireBallBricksDestroyed >= 500;
     case 'quantum':
       return stats.endlessMaxLevel >= 20;
+    case 'ice-core':
+      return stats.endlessMaxLevel >= 30;
+    case 'dark-matter':
+      return stats.multiBallActivations >= 150;
+    case 'solar':
+      return stats.fireBallBricksDestroyed >= 1_500;
+    case 'nova':
+      return getAchievementRows().every((row) => row.complete);
   }
 }
 
@@ -296,15 +359,39 @@ export function getThemeUnlockHint(id: ThemeId): string {
       return 'Complete Classic Mode.';
     case 'laboratory':
       return 'Reach 25,000 lifetime score.';
+    case 'retro-grid':
+      return 'Complete Classic Mode twice.';
+    case 'frozen-core':
+      return 'Reach Level 25 in Endless Mode.';
+    case 'inferno':
+      return 'Destroy 1,000 bricks using Fire Ball.';
   }
 }
 
 export function isPaddleSkinId(value: unknown): value is PaddleSkinId {
-  return value === 'classic' || value === 'carbon' || value === 'neon' || value === 'reactor';
+  return (
+    value === 'classic' ||
+    value === 'carbon' ||
+    value === 'neon' ||
+    value === 'reactor' ||
+    value === 'crystal' ||
+    value === 'titan' ||
+    value === 'pulse' ||
+    value === 'obsidian'
+  );
 }
 
 export function isBallSkinId(value: unknown): value is BallSkinId {
-  return value === 'classic' || value === 'plasma' || value === 'inferno' || value === 'quantum';
+  return (
+    value === 'classic' ||
+    value === 'plasma' ||
+    value === 'inferno' ||
+    value === 'quantum' ||
+    value === 'ice-core' ||
+    value === 'dark-matter' ||
+    value === 'solar' ||
+    value === 'nova'
+  );
 }
 
 /** Last chosen theme that is still unlocked, or Neon Arcade. */
@@ -414,6 +501,12 @@ export function getThemeLabel(id: ThemeId): string {
       return 'Space';
     case 'laboratory':
       return 'Laboratory';
+    case 'retro-grid':
+      return 'Retro Grid';
+    case 'frozen-core':
+      return 'Frozen Core';
+    case 'inferno':
+      return 'Inferno';
   }
 }
 
@@ -427,6 +520,14 @@ export function getPaddleSkinLabel(id: PaddleSkinId): string {
       return 'Neon Paddle';
     case 'reactor':
       return 'Reactor Paddle';
+    case 'crystal':
+      return 'Crystal Paddle';
+    case 'titan':
+      return 'Titan Paddle';
+    case 'pulse':
+      return 'Pulse Paddle';
+    case 'obsidian':
+      return 'Obsidian Paddle';
   }
 }
 
@@ -440,6 +541,14 @@ export function getBallSkinLabel(id: BallSkinId): string {
       return 'Inferno Ball';
     case 'quantum':
       return 'Quantum Ball';
+    case 'ice-core':
+      return 'Ice Core Ball';
+    case 'dark-matter':
+      return 'Dark Matter Ball';
+    case 'solar':
+      return 'Solar Ball';
+    case 'nova':
+      return 'Nova Ball';
   }
 }
 
@@ -474,6 +583,7 @@ export function recordMultiBallActivation(): void {
 export function recordClassicComplete(perfect: boolean): void {
   const stats = loadStats();
   stats.classicCompleted = true;
+  stats.classicCompletions += 1;
   if (perfect) {
     stats.classicPerfect = true;
   }
@@ -580,6 +690,33 @@ export function getThemeUnlockRows(equippedId: ThemeId): ProgressRow[] {
       equippedId === 'laboratory',
       favoriteId === 'laboratory',
     ),
+    countRow(
+      'retro-grid',
+      'Retro Grid',
+      'Complete Classic Mode twice.',
+      stats.classicCompletions,
+      2,
+      equippedId === 'retro-grid',
+      favoriteId === 'retro-grid',
+    ),
+    countRow(
+      'frozen-core',
+      'Frozen Core',
+      'Reach Level 25 in Endless Mode.',
+      stats.endlessMaxLevel,
+      25,
+      equippedId === 'frozen-core',
+      favoriteId === 'frozen-core',
+    ),
+    countRow(
+      'inferno',
+      'Inferno',
+      'Destroy 1,000 bricks using Fire Ball.',
+      stats.fireBallBricksDestroyed,
+      1_000,
+      equippedId === 'inferno',
+      favoriteId === 'inferno',
+    ),
   ];
 }
 
@@ -622,12 +759,48 @@ export function getPaddleUnlockRows(equippedId: PaddleSkinId): ProgressRow[] {
       equippedId === 'reactor',
       favoriteId === 'reactor',
     ),
+    countRow(
+      'crystal',
+      'Crystal Paddle',
+      'Collect 500 powerups.',
+      stats.powerupsCollected,
+      500,
+      equippedId === 'crystal',
+      favoriteId === 'crystal',
+    ),
+    countRow(
+      'titan',
+      'Titan Paddle',
+      'Hit 1,000 Metal Bricks.',
+      stats.metalBricksHit,
+      1_000,
+      equippedId === 'titan',
+      favoriteId === 'titan',
+    ),
+    countRow(
+      'pulse',
+      'Pulse Paddle',
+      'Reach 30,000 points in Time Attack.',
+      stats.timeAttackBestScore,
+      30_000,
+      equippedId === 'pulse',
+      favoriteId === 'pulse',
+    ),
+    flagRow(
+      'obsidian',
+      'Obsidian Paddle',
+      'Complete Classic Mode without losing a life.',
+      stats.classicPerfect,
+      equippedId === 'obsidian',
+      favoriteId === 'obsidian',
+    ),
   ];
 }
 
 export function getBallUnlockRows(equippedId: BallSkinId): ProgressRow[] {
   const stats = loadStats();
   const favoriteId = loadFavoriteBallSkinId();
+  const achievementRows = getAchievementRows();
   return [
     flagRow(
       'classic',
@@ -663,6 +836,42 @@ export function getBallUnlockRows(equippedId: BallSkinId): ProgressRow[] {
       20,
       equippedId === 'quantum',
       favoriteId === 'quantum',
+    ),
+    countRow(
+      'ice-core',
+      'Ice Core Ball',
+      'Reach Level 30 in Endless Mode.',
+      stats.endlessMaxLevel,
+      30,
+      equippedId === 'ice-core',
+      favoriteId === 'ice-core',
+    ),
+    countRow(
+      'dark-matter',
+      'Dark Matter Ball',
+      'Activate Multi Ball 150 times.',
+      stats.multiBallActivations,
+      150,
+      equippedId === 'dark-matter',
+      favoriteId === 'dark-matter',
+    ),
+    countRow(
+      'solar',
+      'Solar Ball',
+      'Destroy 1,500 bricks while Fire Ball is active.',
+      stats.fireBallBricksDestroyed,
+      1_500,
+      equippedId === 'solar',
+      favoriteId === 'solar',
+    ),
+    countRow(
+      'nova',
+      'Nova Ball',
+      'Complete all achievements.',
+      countUnlocked(achievementRows),
+      achievementRows.length,
+      equippedId === 'nova',
+      favoriteId === 'nova',
     ),
   ];
 }

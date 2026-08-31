@@ -146,9 +146,10 @@ import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins'
  * `ModeLabel` shows the active mode (plus the Time Attack clock).
  *
  * DXB-13A: ESC opens a `PauseOverlay` (Resume / Restart Run / Return
- * To Mode Selection) from every gameplay state. The campaign is 5
- * levels; the HUD shows `Level X / 5`. Score, lives, and high score
- * still carry across the sequence on the same `BrickGrid`.
+ * To Mode Selection) from every gameplay state. The campaign length
+ * is `LEVELS.length` (10 since DXB-19); the HUD shows `Level X / 10`.
+ * Score, lives, and high score still carry across the sequence on
+ * the same `BrickGrid`.
  *
  * DXB-15: reads the persisted theme and applies it to the backdrop,
  * HUD, brick row/type colors, powerup palette, pause card, and

@@ -33,6 +33,13 @@ import type { BallConfig } from '@entities/dx-ball/Ball';
  * DXB-13A adds levels 4-5 (campaign is now 5). Level 4 leans on metal
  * corridors. Level 5 mixes every current type (normal, cracked, metal,
  * bonus). Score / lives still carry on the same `BrickGrid` instance.
+ *
+ * DXB-19 appends levels 6-10 (campaign is now 10). Levels 1-5 stay as
+ * authored. Level 6 is a sparse precision field; level 7 is cracked-
+ * heavy; level 8 is a metal-obstacle maze with bounce lanes; level 9
+ * is bonus-brick risk/reward; level 10 mixes every current type as the
+ * Classic finale. Metal still never counts toward clear, so leftover
+ * cages cannot lock a level. Time Attack / Endless still wrap `LEVELS`.
  */
 export interface LevelConfig {
   brickGrid?: BrickGridConfig;
@@ -115,5 +122,100 @@ export const LEVELS: readonly LevelConfig[] = [
       ],
     },
     ball: { speedRatio: 0.88 },
+  },
+  // Level 6: precision — sparse columns and holes; every required brick is open.
+  {
+    brickGrid: {
+      gapRatio: 0.014,
+      rowHeightRatio: 0.024,
+      basePointsPerRow: 18,
+      layout: [
+        '..N..N..',
+        '.N.NN.N.',
+        'N......N',
+        '.N....N.',
+        '..N..N..',
+        'N.N..N.N',
+        '.N.NN.N.',
+        '..NNNN..',
+      ],
+    },
+    ball: { speedRatio: 0.9 },
+  },
+  // Level 7: cracked-heavy — two-hit bricks dominate, with lanes so nothing is boxed in.
+  {
+    brickGrid: {
+      gapRatio: 0.012,
+      rowHeightRatio: 0.024,
+      basePointsPerRow: 20,
+      layout: [
+        'CCCCCCCC',
+        'CCNCCNCC',
+        'C.CCCC.C',
+        'CCCCCCCC',
+        'CNCNCNCN',
+        'CCCCCCCC',
+        '.CCCCCC.',
+        'NCCNNCCN',
+      ],
+    },
+    ball: { speedRatio: 0.92 },
+  },
+  // Level 8: metal-obstacle maze — bounce lanes keep every required brick reachable.
+  {
+    brickGrid: {
+      gapRatio: 0.012,
+      rowHeightRatio: 0.022,
+      basePointsPerRow: 20,
+      layout: [
+        'M.N.N.N.M',
+        'N.M.N.M.N',
+        '.N.N.N.N.',
+        'NNM.N.MNN',
+        'M.N...N.M',
+        '.NNNNNNN.',
+        'MN.NNN.NM',
+        'N...N...N',
+      ],
+    },
+    ball: { speedRatio: 0.94 },
+  },
+  // Level 9: bonus risk/reward — guaranteed-drop bricks near metal, plus safer clusters.
+  {
+    brickGrid: {
+      gapRatio: 0.012,
+      rowHeightRatio: 0.022,
+      basePointsPerRow: 22,
+      layout: [
+        'B.B.M.B.B',
+        '.M.B.B.M.',
+        'B..NNN..B',
+        'M.B.M.B.M',
+        'B...B...B',
+        'NNB.B.BNN',
+        '.B..M..B.',
+        'BB.NNN.BB',
+      ],
+    },
+    ball: { speedRatio: 0.96 },
+  },
+  // Level 10: finale — every current brick type, metal as obstacles only.
+  {
+    brickGrid: {
+      gapRatio: 0.011,
+      rowHeightRatio: 0.022,
+      basePointsPerRow: 24,
+      layout: [
+        'CMBNNMBMC',
+        'NCMCBCNCN',
+        'M.NCCCN.M',
+        'BNCNMNCNB',
+        'C.CBNBC.C',
+        'MNN.B.NNM',
+        'NCBMNMBCN',
+        'B.NMCMN.B',
+      ],
+    },
+    ball: { speedRatio: 0.98 },
   },
 ];

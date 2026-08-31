@@ -49,7 +49,7 @@ export interface PaddleSkinVisual {
   fill: number;
   stroke: number;
   strokeWidthRatio: number;
-  motif: 'flat' | 'bands' | 'glow' | 'core';
+  motif: 'flat' | 'bands' | 'glow' | 'core' | 'crystal' | 'plates' | 'pulse' | 'shard';
   motifColor: number;
 }
 
@@ -361,6 +361,77 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
       case 'core': {
         this.overlay.fillStyle(this.skin.motifColor, 0.95);
         this.overlay.fillRect(-halfWidth * 0.55, -Math.max(1, this.height * 0.12), this.width * 0.55, Math.max(2, this.height * 0.24));
+        break;
+      }
+      case 'crystal': {
+        this.overlay.fillStyle(this.skin.motifColor, 0.55);
+        this.overlay.fillTriangle(
+          0,
+          -halfHeight * 0.95,
+          -halfWidth * 0.22,
+          halfHeight * 0.2,
+          halfWidth * 0.22,
+          halfHeight * 0.2,
+        );
+        this.overlay.fillStyle(this.skin.motifColor, 0.85);
+        this.overlay.fillTriangle(
+          -halfWidth * 0.72,
+          0,
+          -halfWidth * 0.28,
+          -halfHeight * 0.55,
+          -halfWidth * 0.18,
+          halfHeight * 0.55,
+        );
+        this.overlay.fillTriangle(
+          halfWidth * 0.72,
+          0,
+          halfWidth * 0.28,
+          -halfHeight * 0.55,
+          halfWidth * 0.18,
+          halfHeight * 0.55,
+        );
+        break;
+      }
+      case 'plates': {
+        this.overlay.fillStyle(this.skin.motifColor, 0.92);
+        const plateW = this.width * 0.22;
+        const plateH = Math.max(2, this.height * 0.7);
+        this.overlay.fillRect(-halfWidth * 0.82, -plateH / 2, plateW, plateH);
+        this.overlay.fillRect(-plateW / 2, -plateH / 2, plateW, plateH);
+        this.overlay.fillRect(halfWidth * 0.82 - plateW, -plateH / 2, plateW, plateH);
+        break;
+      }
+      case 'pulse': {
+        this.overlay.lineStyle(Math.max(1.5, this.height * 0.18), this.skin.motifColor, 0.9);
+        this.overlay.strokeRoundedRect(
+          -halfWidth * 0.78,
+          -halfHeight * 0.55,
+          this.width * 0.78,
+          this.height * 0.55,
+          Math.max(2, this.height * 0.28),
+        );
+        this.overlay.lineStyle(Math.max(1, this.height * 0.12), this.skin.motifColor, 0.45);
+        this.overlay.strokeRoundedRect(
+          -halfWidth * 0.5,
+          -halfHeight * 0.28,
+          this.width * 0.5,
+          this.height * 0.28,
+          Math.max(1, this.height * 0.18),
+        );
+        break;
+      }
+      case 'shard': {
+        this.overlay.fillStyle(this.skin.motifColor, 0.95);
+        this.overlay.fillTriangle(
+          -halfWidth * 0.15,
+          -halfHeight * 0.95,
+          halfWidth * 0.62,
+          0,
+          -halfWidth * 0.15,
+          halfHeight * 0.95,
+        );
+        this.overlay.fillStyle(this.skin.motifColor, 0.4);
+        this.overlay.fillRect(-halfWidth * 0.88, -halfHeight * 0.2, this.width * 0.28, Math.max(2, this.height * 0.4));
         break;
       }
       default:

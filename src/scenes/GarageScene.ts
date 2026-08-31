@@ -217,9 +217,9 @@ export class GarageScene extends Phaser.Scene {
         mutedColor: theme.menu.mutedColor,
         completeColor: theme.hud.lives,
         completeLabel: 'UNLOCKED',
-        rowHeightRatio: 0.07,
-        titleFontSizeRatio: 0.024,
-        descriptionFontSizeRatio: 0.014,
+        rowHeightRatio: 0.05,
+        titleFontSizeRatio: 0.02,
+        descriptionFontSizeRatio: 0.012,
       },
     );
 

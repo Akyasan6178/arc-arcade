@@ -18,7 +18,7 @@ Currently:
   reuse into practice — DX-Ball's lives counter is a third `ScoreLabel`
   instance (`Lives: `, bottom-left). DXB-13 adds a shared bold typeface,
   dark stroke, and drop shadow so every corner stays readable. DXB-13A
-  lets `setValue` take an optional suffix (`Level 1 / 5`).
+  lets `setValue` take an optional suffix (`Level 1 / 10`).
 - `ActiveEffectsLabel.ts` — DXB-12's second shared widget. A centered
   top-of-viewport `Text` listing active effects and remaining duration
   (or a count suffix for untimed effects). Hidden when the list is empty.
@@ -28,7 +28,8 @@ Currently:
   `Graphics` object that paints a gradient, a faint grid, static dots,
   and a vignette from viewport size only — no assets, no per-frame
   work. DXB-15 adds `applyTheme()` so Neon / Space / Laboratory can
-  swap colors and motif. Not DX-Ball-specific.
+  swap colors and motif. DXB-19 adds retro CRT scanlines, frozen frost
+  shards, and inferno ember vents. Not DX-Ball-specific.
 - `ModeLabel.ts` — DXB-14's top-center mode HUD (`label` + optional
   `detail`, e.g. a Time Attack clock). Same typeface/stroke as the
   other HUD widgets. Not DX-Ball-specific.

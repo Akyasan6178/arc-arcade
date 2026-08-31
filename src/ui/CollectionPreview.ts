@@ -9,7 +9,15 @@ import Phaser from 'phaser';
  * No gameplay: this widget never moves, collides, or launches.
  */
 
-export type CollectionPreviewPaddleMotif = 'flat' | 'bands' | 'glow' | 'core';
+export type CollectionPreviewPaddleMotif =
+  | 'flat'
+  | 'bands'
+  | 'glow'
+  | 'core'
+  | 'crystal'
+  | 'plates'
+  | 'pulse'
+  | 'shard';
 
 export interface CollectionPreviewPaddleVisual {
   fill: number;
@@ -26,6 +34,9 @@ export interface CollectionPreviewBallVisual {
   glowColor: number;
   glowAlpha: number;
   glowScale: number;
+  coreColor?: number;
+  coreAlpha?: number;
+  coreScale?: number;
 }
 
 export interface CollectionPreviewBackdrop {
@@ -246,6 +257,77 @@ export class CollectionPreview {
         );
         break;
       }
+      case 'crystal': {
+        this.paddle.fillStyle(visual.motifColor, 0.55);
+        this.paddle.fillTriangle(
+          x,
+          y - halfH * 0.95,
+          x - halfW * 0.22,
+          y + halfH * 0.2,
+          x + halfW * 0.22,
+          y + halfH * 0.2,
+        );
+        this.paddle.fillStyle(visual.motifColor, 0.85);
+        this.paddle.fillTriangle(
+          x - halfW * 0.72,
+          y,
+          x - halfW * 0.28,
+          y - halfH * 0.55,
+          x - halfW * 0.18,
+          y + halfH * 0.55,
+        );
+        this.paddle.fillTriangle(
+          x + halfW * 0.72,
+          y,
+          x + halfW * 0.28,
+          y - halfH * 0.55,
+          x + halfW * 0.18,
+          y + halfH * 0.55,
+        );
+        break;
+      }
+      case 'plates': {
+        this.paddle.fillStyle(visual.motifColor, 0.92);
+        const plateW = width * 0.22;
+        const plateH = Math.max(2, height * 0.7);
+        this.paddle.fillRect(x - halfW * 0.82, y - plateH / 2, plateW, plateH);
+        this.paddle.fillRect(x - plateW / 2, y - plateH / 2, plateW, plateH);
+        this.paddle.fillRect(x + halfW * 0.82 - plateW, y - plateH / 2, plateW, plateH);
+        break;
+      }
+      case 'pulse': {
+        this.paddle.lineStyle(Math.max(1.5, height * 0.18), visual.motifColor, 0.9);
+        this.paddle.strokeRoundedRect(
+          x - halfW * 0.78,
+          y - halfH * 0.55,
+          width * 0.78,
+          height * 0.55,
+          Math.max(2, height * 0.28),
+        );
+        this.paddle.lineStyle(Math.max(1, height * 0.12), visual.motifColor, 0.45);
+        this.paddle.strokeRoundedRect(
+          x - halfW * 0.5,
+          y - halfH * 0.28,
+          width * 0.5,
+          height * 0.28,
+          Math.max(1, height * 0.18),
+        );
+        break;
+      }
+      case 'shard': {
+        this.paddle.fillStyle(visual.motifColor, 0.95);
+        this.paddle.fillTriangle(
+          x - halfW * 0.15,
+          y - halfH * 0.95,
+          x + halfW * 0.62,
+          y,
+          x - halfW * 0.15,
+          y + halfH * 0.95,
+        );
+        this.paddle.fillStyle(visual.motifColor, 0.4);
+        this.paddle.fillRect(x - halfW * 0.88, y - halfH * 0.2, width * 0.28, Math.max(2, height * 0.4));
+        break;
+      }
       default:
         break;
     }
@@ -275,6 +357,11 @@ export class CollectionPreview {
     if (strokeWidth > 0) {
       this.ball.lineStyle(Math.max(1.5, strokeWidth), visual.stroke, 1);
       this.ball.strokeCircle(x, y, radius);
+    }
+    const coreAlpha = visual.coreAlpha ?? 0;
+    if (coreAlpha > 0) {
+      this.ball.fillStyle(visual.coreColor ?? visual.fill, coreAlpha);
+      this.ball.fillCircle(x, y, radius * (visual.coreScale ?? 0.4));
     }
   }
 }

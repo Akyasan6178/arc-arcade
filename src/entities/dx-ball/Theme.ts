@@ -10,11 +10,27 @@ import { ThemeStore } from '@systems/ThemeStore';
  * `BrickGrid` / `Ball` / `Paddle` never import it; the owning scene
  * applies tokens. `Powerup` reads powerup colors from a palette the
  * manager passes in.
+ *
+ * DXB-19 adds Retro Grid, Frozen Core, and Inferno. Existing Neon /
+ * Space / Laboratory palettes are unchanged. Unlock gates live in
+ * `Progress.ts`; this file still only names palettes.
  */
 
-export type ThemeId = 'neon-arcade' | 'space' | 'laboratory';
+export type ThemeId =
+  | 'neon-arcade'
+  | 'space'
+  | 'laboratory'
+  | 'retro-grid'
+  | 'frozen-core'
+  | 'inferno';
 
-export type ArcadeBackdropStyle = 'neon' | 'space' | 'laboratory';
+export type ArcadeBackdropStyle =
+  | 'neon'
+  | 'space'
+  | 'laboratory'
+  | 'retro'
+  | 'frozen'
+  | 'inferno';
 
 export interface ThemeBackdrop {
   style: ArcadeBackdropStyle;
@@ -306,7 +322,215 @@ const LABORATORY: ThemeDefinition = {
   },
 };
 
-export const THEMES: readonly ThemeDefinition[] = [NEON_ARCADE, SPACE, LABORATORY];
+const INFERNO: ThemeDefinition = {
+  id: 'inferno',
+  label: 'Inferno',
+  description: 'Magma vents, ember sparks, and a furnace glow.',
+  backdrop: {
+    style: 'inferno',
+    topColor: 0x140202,
+    bottomColor: 0x3b0d08,
+    gridColor: 0xff6b35,
+    starColor: 0xffd166,
+    canvasBackground: '#140202',
+  },
+  hud: {
+    score: '#fff7ed',
+    best: '#ffd166',
+    lives: '#86efac',
+    level: '#fb923c',
+    effects: '#ffe066',
+    mode: '#fdba74',
+    title: '#fff7ed',
+    subtitle: '#ff6b35',
+    hint: '#fdba74',
+    stroke: '#1c0604',
+    message: '#fff7ed',
+  },
+  bricks: {
+    rowColors: [0xdc2626, 0xea580c, 0xf59e0b, 0xf97316, 0xb91c1c],
+    types: {
+      normal: {},
+      cracked: {
+        strokeColor: 0xffedd5,
+        crackedFillDarken: 0.4,
+        crackedStrokeColor: 0xfde68a,
+      },
+      metal: { fillColor: 0x44403c, strokeColor: 0xfca5a5 },
+      bonus: { fillColor: 0xfacc15, strokeColor: 0xfff7ed },
+    },
+  },
+  powerups: {
+    'widen-paddle': { color: 0x166534, stroke: 0xbbf7d0 },
+    'slow-ball': { color: 0x3f6212, stroke: 0xd9f99d },
+    'extra-life': { color: 0x15803d, stroke: 0xdcfce7 },
+    'fire-ball': { color: 0x7f1d1d, stroke: 0xfde68a },
+    'multi-ball': { color: 0x9a3412, stroke: 0xfed7aa },
+    'small-paddle': { color: 0x9f1239, stroke: 0xfda4af },
+    'fast-ball': { color: 0x7c2d12, stroke: 0xfdba74 },
+  },
+  overlay: {
+    dim: 0x140202,
+    dimAlpha: 0.68,
+    panel: 0x2a0b08,
+    panelStroke: 0xff6b35,
+    title: '#fff7ed',
+    body: '#fdba74',
+    accent: '#ffd166',
+    victoryTitle: '#ffe066',
+    defeatTitle: '#fb7185',
+    infoTitle: '#fdba74',
+  },
+  menu: {
+    color: '#fdba74',
+    highlightColor: '#fff7ed',
+    descriptionColor: '#ffd166',
+    mutedColor: '#9a3412',
+  },
+};
+
+const RETRO_GRID: ThemeDefinition = {
+  id: 'retro-grid',
+  label: 'Retro Grid',
+  description: 'Phosphor green CRT, amber scanlines, and chunky pixels.',
+  backdrop: {
+    style: 'retro',
+    topColor: 0x03140a,
+    bottomColor: 0x0a2414,
+    gridColor: 0x39ff14,
+    starColor: 0xffb000,
+    canvasBackground: '#03140a',
+  },
+  hud: {
+    score: '#d8ffd8',
+    best: '#ffb000',
+    lives: '#86efac',
+    level: '#39ff14',
+    effects: '#ffe066',
+    mode: '#bbf7d0',
+    title: '#d8ffd8',
+    subtitle: '#39ff14',
+    hint: '#ffb000',
+    stroke: '#021008',
+    message: '#d8ffd8',
+  },
+  bricks: {
+    rowColors: [0x22c55e, 0x84cc16, 0xf59e0b, 0x16a34a, 0xeab308],
+    types: {
+      normal: {},
+      cracked: {
+        strokeColor: 0xd9f99d,
+        crackedFillDarken: 0.4,
+        crackedStrokeColor: 0xffb000,
+      },
+      metal: { fillColor: 0x4b5563, strokeColor: 0xbbf7d0 },
+      bonus: { fillColor: 0xf59e0b, strokeColor: 0xfef9c3 },
+    },
+  },
+  powerups: {
+    'widen-paddle': { color: 0x14532d, stroke: 0x86efac },
+    'slow-ball': { color: 0x3f6212, stroke: 0xd9f99d },
+    'extra-life': { color: 0x166534, stroke: 0xbbf7d0 },
+    'fire-ball': { color: 0x365314, stroke: 0xfef08a },
+    'multi-ball': { color: 0x15803d, stroke: 0xdcfce7 },
+    'small-paddle': { color: 0x9a3412, stroke: 0xfdba74 },
+    'fast-ball': { color: 0xb45309, stroke: 0xfde68a },
+  },
+  overlay: {
+    dim: 0x021008,
+    dimAlpha: 0.66,
+    panel: 0x0a1f12,
+    panelStroke: 0x39ff14,
+    title: '#d8ffd8',
+    body: '#bbf7d0',
+    accent: '#ffb000',
+    victoryTitle: '#fde68a',
+    defeatTitle: '#fb7185',
+    infoTitle: '#39ff14',
+  },
+  menu: {
+    color: '#bbf7d0',
+    highlightColor: '#d8ffd8',
+    descriptionColor: '#39ff14',
+    mutedColor: '#4b7c5f',
+  },
+};
+
+const FROZEN_CORE: ThemeDefinition = {
+  id: 'frozen-core',
+  label: 'Frozen Core',
+  description: 'Ice-blue glaciers, frost shards, and pale aurora light.',
+  backdrop: {
+    style: 'frozen',
+    topColor: 0x031018,
+    bottomColor: 0x0a2848,
+    gridColor: 0x7dd3fc,
+    starColor: 0xe0f2fe,
+    canvasBackground: '#031018',
+  },
+  hud: {
+    score: '#f0f9ff',
+    best: '#fde68a',
+    lives: '#a7f3d0',
+    level: '#7dd3fc',
+    effects: '#e0f2fe',
+    mode: '#bae6fd',
+    title: '#f0f9ff',
+    subtitle: '#7dd3fc',
+    hint: '#bae6fd',
+    stroke: '#020617',
+    message: '#f0f9ff',
+  },
+  bricks: {
+    rowColors: [0x0284c7, 0x38bdf8, 0x67e8f9, 0x818cf8, 0x22d3ee],
+    types: {
+      normal: {},
+      cracked: {
+        strokeColor: 0xe0f2fe,
+        crackedFillDarken: 0.36,
+        crackedStrokeColor: 0xfde68a,
+      },
+      metal: { fillColor: 0x64748b, strokeColor: 0xf1f5f9 },
+      bonus: { fillColor: 0x818cf8, strokeColor: 0xfef9c3 },
+    },
+  },
+  powerups: {
+    'widen-paddle': { color: 0x155e75, stroke: 0xa5f3fc },
+    'slow-ball': { color: 0x0e7490, stroke: 0xcffafe },
+    'extra-life': { color: 0x115e59, stroke: 0x99f6e4 },
+    'fire-ball': { color: 0x1e3a8a, stroke: 0xbfdbfe },
+    'multi-ball': { color: 0x164e63, stroke: 0xe0f2fe },
+    'small-paddle': { color: 0x9a3412, stroke: 0xfdba74 },
+    'fast-ball': { color: 0x7f1d1d, stroke: 0xfca5a5 },
+  },
+  overlay: {
+    dim: 0x020617,
+    dimAlpha: 0.66,
+    panel: 0x0b1c2c,
+    panelStroke: 0x7dd3fc,
+    title: '#f0f9ff',
+    body: '#bae6fd',
+    accent: '#38bdf8',
+    victoryTitle: '#fde68a',
+    defeatTitle: '#fda4af',
+    infoTitle: '#7dd3fc',
+  },
+  menu: {
+    color: '#bae6fd',
+    highlightColor: '#f0f9ff',
+    descriptionColor: '#7dd3fc',
+    mutedColor: '#64748b',
+  },
+};
+
+export const THEMES: readonly ThemeDefinition[] = [
+  NEON_ARCADE,
+  SPACE,
+  LABORATORY,
+  RETRO_GRID,
+  FROZEN_CORE,
+  INFERNO,
+];
 
 export const THEME_INFOS: readonly ThemeInfo[] = THEMES.map((theme) => ({
   id: theme.id,
@@ -315,7 +539,14 @@ export const THEME_INFOS: readonly ThemeInfo[] = THEMES.map((theme) => ({
 }));
 
 export function isThemeId(value: unknown): value is ThemeId {
-  return value === 'neon-arcade' || value === 'space' || value === 'laboratory';
+  return (
+    value === 'neon-arcade' ||
+    value === 'space' ||
+    value === 'laboratory' ||
+    value === 'retro-grid' ||
+    value === 'frozen-core' ||
+    value === 'inferno'
+  );
 }
 
 export function getTheme(id: ThemeId): ThemeDefinition {
