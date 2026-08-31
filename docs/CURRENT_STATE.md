@@ -27,6 +27,7 @@ be updated at the end of every task's closure workflow.
 - ✅ DXB-13A Quality of Life
 - ✅ DXB-15 Theme & Visual Identity System
 - ✅ DXB-16 Unlockables & Achievements
+- ✅ DXB-17 Stats & Leaderboards
 
 ## Technology Stack
 
@@ -39,27 +40,28 @@ be updated at the end of every task's closure workflow.
 ```
 src/
   scenes/     BootScene -> PreloadScene -> ThemeSelectScene -> ModeSelectScene -> MainScene
-              (UnlockablesScene is a side screen from ThemeSelect / ModeSelect)
+              (UnlockablesScene and StatsScene are side screens from ThemeSelect / ModeSelect)
   systems/    GameViewport, SceneKeys, HighScoreStore, AudioManager, ThemeStore, JsonStore
-  entities/   dx-ball/ (Paddle, Ball, Brick, BrickType, BrickGrid, levels, GameMode, Theme, Progress, Skins, Powerup, PowerupManager, audioCues)
-  ui/         ScoreLabel, ActiveEffectsLabel, ArcadeBackground, ModeLabel, SelectMenu, PauseOverlay, ResultOverlay, ProgressList
+  entities/   dx-ball/ (Paddle, Ball, Brick, BrickType, BrickGrid, levels, GameMode, Theme, Progress, Leaderboards, Skins, Powerup, PowerupManager, audioCues)
+  ui/         ScoreLabel, ActiveEffectsLabel, ArcadeBackground, ModeLabel, SelectMenu, PauseOverlay, ResultOverlay, ProgressList, StatsList
   assets/     dx-ball/audio-manifest.ts (empty real-asset list; SFX use synthesized fallback)
 ```
 
 **Scenes**
 - `BootScene` — first scene to run; minimal setup, hands off to `PreloadScene`.
 - `PreloadScene` — loads assets and shows loading progress, hands off to `ThemeSelectScene` (since DXB-15; previously `ModeSelectScene` since DXB-14). Since DXB-10: also loops over `DX_BALL_AUDIO_MANIFEST` calling `this.load.audio()` for each entry (currently zero, so a no-op today).
-- `ThemeSelectScene` — DXB-15: pre-run Neon Arcade / Space / Laboratory picker with a live backdrop preview. Persists the choice via `ThemeStore`. Owns an `ArcadeBackground`, a title, and a `SelectMenu`; starts `ModeSelectScene`. No gameplay. Since DXB-16: Space and Laboratory are locked until their unlock gates are met (preview still works; confirm does not); `U` opens `UnlockablesScene`.
-- `ModeSelectScene` — DXB-14: pre-run Classic / Time Attack / Endless picker. Paints the saved theme; Esc returns to ThemeSelect. Owns an `ArcadeBackground`, a title, and a `SelectMenu`; starts `MainScene` with `{ mode }`. No gameplay. Since DXB-16: `U` opens `UnlockablesScene`.
+- `ThemeSelectScene` — DXB-15: pre-run Neon Arcade / Space / Laboratory picker with a live backdrop preview. Persists the choice via `ThemeStore`. Owns an `ArcadeBackground`, a title, and a `SelectMenu`; starts `ModeSelectScene`. No gameplay. Since DXB-16: Space and Laboratory are locked until their unlock gates are met (preview still works; confirm does not); `U` opens `UnlockablesScene`. Since DXB-17: `S` opens `StatsScene`.
+- `ModeSelectScene` — DXB-14: pre-run Classic / Time Attack / Endless picker. Paints the saved theme; Esc returns to ThemeSelect. Owns an `ArcadeBackground`, a title, and a `SelectMenu`; starts `MainScene` with `{ mode }`. No gameplay. Since DXB-16: `U` opens `UnlockablesScene`. Since DXB-17: `S` opens `StatsScene`.
 - `UnlockablesScene` — DXB-16: catalog hub (Themes / Paddle Skins / Ball Skins / Achievements) plus detail lists showing locked / unlocked / percent / equipped. Space equips an unlocked theme or skin. Esc returns to the hub, then to ThemeSelect or ModeSelect. No gameplay.
-- `MainScene` — the active DX-Ball gameplay scene. Owns and drives `Paddle`, `Ball`, and `BrickGrid` each frame; subscribes to `GameViewport` to keep the camera and every entity in sync with resizes; since DXB-04, also owns the win/restart flow (freezes the update loop and shows a win message once `BrickGrid.isCleared()`, restarting the scene via `this.scene.restart()` on Space). Since DXB-06: also owns the score HUD — polls `BrickGrid.getScore()` every frame into a `ScoreLabel`, tracks/persists a best score via `HighScoreStore` the moment it's passed, and reports the final score in the win message. Since DXB-07: also owns the lives/lose flow — starts each run with 3 lives, polls `Ball.getMissCount()` every frame to decrement them, and once they reach zero freezes the loop (mirroring the win flow via a sibling `lost` flag) and shows a "GAME OVER" message with the same restart-on-Space mechanic. Since DXB-08: also owns the level sequence (`entities/dx-ball/levels.ts`) — `isCleared()` now advances to the next level (`BrickGrid.loadLevel()` + a fresh `Ball`, both preserving score/lives) behind a "LEVEL CLEARED" transition message, and only calls `handleWin()` once the last level is cleared. Since DXB-09: also owns a `PowerupManager` for the run — every frame it drains `BrickGrid`'s queued powerup spawns into it, advances it, and dispatches any caught capsule's effect (`extra-life` bumps lives directly; `widen-paddle`/`slow-ball` delegate to `Paddle`/`Ball`); a level transition clears any still-falling capsules. Since DXB-10: plays the four scene-owned audio cues (`life-lost`, `level-complete`, `game-over`, `victory`) at the same code paths that already detect those events, and wires the `M` key to `AudioManager.toggle()` as a global mute (a keybinding, not a HUD control). Since DXB-12: owns a `balls[]` instead of a single `ball` so Multi Ball can coexist with lives/levels (extras spend on miss; lives still only decrement when the last ball is gone); `applyPowerupEffect()` also dispatches Fire Ball / Fast Ball / Small Paddle / Multi Ball; an `ActiveEffectsLabel` at top-center lists every active effect and its remaining duration. Since DXB-13: also owns an `ArcadeBackground` behind the playfield (created first, resized with the viewport); HUD corner colors and overlay messages share one typeface/stroke language. Since DXB-14: `init({ mode })` selects Classic / Time Attack / Endless; Classic is the unchanged loop; Time Attack adds a 90s countdown that ends in TIME'S UP (levels wrap); Endless wraps `LEVELS` and ramps ball speed; a `ModeLabel` shows the active mode; Space on an end screen restarts the same mode. Since DXB-13A: ESC opens a `PauseOverlay` (Resume / Restart Run / Return To Mode Selection) from every gameplay state and freezes the update loop while it is open; the campaign is 5 levels and the HUD shows `Level X / 5`. Since DXB-15: reads the persisted theme and applies it to the backdrop, HUD, brick palette, powerup palette, pause card, and a `ResultOverlay` for victory / game over / time-up / level-clear. Since DXB-16: records lifetime unlock stats (score deltas, powerup catches, metal hits, Fire Ball destroys, Multi Ball activations, Classic completion / perfect run, Time Attack best, Endless level) and applies the equipped paddle / ball skins. Gameplay ownership of score / lives / powerups / audio is unchanged.
+- `StatsScene` — DXB-17: statistics hub (Lifetime Stats / Personal Bests / Local Leaderboards / Progress Summary). Leaderboards open a per-mode Top 10. Esc returns to the hub (or the boards picker), then to ThemeSelect or ModeSelect. No gameplay.
+- `MainScene` — the active DX-Ball gameplay scene. Owns and drives `Paddle`, `Ball`, and `BrickGrid` each frame; subscribes to `GameViewport` to keep the camera and every entity in sync with resizes; since DXB-04, also owns the win/restart flow (freezes the update loop and shows a win message once `BrickGrid.isCleared()`, restarting the scene via `this.scene.restart()` on Space). Since DXB-06: also owns the score HUD — polls `BrickGrid.getScore()` every frame into a `ScoreLabel`, tracks/persists a best score via `HighScoreStore` the moment it's passed, and reports the final score in the win message. Since DXB-07: also owns the lives/lose flow — starts each run with 3 lives, polls `Ball.getMissCount()` every frame to decrement them, and once they reach zero freezes the loop (mirroring the win flow via a sibling `lost` flag) and shows a "GAME OVER" message with the same restart-on-Space mechanic. Since DXB-08: also owns the level sequence (`entities/dx-ball/levels.ts`) — `isCleared()` now advances to the next level (`BrickGrid.loadLevel()` + a fresh `Ball`, both preserving score/lives) behind a "LEVEL CLEARED" transition message, and only calls `handleWin()` once the last level is cleared. Since DXB-09: also owns a `PowerupManager` for the run — every frame it drains `BrickGrid`'s queued powerup spawns into it, advances it, and dispatches any caught capsule's effect (`extra-life` bumps lives directly; `widen-paddle`/`slow-ball` delegate to `Paddle`/`Ball`); a level transition clears any still-falling capsules. Since DXB-10: plays the four scene-owned audio cues (`life-lost`, `level-complete`, `game-over`, `victory`) at the same code paths that already detect those events, and wires the `M` key to `AudioManager.toggle()` as a global mute (a keybinding, not a HUD control). Since DXB-12: owns a `balls[]` instead of a single `ball` so Multi Ball can coexist with lives/levels (extras spend on miss; lives still only decrement when the last ball is gone); `applyPowerupEffect()` also dispatches Fire Ball / Fast Ball / Small Paddle / Multi Ball; an `ActiveEffectsLabel` at top-center lists every active effect and its remaining duration. Since DXB-13: also owns an `ArcadeBackground` behind the playfield (created first, resized with the viewport); HUD corner colors and overlay messages share one typeface/stroke language. Since DXB-14: `init({ mode })` selects Classic / Time Attack / Endless; Classic is the unchanged loop; Time Attack adds a 90s countdown that ends in TIME'S UP (levels wrap); Endless wraps `LEVELS` and ramps ball speed; a `ModeLabel` shows the active mode; Space on an end screen restarts the same mode. Since DXB-13A: ESC opens a `PauseOverlay` (Resume / Restart Run / Return To Mode Selection) from every gameplay state and freezes the update loop while it is open; the campaign is 5 levels and the HUD shows `Level X / 5`. Since DXB-15: reads the persisted theme and applies it to the backdrop, HUD, brick palette, powerup palette, pause card, and a `ResultOverlay` for victory / game over / time-up / level-clear. Since DXB-16: records lifetime unlock stats (score deltas, powerup catches, metal hits, Fire Ball destroys, Multi Ball activations, Classic completion / perfect run, Time Attack best, Endless level) and applies the equipped paddle / ball skins. Since DXB-17: the same recording path also counts games played, bricks destroyed, per-mode personal bests, overall highest, and live play time, and submits a finished run to that mode's local Top 10. Gameplay ownership of score / lives / powerups / audio is unchanged.
 
 **Systems**
 - `GameViewport` — game-agnostic responsive-viewport service (singleton). Wraps Phaser's Scale Manager plus browser resize/orientation/safe-area concerns into one snapshot (`width`, `height`, `centerX/Y`, `isPortrait/Landscape`, `safeArea`) with a subscribable `onChange()`.
-- `SceneKeys` — centralizes scene key strings (`Boot`, `Preload`, `ThemeSelect`, `ModeSelect`, `Unlockables`, `Main`).
+- `SceneKeys` — centralizes scene key strings (`Boot`, `Preload`, `ThemeSelect`, `ModeSelect`, `Unlockables`, `Stats`, `Main`).
 - `HighScoreStore` — DXB-06: game-agnostic `localStorage` wrapper (`get(key)` / `set(key, value)`) for persisting a best score across restarts/reloads. Knows nothing about DX-Ball or any scoring rule — the caller picks the key.
 - `ThemeStore` — DXB-15: game-agnostic string `localStorage` wrapper for a selected theme id. Knows nothing about palettes — `entities/dx-ball/Theme.ts` owns those.
-- `JsonStore` — DXB-16: game-agnostic JSON `localStorage` wrapper (`get<T>(key)` / `set(key, value)`). Knows nothing about achievements — `entities/dx-ball/Progress.ts` owns those.
+- `JsonStore` — DXB-16: game-agnostic JSON `localStorage` wrapper (`get<T>(key)` / `set(key, value)`). Knows nothing about achievements or leaderboards — `entities/dx-ball/Progress.ts` and `Leaderboards.ts` own those.
 - `AudioManager` — DXB-10: game-agnostic audio singleton (`AudioManager.init(game)` once in `main.ts`, `AudioManager.get()` from anywhere). `play(key, fallback)` prefers a Phaser-cached audio asset under `key` if one exists, otherwise synthesizes `fallback` (`ToneSpec`) via the Web Audio API. A global `enabled` flag (`isEnabled()` / `setEnabled()` / `toggle()`, persisted under `arc-arcade-audio-enabled`) gates every call; every operation is defensive and never throws. Knows nothing about DX-Ball's specific cues — those live in `entities/dx-ball/audioCues.ts`. The two-path split plus an `AudioManifestEntry.category: 'sfx' | 'music'` field is the seam a future music system would reuse; no music is implemented.
 
 ## Current Entities (`dx-ball/`)
@@ -70,9 +72,10 @@ src/
 - `BrickType.ts` — DXB-11: reusable brick-type vocabulary (`normal` | `cracked` | `metal` | `bonus`), a `BRICK_TYPE_SPECS` data table (hit count, score, drop policy, fill/stroke), and the compact layout parser (`N`/`C`/`M`/`B`/`.`). Kept out of `BrickGrid` the same way `levels.ts` keeps level data out of the grid.
 - `BrickGrid` — owns the full set of `Brick`s (default 5 rows × 8 columns, one color per row); responsive layout; `resolveBallCollision()` checks a ball against every remaining brick and safely removes the first one it overlaps. Since DXB-04: `isCleared()` reports whether every brick has been removed (the win condition). Since DXB-06: also assigns each brick's `points` (row-weighted — back rows worth more) and accumulates a running `getScore()` total as bricks are destroyed. Since DXB-06A: bricks sized slightly smaller (`gapRatio` 0.008 → 0.01, `rowHeightRatio` 0.035 → 0.03), a tuning-only change; row/column count and scoring formula unchanged. Since DXB-08: `loadLevel(config, viewportWidth, viewportHeight)` replaces every brick with a fresh grid built from a new config *without* resetting `score`, letting a level transition carry the running score forward on the same instance. Since DXB-09: also rolls a `powerupDropChance` (default 0.15) whenever it removes a brick, queuing that brick's position for `consumePendingPowerupSpawns()` to report — the grid itself has no idea what a "powerup" is beyond a spawn point. Since DXB-10: `resolveBallCollision()` plays `'brick-break'` the instant it removes a brick. Since DXB-11: the same overlap loop now asks `Brick.takeHit()` before removing, so metal and a cracked first hit bounce without being destroyed; score and `'brick-break'` still fire only on actual destruction; bonus always queues a drop; `isCleared()` ignores remaining metal; an optional `layout` of row-strings selects types per cell (omitted → all normal). Since DXB-12: optional `{ pierce: true }` force-destroys the overlapped brick (including metal) and returns `null` so a Fire Ball continues through instead of bouncing; drop policy for metal is still `'never'`. Since DXB-15: optional `typeVisuals` plus themed `colors` from `MainScene`; collision/score/drop paths are unchanged. Since DXB-16: queues `BrickHitEvent`s (`consumePendingHits()`) so the owning scene can count metal hits and Fire Ball destroys; the grid still does not know achievements exist.
 - `levels.ts` — DXB-08: DX-Ball's fixed level sequence, a plain `LevelConfig[]` (`LEVELS`) of partial `BrickGrid`/`Ball` config overrides, read only by `MainScene`. Since DXB-11: levels 2-3 also carry compact `layout` strings (level 2 adds cracked; level 3 adds cracked, metal, and bonus). Level 1 stays all-normal (no `layout`). Since DXB-14: Time Attack and Endless wrap this same array; Classic still wins after the last entry. Since DXB-13A: 5 entries — levels 1-3 unchanged, level 4 is metal-heavy corridors, level 5 mixes every current brick type.
-- `GameMode.ts` — DXB-14: DX-Ball's mode vocabulary (`classic` | `time-attack` | `endless`), HUD labels, Time Attack's 90s duration, and Endless's gradual speed-ramp constants. Read by `ModeSelectScene` / `MainScene` only — same "data file, owning scene drives it" shape as `levels.ts`.
+- `GameMode.ts` — DXB-14: DX-Ball's mode vocabulary (`classic` | `time-attack` | `endless`), HUD labels, Time Attack's 90s duration, and Endless's gradual speed-ramp constants. Read by ModeSelect / MainScene / StatsScene / Leaderboards — same "data file, owning scene drives it" shape as `levels.ts`.
 - `Theme.ts` — DXB-15: DX-Ball's visual-identity vocabulary (`neon-arcade` | `space` | `laboratory`), labels, backdrop/HUD/brick/powerup/overlay palettes, and load/save helpers. Read by ThemeSelect / ModeSelect / MainScene. `BrickGrid` / `Ball` / `Paddle` never import it. Since DXB-16: Space and Laboratory are gated by `Progress.ts`; this file still only names palettes.
-- `Progress.ts` — DXB-16: lifetime stats, unlock gates (themes / paddle skins / ball skins), the seven achievements, and selected skin persistence. Unlocks are derived from stats. Read by ThemeSelect / Unlockables / MainScene.
+- `Progress.ts` — DXB-16: lifetime stats, unlock gates (themes / paddle skins / ball skins), the seven achievements, and selected skin persistence. Unlocks are derived from stats. Read by ThemeSelect / Unlockables / MainScene. Since DXB-17: the same blob also holds games played, overall / Classic / Endless bests, bricks destroyed, and play time; display rows feed `StatsScene`.
+- `Leaderboards.ts` — DXB-17: local Top 10 scores per mode (`classic` / `time-attack` / `endless`). Separate `dx-ball-leaderboards` key. `MainScene` submits a run once; `StatsScene` reads the lists.
 - `Skins.ts` — DXB-16: paddle / ball cosmetic tokens. `Paddle` / `Ball` never import it; the owning scene applies visuals.
 - `Powerup` — DXB-09: a single falling capsule; a `Container` holding a colored rounded-rect background plus a one-letter label, one fixed color+letter pair per `PowerupType`. Purely visual/motion — all "what happens when caught" logic lives in `PowerupManager`. Since DXB-12: the union and visual map also include `fire-ball` (`F`), `multi-ball` (`M`), `small-paddle` (`N`), `fast-ball` (`T`) alongside the original `W`/`S`/`L`. Since DXB-13: positives use a green family and negatives a red/orange family; letters are unchanged. Since DXB-15: each type has a unique Graphics icon (heart, flame, spheres, expand, shrink, slow, fast); the letter is a small secondary cue; colors come from the active theme palette.
 - `PowerupManager` — DXB-09: owns every currently-falling `Powerup` for one run. `spawn(x, y)` picks a random configured type; `update()` advances each capsule and checks it against the paddle (caught → queued, no penalty either way if missed) or the bottom edge (removed); `consumeCaughtPowerups()` drains the caught queue for `MainScene` to react to. Deliberately never holds a `Ball` reference (which is replaced, not mutated, on every level transition) or touches lives/score directly. Since DXB-10: `spawn()` plays `'powerup-spawn'` and a catch plays `'powerup-collect'`. Since DXB-12: the default spawn pool is the full 7-type roster (positives and negatives share the existing drop pipeline); this manager still does not know what any type does. Since DXB-15: optional theme `palette` is forwarded into each capsule; spawn/catch/audio are unchanged.
@@ -88,6 +91,7 @@ src/
 - `PauseOverlay` — DXB-13A: reusable pause/menu overlay (dim + title + `SelectMenu`). `MainScene` opens it on ESC. Since DXB-15: framed panel, accent bar, themed menu. Not DX-Ball-specific.
 - `ResultOverlay` — DXB-15: reusable end/transition card (dim + framed panel + title + body). `MainScene` uses it for victory, game over, time-up, and level-clear. Not DX-Ball-specific.
 - `ProgressList` — DXB-16: reusable catalog list (locked / unlocked / percent / equipped). `UnlockablesScene` is the first caller. Not DX-Ball-specific beyond the `ProgressRow` shape.
+- `StatsList` — DXB-17: reusable read-only label/value list. `StatsScene` is the first caller. Not DX-Ball-specific beyond the `StatDisplayRow` shape.
 
 ## Documentation
 
@@ -109,6 +113,7 @@ src/
 - `docs/progress/DXB-13A.md`
 - `docs/progress/DXB-15.md`
 - `docs/progress/DXB-16.md`
+- `docs/progress/DXB-17.md`
 - `docs/CURRENT_STATE.md` (this file)
 
 ## Repository
@@ -123,22 +128,23 @@ src/
 
 ## Last Completed Task
 
-DXB-16 Unlockables & Achievements — persistent lifetime tracking,
-gated themes / paddle skins / ball skins, seven achievements, and a
-dedicated Unlockables screen. Neon Arcade plus Classic paddle/ball stay
-free; everything else unlocks from play. Progress lives in localStorage
-and survives refresh. Gameplay systems are unchanged. See
-`docs/progress/DXB-16.md` for full details. `npm run typecheck` and
-`npm run build` both verified passing.
+DXB-17 Stats & Leaderboards — persistent lifetime statistics, local
+Top 10 boards per mode, personal bests, a progress summary, and a
+dedicated Statistics screen from Theme Select / Mode Select. Data
+lives in localStorage and survives refresh. Unlocks, achievements,
+themes, and modes are unchanged. See `docs/progress/DXB-17.md` for
+full details. `npm run typecheck` and `npm run build` both verified
+passing.
 
 ## Next Recommended Task
 
 The core gameplay loop now spans a 5-level campaign plus the expanded
 powerup roster, audio, advanced brick types, a visual refresh, three
-game modes, a pause menu, a theme system, and long-term unlocks (win,
-lose, score, best score, lives, levels, powerups, SFX, brick types,
-readable presentation, Classic / Time Attack / Endless, ESC overlay,
-selectable visual identity, achievements). Good candidates going
+game modes, a pause menu, a theme system, long-term unlocks, and
+local stats / leaderboards (win, lose, score, best score, lives,
+levels, powerups, SFX, brick types, readable presentation, Classic /
+Time Attack / Endless, ESC overlay, selectable visual identity,
+achievements, lifetime tracking). Good candidates going
 forward, none yet confirmed with a requester:
 - A live-playtested balance pass covering the new 7-type mix (drop
   chance, durations, widen/small/slow/fast multipliers) together with
@@ -147,7 +153,7 @@ forward, none yet confirmed with a requester:
   Endless's speed ramp, DXB-15's slightly larger capsules, and DXB-16's
   unlock thresholds — the standing recommendation since
   DXB-06A/DXB-07/DXB-08, still using manual verification this session
-  (see DXB-16's own Known Risks).
+  (see DXB-17's own Known Risks).
 - Visual feedback polish (a "+N" popup or flash on scoring, a flash on
   losing a life, catching a powerup, win/game-over, or a level
   transition; a crack-hit cue) — type/HUD/background/theme presentation

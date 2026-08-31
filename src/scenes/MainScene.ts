@@ -30,15 +30,19 @@ import {
   loadBallSkinId,
   loadPaddleSkinId,
   loadPlayableThemeId,
+  recordBricksDestroyed,
   recordClassicComplete,
   recordEndlessLevel,
   recordFireBallBrickDestroyed,
+  recordGamePlayed,
   recordLifetimeScoreDelta,
   recordMetalBrickHit,
+  recordModeScore,
   recordMultiBallActivation,
+  recordPlayTime,
   recordPowerupCollected,
-  recordTimeAttackScore,
 } from '@entities/dx-ball/Progress';
+import { submitScore } from '@entities/dx-ball/Leaderboards';
 import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins';
 
 /**
@@ -156,6 +160,11 @@ import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins'
  * activations, Classic completion / perfect run, Time Attack best,
  * Endless level reached) and applies the equipped paddle / ball
  * skins. Gameplay rules are unchanged.
+ *
+ * DXB-17: the same recording path also counts games played, bricks
+ * destroyed, per-mode personal bests, overall highest score, and
+ * live play time, and submits a finished run's score to that mode's
+ * local Top 10. Pause / end-of-run still own the existing overlays.
  */
 
 export interface MainSceneData {
@@ -185,6 +194,9 @@ const MULTI_BALL_TOTAL = 3;
 
 /** DXB-12: Heading offsets (degrees) applied to extras split from a launched ball. */
 const MULTI_BALL_SPLIT_ANGLES_DEG = [-20, 20];
+
+/** DXB-17: Flush accumulated play time to localStorage at this interval. */
+const PLAY_TIME_FLUSH_MS = 5000;
 
 export class MainScene extends Phaser.Scene {
   private paddle!: Paddle;
@@ -221,6 +233,10 @@ export class MainScene extends Phaser.Scene {
   private remainingTimeMs = TIME_ATTACK_DURATION_MS;
   /** DXB-14: Endless play time used for the gradual speed ramp. */
   private runElapsedMs = 0;
+  /** DXB-17: Live-play ms not yet written to Progress. */
+  private unflushedPlayTimeMs = 0;
+  /** DXB-17: True once this run's score has been offered to the local board. */
+  private runSubmitted = false;
   private unsubscribeViewport?: () => void;
   private won = false;
   private lost = false;
@@ -255,8 +271,11 @@ export class MainScene extends Phaser.Scene {
     this.currentLevelIndex = 0;
     this.remainingTimeMs = TIME_ATTACK_DURATION_MS;
     this.runElapsedMs = 0;
+    this.unflushedPlayTimeMs = 0;
+    this.runSubmitted = false;
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
     this.theme = getTheme(loadPlayableThemeId());
+    recordGamePlayed();
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(this.theme.backdrop.canvasBackground);
@@ -342,8 +361,13 @@ export class MainScene extends Phaser.Scene {
     this.unsubscribeViewport = viewport.onChange((next) => this.handleViewportChange(next));
 
     // Scenes own their subscriptions: unsubscribe on shutdown so nothing
-    // leaks if this scene is stopped/restarted.
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubscribeViewport?.());
+    // leaks if this scene is stopped/restarted. DXB-17 also flushes play
+    // time and offers the run to the local leaderboard on the way out.
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.unsubscribeViewport?.();
+      this.flushPlayTime();
+      this.submitRunIfNeeded();
+    });
 
     // DXB-10: global audio mute toggle. A keybinding rather than a HUD
     // button/icon, per this task's "no visual redesign" restriction; the
@@ -379,6 +403,8 @@ export class MainScene extends Phaser.Scene {
       return;
     }
 
+    this.accumulatePlayTime(delta);
+
     this.paddle.update(delta);
     this.updateBalls(delta);
     this.updateProgressFromHits();
@@ -410,10 +436,8 @@ export class MainScene extends Phaser.Scene {
     const delta = score - this.lastRunScore;
     if (delta > 0) {
       recordLifetimeScoreDelta(delta);
+      recordModeScore(this.mode, score);
       this.lastRunScore = score;
-      if (this.mode === 'time-attack') {
-        recordTimeAttackScore(score);
-      }
     }
 
     if (score > this.bestScore) {
@@ -476,16 +500,55 @@ export class MainScene extends Phaser.Scene {
    * DXB-16: Folds brick contacts into lifetime achievement counters.
    * Metal hits count even when the brick survives; Fire Ball destroys
    * count only when pierce actually removed the brick.
+   * DXB-17: every actual destroy also increments bricksDestroyed.
    */
   private updateProgressFromHits(): void {
+    let destroyed = 0;
     for (const hit of this.brickGrid.consumePendingHits()) {
       if (hit.brickType === 'metal') {
         recordMetalBrickHit();
+      }
+      if (hit.destroyed) {
+        destroyed += 1;
       }
       if (hit.destroyed && hit.pierced) {
         recordFireBallBrickDestroyed();
       }
     }
+    if (destroyed > 0) {
+      recordBricksDestroyed(destroyed);
+    }
+  }
+
+  /** DXB-17: Count only live play; paused / ended / level-clear waits are excluded. */
+  private accumulatePlayTime(deltaMs: number): void {
+    this.unflushedPlayTimeMs += deltaMs;
+    if (this.unflushedPlayTimeMs >= PLAY_TIME_FLUSH_MS) {
+      this.flushPlayTime();
+    }
+  }
+
+  private flushPlayTime(): void {
+    if (this.unflushedPlayTimeMs <= 0) {
+      return;
+    }
+    recordPlayTime(this.unflushedPlayTimeMs);
+    this.unflushedPlayTimeMs = 0;
+  }
+
+  /**
+   * DXB-17: Offers this run's score to the local Top 10 once. Called
+   * from win / game-over / time-up and from shutdown (pause leave /
+   * restart) so a refresh on an end card still persists the entry.
+   */
+  private submitRunIfNeeded(): void {
+    if (this.runSubmitted || !this.brickGrid) {
+      return;
+    }
+
+    this.runSubmitted = true;
+    this.flushPlayTime();
+    submitScore(this.mode, this.brickGrid.getScore());
   }
 
   /**
@@ -806,6 +869,8 @@ export class MainScene extends Phaser.Scene {
       recordClassicComplete(!this.lostLifeThisRun);
     }
 
+    this.submitRunIfNeeded();
+
     const finalScore = this.brickGrid.getScore();
     this.resultOverlay.show({
       tone: 'victory',
@@ -826,6 +891,7 @@ export class MainScene extends Phaser.Scene {
   private handleGameOver(): void {
     this.lost = true;
     playDxBallSfx('game-over');
+    this.submitRunIfNeeded();
 
     const finalScore = this.brickGrid.getScore();
     this.resultOverlay.show({
@@ -851,6 +917,7 @@ export class MainScene extends Phaser.Scene {
     this.transitioning = false;
     this.resultOverlay.hide();
     playDxBallSfx('game-over');
+    this.submitRunIfNeeded();
 
     const finalScore = this.brickGrid.getScore();
     this.resultOverlay.show({

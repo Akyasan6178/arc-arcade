@@ -48,3 +48,7 @@ Currently:
 - `ProgressList.ts` — DXB-16's reusable catalog list (title + locked /
   unlocked / percent / equipped). Space confirms only unlocked
   selectable rows. Not DX-Ball-specific beyond the `ProgressRow` shape.
+- `StatsList.ts` — DXB-17's reusable read-only label/value list
+  (statistics, personal bests, leaderboards, progress summary).
+  Arrow keys highlight; there is no confirm. Not DX-Ball-specific
+  beyond the `StatDisplayRow` shape.

@@ -17,8 +17,9 @@ import { SelectMenu } from '@ui/SelectMenu';
  * themed backdrop, a title, and a `SelectMenu`, then starts
  * `MainScene` with `{ mode }`.
  *
- * Esc returns to ThemeSelect. U opens unlockables (DXB-16). Space on
- * an ended run in MainScene restarts the same mode instead.
+ * Esc returns to ThemeSelect. U opens unlockables (DXB-16). S opens
+ * statistics / leaderboards (DXB-17). Space on an ended run in
+ * MainScene restarts the same mode instead.
  */
 export class ModeSelectScene extends Phaser.Scene {
   private background!: ArcadeBackground;
@@ -86,6 +87,10 @@ export class ModeSelectScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-U', () => {
       this.scene.start(SceneKeys.Unlockables, { from: SceneKeys.ModeSelect });
+    });
+
+    this.input.keyboard?.on('keydown-S', () => {
+      this.scene.start(SceneKeys.Stats, { from: SceneKeys.ModeSelect });
     });
   }
 
@@ -162,7 +167,7 @@ export class ModeSelectScene extends Phaser.Scene {
       .text(
         viewportWidth / 2,
         viewportHeight * 0.9,
-        'Arrows to move  ·  Space / Enter / click to start  ·  U unlockables',
+        'Arrows to move  ·  Space / Enter / click to start  ·  U unlockables  ·  S stats',
         {
           fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
           fontSize: `${fontSize}px`,

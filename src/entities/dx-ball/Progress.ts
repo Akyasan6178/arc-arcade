@@ -1,6 +1,8 @@
 import { JsonStore } from '@systems/JsonStore';
 import { ThemeStore } from '@systems/ThemeStore';
+import { HighScoreStore } from '@systems/HighScoreStore';
 import { loadThemeId, type ThemeId } from '@entities/dx-ball/Theme';
+import type { GameModeId } from '@entities/dx-ball/GameMode';
 
 /**
  * entities/dx-ball/Progress.ts
@@ -14,6 +16,11 @@ import { loadThemeId, type ThemeId } from '@entities/dx-ball/Theme';
  * Unlocks are derived from stats on every read, not stored as a
  * separate flag list, so a refresh cannot desync "I have 25000 score"
  * from "Laboratory is unlocked".
+ *
+ * DXB-17: the same blob also holds long-term statistics (games played,
+ * highest scores per mode, bricks destroyed, play time). Leaderboards
+ * are a sibling file (`Leaderboards.ts`) with their own key so Top 10
+ * lists cannot corrupt unlock counters.
  */
 
 export type PaddleSkinId = 'classic' | 'carbon' | 'neon' | 'reactor';
@@ -29,6 +36,39 @@ export interface DxBallStats {
   classicPerfect: boolean;
   timeAttackBestScore: number;
   endlessMaxLevel: number;
+  /** DXB-17: Runs started (create / restart). */
+  gamesPlayed: number;
+  /** DXB-17: Best score across every mode. */
+  highestScore: number;
+  /** DXB-17: Best finished-or-live Classic score. */
+  classicBestScore: number;
+  /** DXB-17: Best finished-or-live Endless score. */
+  endlessBestScore: number;
+  /** DXB-17: Bricks actually destroyed (not metal bounces). */
+  bricksDestroyed: number;
+  /** DXB-17: Accumulated live-play milliseconds (paused / ended time excluded). */
+  playTimeMs: number;
+}
+
+/** DXB-17: Label + formatted value for the statistics screen. */
+export interface StatDisplayRow {
+  id: string;
+  title: string;
+  value: string;
+}
+
+export interface ProgressSummary {
+  completionPercent: number;
+  unlockedCount: number;
+  totalCount: number;
+  themesUnlocked: number;
+  themesTotal: number;
+  paddlesUnlocked: number;
+  paddlesTotal: number;
+  ballsUnlocked: number;
+  ballsTotal: number;
+  achievementsComplete: number;
+  achievementsTotal: number;
 }
 
 export interface ProgressRow {
@@ -46,6 +86,8 @@ export interface ProgressRow {
 const PROGRESS_STORAGE_KEY = 'dx-ball-progress';
 const PADDLE_SKIN_STORAGE_KEY = 'dx-ball-paddle-skin';
 const BALL_SKIN_STORAGE_KEY = 'dx-ball-ball-skin';
+/** Same key `MainScene` uses for the in-run Best HUD (DXB-06). */
+const HIGH_SCORE_STORAGE_KEY = 'dx-ball-high-score';
 
 const EMPTY_STATS: DxBallStats = {
   lifetimeScore: 0,
@@ -57,6 +99,12 @@ const EMPTY_STATS: DxBallStats = {
   classicPerfect: false,
   timeAttackBestScore: 0,
   endlessMaxLevel: 0,
+  gamesPlayed: 0,
+  highestScore: 0,
+  classicBestScore: 0,
+  endlessBestScore: 0,
+  bricksDestroyed: 0,
+  playTimeMs: 0,
 };
 
 let cached: DxBallStats | null = null;
@@ -86,6 +134,12 @@ function normalizeStats(raw: Partial<DxBallStats> | null | undefined): DxBallSta
       raw?.timeAttackBestScore ?? EMPTY_STATS.timeAttackBestScore,
     ),
     endlessMaxLevel: clampNonNegInt(raw?.endlessMaxLevel ?? EMPTY_STATS.endlessMaxLevel),
+    gamesPlayed: clampNonNegInt(raw?.gamesPlayed ?? EMPTY_STATS.gamesPlayed),
+    highestScore: clampNonNegInt(raw?.highestScore ?? EMPTY_STATS.highestScore),
+    classicBestScore: clampNonNegInt(raw?.classicBestScore ?? EMPTY_STATS.classicBestScore),
+    endlessBestScore: clampNonNegInt(raw?.endlessBestScore ?? EMPTY_STATS.endlessBestScore),
+    bricksDestroyed: clampNonNegInt(raw?.bricksDestroyed ?? EMPTY_STATS.bricksDestroyed),
+    playTimeMs: clampNonNegInt(raw?.playTimeMs ?? EMPTY_STATS.playTimeMs),
   };
 }
 
@@ -95,6 +149,15 @@ function loadStats(): DxBallStats {
   }
 
   cached = normalizeStats(JsonStore.get<Partial<DxBallStats>>(PROGRESS_STORAGE_KEY));
+
+  // DXB-17: seed overall highest from the pre-existing Best HUD store so
+  // a player who never ran after this task still sees their old best.
+  const storedBest = HighScoreStore.get(HIGH_SCORE_STORAGE_KEY);
+  if (storedBest > cached.highestScore) {
+    cached.highestScore = storedBest;
+    JsonStore.set(PROGRESS_STORAGE_KEY, cached);
+  }
+
   return cached;
 }
 
@@ -279,11 +342,7 @@ export function recordClassicComplete(perfect: boolean): void {
 }
 
 export function recordTimeAttackScore(score: number): void {
-  const stats = loadStats();
-  if (score > stats.timeAttackBestScore) {
-    stats.timeAttackBestScore = score;
-    saveStats();
-  }
+  recordModeScore('time-attack', score);
 }
 
 /** `levelNumber` is 1-based (`currentLevelIndex + 1`), including Endless wrap. */
@@ -293,6 +352,64 @@ export function recordEndlessLevel(levelNumber: number): void {
     stats.endlessMaxLevel = levelNumber;
     saveStats();
   }
+}
+
+/** DXB-17: Live per-mode bests plus overall highest. No-ops if `score` is not an improvement. */
+export function recordModeScore(mode: GameModeId, score: number): void {
+  const stats = loadStats();
+  const value = clampNonNegInt(score);
+  let changed = false;
+
+  if (value > stats.highestScore) {
+    stats.highestScore = value;
+    changed = true;
+  }
+
+  if (mode === 'classic' && value > stats.classicBestScore) {
+    stats.classicBestScore = value;
+    changed = true;
+  }
+
+  if (mode === 'time-attack' && value > stats.timeAttackBestScore) {
+    stats.timeAttackBestScore = value;
+    changed = true;
+  }
+
+  if (mode === 'endless' && value > stats.endlessBestScore) {
+    stats.endlessBestScore = value;
+    changed = true;
+  }
+
+  if (changed) {
+    saveStats();
+  }
+}
+
+export function recordGamePlayed(): void {
+  loadStats().gamesPlayed += 1;
+  saveStats();
+}
+
+export function recordBricksDestroyed(count = 1): void {
+  const add = clampNonNegInt(count);
+  if (add <= 0) {
+    return;
+  }
+  loadStats().bricksDestroyed += add;
+  saveStats();
+}
+
+export function recordPlayTime(deltaMs: number): void {
+  const add = clampNonNegInt(deltaMs);
+  if (add <= 0) {
+    return;
+  }
+  loadStats().playTimeMs += add;
+  saveStats();
+}
+
+export function getStats(): DxBallStats {
+  return { ...loadStats() };
 }
 
 export function getThemeUnlockRows(equippedId: ThemeId): ProgressRow[] {
@@ -435,4 +552,140 @@ export function getAchievementRows(): ProgressRow[] {
 
 export function countUnlocked(rows: readonly ProgressRow[]): number {
   return rows.filter((row) => row.unlocked).length;
+}
+
+export function formatCount(value: number): string {
+  return clampNonNegInt(value)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+export function formatPlayTime(ms: number): string {
+  const totalSeconds = Math.floor(clampNonNegInt(ms) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number): string => n.toString().padStart(2, '0');
+  if (hours > 0) {
+    return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+  }
+  return `${minutes}:${pad(seconds)}`;
+}
+
+export function getLifetimeStatRows(): StatDisplayRow[] {
+  const stats = loadStats();
+  return [
+    { id: 'games', title: 'Total Games Played', value: formatCount(stats.gamesPlayed) },
+    { id: 'score', title: 'Total Score', value: formatCount(stats.lifetimeScore) },
+    { id: 'high', title: 'Highest Score', value: formatCount(stats.highestScore) },
+    {
+      id: 'time-attack-high',
+      title: 'Highest Time Attack Score',
+      value: formatCount(stats.timeAttackBestScore),
+    },
+    {
+      id: 'endless-high',
+      title: 'Highest Endless Score',
+      value: formatCount(stats.endlessBestScore),
+    },
+    {
+      id: 'bricks',
+      title: 'Total Bricks Destroyed',
+      value: formatCount(stats.bricksDestroyed),
+    },
+    {
+      id: 'metal',
+      title: 'Total Metal Bricks Hit',
+      value: formatCount(stats.metalBricksHit),
+    },
+    {
+      id: 'powerups',
+      title: 'Total Powerups Collected',
+      value: formatCount(stats.powerupsCollected),
+    },
+    {
+      id: 'fire',
+      title: 'Total Fire Ball Kills',
+      value: formatCount(stats.fireBallBricksDestroyed),
+    },
+    {
+      id: 'multi',
+      title: 'Total Multi Ball Activations',
+      value: formatCount(stats.multiBallActivations),
+    },
+    { id: 'play-time', title: 'Total Play Time', value: formatPlayTime(stats.playTimeMs) },
+  ];
+}
+
+export function getPersonalBestRows(): StatDisplayRow[] {
+  const stats = loadStats();
+  return [
+    { id: 'classic', title: 'Best Classic', value: formatCount(stats.classicBestScore) },
+    {
+      id: 'time-attack',
+      title: 'Best Time Attack',
+      value: formatCount(stats.timeAttackBestScore),
+    },
+    { id: 'endless', title: 'Best Endless', value: formatCount(stats.endlessBestScore) },
+  ];
+}
+
+export function getProgressSummary(): ProgressSummary {
+  const themeRows = getThemeUnlockRows(loadPlayableThemeId());
+  const paddleRows = getPaddleUnlockRows(loadPaddleSkinId());
+  const ballRows = getBallUnlockRows(loadBallSkinId());
+  const achievementRows = getAchievementRows();
+  const themesUnlocked = countUnlocked(themeRows);
+  const paddlesUnlocked = countUnlocked(paddleRows);
+  const ballsUnlocked = countUnlocked(ballRows);
+  const achievementsComplete = countUnlocked(achievementRows);
+  const unlockedCount = themesUnlocked + paddlesUnlocked + ballsUnlocked + achievementsComplete;
+  const totalCount =
+    themeRows.length + paddleRows.length + ballRows.length + achievementRows.length;
+
+  return {
+    completionPercent: percent(unlockedCount, totalCount),
+    unlockedCount,
+    totalCount,
+    themesUnlocked,
+    themesTotal: themeRows.length,
+    paddlesUnlocked,
+    paddlesTotal: paddleRows.length,
+    ballsUnlocked,
+    ballsTotal: ballRows.length,
+    achievementsComplete,
+    achievementsTotal: achievementRows.length,
+  };
+}
+
+export function getProgressSummaryRows(): StatDisplayRow[] {
+  const summary = getProgressSummary();
+  return [
+    { id: 'completion', title: 'Completion', value: `${summary.completionPercent}%` },
+    {
+      id: 'unlocks',
+      title: 'Unlocks',
+      value: `${summary.unlockedCount} / ${summary.totalCount}`,
+    },
+    {
+      id: 'themes',
+      title: 'Themes',
+      value: `${summary.themesUnlocked} / ${summary.themesTotal}`,
+    },
+    {
+      id: 'paddles',
+      title: 'Paddle Skins',
+      value: `${summary.paddlesUnlocked} / ${summary.paddlesTotal}`,
+    },
+    {
+      id: 'balls',
+      title: 'Ball Skins',
+      value: `${summary.ballsUnlocked} / ${summary.ballsTotal}`,
+    },
+    {
+      id: 'achievements',
+      title: 'Achievements',
+      value: `${summary.achievementsComplete} / ${summary.achievementsTotal}`,
+    },
+  ];
 }

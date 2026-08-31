@@ -4,6 +4,7 @@ import { PreloadScene } from '@scenes/PreloadScene';
 import { ThemeSelectScene } from '@scenes/ThemeSelectScene';
 import { ModeSelectScene } from '@scenes/ModeSelectScene';
 import { UnlockablesScene } from '@scenes/UnlockablesScene';
+import { StatsScene } from '@scenes/StatsScene';
 import { MainScene } from '@scenes/MainScene';
 import { GameViewport } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
@@ -16,6 +17,7 @@ import { AudioManager } from '@systems/AudioManager';
  * pipeline (Boot -> Preload -> ThemeSelect -> ModeSelect -> Main). Individual games
  * plug additional scenes into this same array as they're built. DXB-16
  * also registers `UnlockablesScene`, opened from ThemeSelect / ModeSelect.
+ * DXB-17 also registers `StatsScene`, opened from the same two screens.
  *
  * ARC-01: `scale` is configured with Phaser.Scale.RESIZE so the canvas
  * always fills its parent container (`#app`, styled to 100% of the
@@ -41,7 +43,15 @@ const config: Phaser.Types.Core.GameConfig = {
     min: { width: 320, height: 240 },
     max: { width: 2560, height: 1440 },
   },
-  scene: [BootScene, PreloadScene, ThemeSelectScene, ModeSelectScene, UnlockablesScene, MainScene],
+  scene: [
+    BootScene,
+    PreloadScene,
+    ThemeSelectScene,
+    ModeSelectScene,
+    UnlockablesScene,
+    StatsScene,
+    MainScene,
+  ],
 };
 
 const game = new Phaser.Game(config);

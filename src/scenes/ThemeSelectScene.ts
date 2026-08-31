@@ -26,7 +26,8 @@ import { SelectMenu } from '@ui/SelectMenu';
  *
  * Returning here from ModeSelect (Esc) lets the player change theme
  * without starting a run. U opens the unlockables / achievements
- * catalog (DXB-16). Locked themes can be previewed but not confirmed.
+ * catalog (DXB-16). S opens statistics / leaderboards (DXB-17).
+ * Locked themes can be previewed but not confirmed.
  */
 export class ThemeSelectScene extends Phaser.Scene {
   private background!: ArcadeBackground;
@@ -90,6 +91,10 @@ export class ThemeSelectScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-U', () => {
       this.scene.start(SceneKeys.Unlockables, { from: SceneKeys.ThemeSelect });
+    });
+
+    this.input.keyboard?.on('keydown-S', () => {
+      this.scene.start(SceneKeys.Stats, { from: SceneKeys.ThemeSelect });
     });
   }
 
@@ -162,7 +167,7 @@ export class ThemeSelectScene extends Phaser.Scene {
       .text(
         viewportWidth / 2,
         viewportHeight * 0.9,
-        'Arrows to preview  ·  Space / Enter / click to choose  ·  U unlockables',
+        'Arrows to preview  ·  Space / Enter / click to choose  ·  U unlockables  ·  S stats',
         {
           fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
           fontSize: `${fontSize}px`,
