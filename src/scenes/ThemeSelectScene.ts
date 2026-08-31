@@ -17,6 +17,19 @@ import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { SelectMenu } from '@ui/SelectMenu';
 import { TextButton } from '@ui/TextButton';
 import { bindOptionalMenuShortcuts } from '@scenes/menuNavigation';
+import {
+  MENU_LAYOUT,
+  createMenuHint,
+  createMenuSubtitle,
+  createMenuTitle,
+  layoutMenuHint,
+  layoutMenuSubtitle,
+  layoutMenuTitle,
+  menuBackX,
+  menuFontSize,
+  menuHintY,
+  menuOriginY,
+} from '@ui/menuLayout';
 
 /**
  * scenes/ThemeSelectScene.ts
@@ -28,8 +41,8 @@ import { bindOptionalMenuShortcuts } from '@scenes/menuNavigation';
  *
  * Locked themes can be previewed but not confirmed. Optional G / S / U
  * shortcuts still open Garage / Stats / Achievements. DXB-19: the list
- * is `THEME_INFOS` (six themes); row height is compacted so every
- * option stays on-screen without a new navigation path.
+ * is `THEME_INFOS` (six themes). DXB-20: shared menu chrome so six rows
+ * stay on-screen with the same Back / hint language as every other menu.
  */
 export class ThemeSelectScene extends Phaser.Scene {
   private background!: ArcadeBackground;
@@ -53,15 +66,15 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(current.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, current.backdrop);
-    this.titleText = this.createTitle(snapshot.width, snapshot.height, current.hud);
-    this.subtitleText = this.createSubtitle(snapshot.width, snapshot.height, current.hud);
-    this.hintText = this.createHint(snapshot.width, snapshot.height, current.hud);
-    this.backButton = this.createBackButton(snapshot.width, snapshot.height, current.menu.color);
+    this.titleText = createMenuTitle(this, snapshot, current.hud.title);
+    this.subtitleText = createMenuSubtitle(this, snapshot, current.hud.subtitle, 'SELECT THEME');
+    this.hintText = createMenuHint(this, snapshot, current.hud.hint, 'Tap a theme to choose');
+    this.backButton = this.createBackButton(snapshot, current.menu.color);
     this.menu = new SelectMenu(
       this,
       snapshot.width,
       snapshot.height,
-      ThemeSelectScene.menuOriginY(snapshot.height),
+      menuOriginY(snapshot, true),
       THEME_INFOS.map((theme) => {
         const unlocked = isThemeUnlocked(theme.id);
         return {
@@ -79,7 +92,7 @@ export class ThemeSelectScene extends Phaser.Scene {
         highlightColor: current.menu.highlightColor,
         descriptionColor: current.menu.descriptionColor,
         mutedColor: current.menu.mutedColor,
-        titleFontSizeRatio: 0.03,
+        titleFontSizeRatio: 0.028,
         descriptionFontSizeRatio: 0.016,
         rowHeightRatio: 0.1,
       },
@@ -125,89 +138,18 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.backButton?.setColor(theme.menu.color, theme.menu.highlightColor);
   }
 
-  private createTitle(
-    viewportWidth: number,
-    viewportHeight: number,
-    hud: { title: string },
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.055);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.03, 'DX-BALL', {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color: hud.title,
-        fontStyle: 'bold',
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 8,
-      })
-      .setOrigin(0.5, 0)
-      .setShadow(1, 3, '#000000', 4, true, true)
-      .setDepth(20);
-  }
-
-  private createSubtitle(
-    viewportWidth: number,
-    viewportHeight: number,
-    hud: { subtitle: string },
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.026);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.095, 'SELECT THEME', {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color: hud.subtitle,
-        fontStyle: 'bold',
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5, 0)
-      .setShadow(1, 2, '#000000', 3, true, true)
-      .setDepth(20);
-  }
-
-  private createHint(
-    viewportWidth: number,
-    viewportHeight: number,
-    hud: { hint: string },
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.022);
-    return this.add
-      .text(
-        viewportWidth * 0.92,
-        viewportHeight * 0.955,
-        'Arrows to preview  ·  tap to choose',
-        {
-          fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-          fontSize: `${fontSize}px`,
-          color: hud.hint,
-          align: 'right',
-          stroke: '#0b1320',
-          strokeThickness: 3,
-        },
-      )
-      .setOrigin(1, 1)
-      .setShadow(1, 2, '#000000', 3, true, true)
-      .setDepth(20);
-  }
-
-  private createBackButton(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): TextButton {
+  private createBackButton(snapshot: ViewportSnapshot, color: string): TextButton {
     return new TextButton(
       this,
-      viewportWidth * 0.08,
-      viewportHeight * 0.955,
+      menuBackX(snapshot),
+      menuHintY(snapshot),
       '← Back',
       () => this.scene.start(SceneKeys.Hub),
       {
         color,
         originX: 0,
         originY: 1,
-        fontSize: Math.round(viewportHeight * 0.022),
+        fontSize: menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
         align: 'left',
       },
     );
@@ -217,26 +159,15 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background.resize(snapshot.width, snapshot.height);
 
-    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.03);
-    this.titleText.setFontSize(Math.round(snapshot.height * 0.055));
+    layoutMenuTitle(this.titleText, snapshot);
+    layoutMenuSubtitle(this.subtitleText, snapshot);
+    layoutMenuHint(this.hintText, snapshot);
 
-    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.095);
-    this.subtitleText.setFontSize(Math.round(snapshot.height * 0.026));
-
-    this.hintText.setPosition(snapshot.width * 0.92, snapshot.height * 0.955);
-    this.hintText.setFontSize(Math.round(snapshot.height * 0.018));
-
-    this.backButton?.setPosition(snapshot.width * 0.08, snapshot.height * 0.955);
-    this.backButton?.setFontSize(Math.round(snapshot.height * 0.022));
-
-    this.menu.resize(
-      snapshot.width,
-      snapshot.height,
-      ThemeSelectScene.menuOriginY(snapshot.height),
+    this.backButton?.setPosition(menuBackX(snapshot), menuHintY(snapshot));
+    this.backButton?.setFontSize(
+      menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
     );
-  }
 
-  private static menuOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.145;
+    this.menu.resize(snapshot.width, snapshot.height, menuOriginY(snapshot, true));
   }
 }

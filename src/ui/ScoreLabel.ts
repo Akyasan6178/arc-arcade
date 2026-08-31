@@ -30,6 +30,13 @@ import Phaser from 'phaser';
  */
 export type ScoreLabelAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
+export interface ScoreLabelInsets {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+}
+
 export interface ScoreLabelConfig {
   /** Text shown before the numeric value, e.g. `'Score: '`. */
   prefix?: string;
@@ -42,23 +49,27 @@ export interface ScoreLabelConfig {
   fontSizeRatio?: number;
   stroke?: string;
   strokeThickness?: number;
+  /** DXB-20: Notch / home-indicator insets from `GameViewport.safeArea`. */
+  insets?: ScoreLabelInsets;
 }
 
 const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
 const HUD_DEPTH = 20;
 
-const DEFAULT_CONFIG: Required<ScoreLabelConfig> = {
-  prefix: 'Score: ',
-  color: '#f8f9fa',
-  anchor: 'top-left',
-  marginRatio: 0.02,
-  fontSizeRatio: 0.036,
-  stroke: '#0b1320',
-  strokeThickness: 4,
-};
+const DEFAULT_CONFIG: Required<Omit<ScoreLabelConfig, 'insets'>> & Pick<ScoreLabelConfig, 'insets'> =
+  {
+    prefix: 'Score: ',
+    color: '#f8f9fa',
+    anchor: 'top-left',
+    marginRatio: 0.02,
+    fontSizeRatio: 0.036,
+    stroke: '#0b1320',
+    strokeThickness: 4,
+    insets: undefined,
+  };
 
 export class ScoreLabel extends Phaser.GameObjects.Text {
-  private readonly config: Required<ScoreLabelConfig>;
+  private readonly config: Required<Omit<ScoreLabelConfig, 'insets'>> & Pick<ScoreLabelConfig, 'insets'>;
   private value = 0;
   private suffix = '';
 
@@ -68,7 +79,8 @@ export class ScoreLabel extends Phaser.GameObjects.Text {
     viewportHeight: number,
     config: ScoreLabelConfig = {},
   ) {
-    const resolvedConfig: Required<ScoreLabelConfig> = { ...DEFAULT_CONFIG, ...config };
+    const resolvedConfig: Required<Omit<ScoreLabelConfig, 'insets'>> & Pick<ScoreLabelConfig, 'insets'> =
+      { ...DEFAULT_CONFIG, ...config };
     const fontSize = ScoreLabel.computeFontSize(viewportHeight, resolvedConfig);
     const { x, y } = ScoreLabel.computePosition(viewportWidth, viewportHeight, resolvedConfig);
 
@@ -106,7 +118,10 @@ export class ScoreLabel extends Phaser.GameObjects.Text {
   }
 
   /** Recomputes position and font size for a new viewport size (e.g. on resize). */
-  resize(viewportWidth: number, viewportHeight: number): void {
+  resize(viewportWidth: number, viewportHeight: number, insets?: ScoreLabelInsets): void {
+    if (insets) {
+      this.config.insets = insets;
+    }
     const { x, y } = ScoreLabel.computePosition(viewportWidth, viewportHeight, this.config);
     this.setPosition(x, y);
     this.setFontSize(ScoreLabel.computeFontSize(viewportHeight, this.config));
@@ -118,28 +133,34 @@ export class ScoreLabel extends Phaser.GameObjects.Text {
 
   private static computeFontSize(
     viewportHeight: number,
-    config: Required<ScoreLabelConfig>,
+    config: Required<Omit<ScoreLabelConfig, 'insets'>> & Pick<ScoreLabelConfig, 'insets'>,
   ): number {
-    return Math.round(viewportHeight * config.fontSizeRatio);
+    return Math.max(13, Math.round(viewportHeight * config.fontSizeRatio));
   }
 
   private static computePosition(
     viewportWidth: number,
     viewportHeight: number,
-    config: Required<ScoreLabelConfig>,
+    config: Required<Omit<ScoreLabelConfig, 'insets'>> & Pick<ScoreLabelConfig, 'insets'>,
   ): { x: number; y: number } {
     const margin = Math.min(viewportWidth, viewportHeight) * config.marginRatio;
     const isRight = config.anchor === 'top-right' || config.anchor === 'bottom-right';
     const isBottom = config.anchor === 'bottom-left' || config.anchor === 'bottom-right';
+    const insetLeft = config.insets?.left ?? 0;
+    const insetRight = config.insets?.right ?? 0;
+    const insetTop = config.insets?.top ?? 0;
+    const insetBottom = config.insets?.bottom ?? 0;
 
     return {
-      x: isRight ? viewportWidth - margin : margin,
-      y: isBottom ? viewportHeight - margin : margin,
+      x: isRight ? viewportWidth - margin - insetRight : margin + insetLeft,
+      y: isBottom ? viewportHeight - margin - insetBottom : margin + insetTop,
     };
   }
 
   /** Origin follows the anchored corner, so the label grows away from the edges it's pinned to. */
-  private static computeOrigin(config: Required<ScoreLabelConfig>): {
+  private static computeOrigin(
+    config: Required<Omit<ScoreLabelConfig, 'insets'>> & Pick<ScoreLabelConfig, 'insets'>,
+  ): {
     originX: number;
     originY: number;
   } {

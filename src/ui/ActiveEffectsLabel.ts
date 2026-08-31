@@ -113,7 +113,7 @@ export class ActiveEffectsLabel extends Phaser.GameObjects.Text {
     viewportHeight: number,
     config: Required<ActiveEffectsLabelConfig>,
   ): number {
-    return Math.round(viewportHeight * config.fontSizeRatio);
+    return Math.max(12, Math.round(viewportHeight * config.fontSizeRatio));
   }
 
   private static computePosition(

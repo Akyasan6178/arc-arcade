@@ -35,6 +35,21 @@ import { CollectionPreview } from '@ui/CollectionPreview';
 import { TabBar } from '@ui/TabBar';
 import { TextButton } from '@ui/TextButton';
 import { resolveMenuReturn } from '@scenes/menuNavigation';
+import {
+  MENU_LAYOUT,
+  createMenuHint,
+  createMenuSubtitle,
+  createMenuTitle,
+  layoutMenuHint,
+  layoutMenuSubtitle,
+  layoutMenuTitle,
+  menuBackX,
+  menuContentY,
+  menuFontSize,
+  menuHintX,
+  menuHintY,
+  menuTabY,
+} from '@ui/menuLayout';
 
 /**
  * scenes/GarageScene.ts
@@ -88,9 +103,9 @@ export class GarageScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
-    this.titleText = this.createTitle(snapshot.width, snapshot.height, theme.hud.title);
-    this.subtitleText = this.createSubtitle(snapshot.width, snapshot.height, theme.hud.subtitle);
-    this.hintText = this.createHint(snapshot.width, snapshot.height, theme.hud.hint);
+    this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
+    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'GARAGE');
+    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, '', 'center');
     this.preview = new CollectionPreview(
       this,
       snapshot.width,
@@ -101,7 +116,7 @@ export class GarageScene extends Phaser.Scene {
       this,
       snapshot.width,
       snapshot.height,
-      GarageScene.tabOriginY(snapshot.height),
+      menuTabY(snapshot),
       [
         { id: 'themes', title: 'Themes' },
         { id: 'paddles', title: 'Paddles' },
@@ -115,12 +130,8 @@ export class GarageScene extends Phaser.Scene {
         mutedColor: theme.menu.mutedColor,
       },
     );
-    this.backButton = this.createBackButton(snapshot.width, snapshot.height, theme.menu.color);
-    this.favoriteButton = this.createFavoriteButton(
-      snapshot.width,
-      snapshot.height,
-      theme.menu.highlightColor,
-    );
+    this.backButton = this.createBackButton(snapshot, theme.menu.color);
+    this.favoriteButton = this.createFavoriteButton(snapshot, theme.menu.highlightColor);
 
     this.showCatalog('themes');
 
@@ -189,7 +200,7 @@ export class GarageScene extends Phaser.Scene {
     this.clearCatalog();
     this.view = id;
 
-    const { width, height } = GameViewport.get().getSnapshot();
+    const snapshot = GameViewport.get().getSnapshot();
     const theme = getTheme(this.previewThemeId);
     const rows = this.catalogRows(id);
     const equippedIndex = Math.max(
@@ -202,9 +213,9 @@ export class GarageScene extends Phaser.Scene {
 
     this.catalogList = new ProgressList(
       this,
-      width,
-      height,
-      GarageScene.catalogOriginY(height),
+      snapshot.width,
+      snapshot.height,
+      menuContentY(snapshot),
       rows,
       (rowId) => this.equipFromCatalog(id, rowId),
       {
@@ -338,138 +349,59 @@ export class GarageScene extends Phaser.Scene {
     this.catalogList = undefined;
   }
 
-  private createBackButton(viewportWidth: number, viewportHeight: number, color: string): TextButton {
+  private createBackButton(snapshot: ViewportSnapshot, color: string): TextButton {
     return new TextButton(
       this,
-      viewportWidth * 0.08,
-      viewportHeight * 0.955,
+      menuBackX(snapshot),
+      menuHintY(snapshot),
       '← Back',
       () => this.goBack(),
       {
         color,
         originX: 0,
         originY: 1,
-        fontSize: Math.round(viewportHeight * 0.02),
+        fontSize: menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
         align: 'left',
       },
     );
   }
 
-  private createFavoriteButton(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): TextButton {
+  private createFavoriteButton(snapshot: ViewportSnapshot, color: string): TextButton {
     return new TextButton(
       this,
-      viewportWidth * 0.92,
-      viewportHeight * 0.955,
+      menuHintX(snapshot),
+      menuHintY(snapshot),
       '★ Favorite',
       () => this.handleFavorite(),
       {
         color,
         originX: 1,
         originY: 1,
-        fontSize: Math.round(viewportHeight * 0.02),
+        fontSize: menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
         align: 'right',
       },
     );
-  }
-
-  private createTitle(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.06);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.035, 'DX-BALL', {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color,
-        fontStyle: 'bold',
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 8,
-      })
-      .setOrigin(0.5, 0)
-      .setShadow(1, 3, '#000000', 4, true, true)
-      .setDepth(20);
-  }
-
-  private createSubtitle(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.022);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.105, 'GARAGE', {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color,
-        fontStyle: 'bold',
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5, 0)
-      .setShadow(1, 2, '#000000', 3, true, true)
-      .setDepth(20);
-  }
-
-  private createHint(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.016);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.90, '', {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color,
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5, 1)
-      .setShadow(1, 2, '#000000', 3, true, true)
-      .setDepth(20);
   }
 
   private handleViewportChange(snapshot: ViewportSnapshot): void {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background.resize(snapshot.width, snapshot.height);
 
-    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.035);
-    this.titleText.setFontSize(Math.round(snapshot.height * 0.06));
+    layoutMenuTitle(this.titleText, snapshot);
+    layoutMenuSubtitle(this.subtitleText, snapshot);
+    layoutMenuHint(this.hintText, snapshot, 'center');
 
-    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.105);
-    this.subtitleText.setFontSize(Math.round(snapshot.height * 0.022));
-
-    this.hintText.setPosition(snapshot.width / 2, snapshot.height * 0.90);
-    this.hintText.setFontSize(Math.round(snapshot.height * 0.016));
-
-    this.tabBar?.resize(snapshot.width, snapshot.height, GarageScene.tabOriginY(snapshot.height));
-    this.backButton?.setPosition(snapshot.width * 0.08, snapshot.height * 0.955);
-    this.backButton?.setFontSize(Math.round(snapshot.height * 0.02));
-    this.favoriteButton?.setPosition(snapshot.width * 0.92, snapshot.height * 0.955);
-    this.favoriteButton?.setFontSize(Math.round(snapshot.height * 0.02));
-    this.preview?.resize(snapshot.width, snapshot.height, GarageScene.previewOriginY(snapshot.height));
-    this.catalogList?.resize(
-      snapshot.width,
-      snapshot.height,
-      GarageScene.catalogOriginY(snapshot.height),
+    this.tabBar?.resize(snapshot.width, snapshot.height, menuTabY(snapshot));
+    this.backButton?.setPosition(menuBackX(snapshot), menuHintY(snapshot));
+    this.backButton?.setFontSize(
+      menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
     );
-  }
-
-  private static tabOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.155;
-  }
-
-  private static catalogOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.21;
+    this.favoriteButton?.setPosition(menuHintX(snapshot), menuHintY(snapshot));
+    this.favoriteButton?.setFontSize(
+      menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
+    );
+    this.preview?.resize(snapshot.width, snapshot.height, GarageScene.previewOriginY(snapshot.height));
+    this.catalogList?.resize(snapshot.width, snapshot.height, menuContentY(snapshot));
   }
 
   private static previewOriginY(viewportHeight: number): number {

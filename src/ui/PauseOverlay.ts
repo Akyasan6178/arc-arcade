@@ -36,7 +36,7 @@ const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
 const DEFAULT_OPTIONS: readonly SelectMenuOption<PauseOverlayAction>[] = [
   { id: 'resume', title: 'Resume', description: 'Back to the run' },
   { id: 'restart', title: 'Restart Run', description: 'Same mode, same theme' },
-  { id: 'mode-select', title: 'Return To Mode Selection', description: 'Leave this run' },
+  { id: 'mode-select', title: 'Leave Run', description: 'Return to mode select' },
 ];
 
 const DEFAULT_COLORS: PauseOverlayColors = {
@@ -96,7 +96,7 @@ export class PauseOverlay {
       .setVisible(false);
 
     this.hint = scene.add
-      .text(viewportWidth / 2, viewportHeight * 0.86, 'Esc to resume  ·  Arrows to move  ·  Space to confirm', {
+      .text(viewportWidth / 2, viewportHeight * 0.86, 'Tap a row to choose  ·  Esc resumes', {
         fontFamily: HUD_FONT_FAMILY,
         fontSize: `${Math.round(viewportHeight * 0.02)}px`,
         color: this.colors.body,
@@ -165,8 +165,8 @@ export class PauseOverlay {
     this.viewportHeight = viewportHeight;
     this.dim.setPosition(viewportWidth / 2, viewportHeight / 2);
     this.dim.setSize(viewportWidth, viewportHeight);
-    this.title.setFontSize(Math.round(viewportHeight * 0.07));
-    this.hint.setFontSize(Math.round(viewportHeight * 0.02));
+    this.title.setFontSize(Math.max(22, Math.round(viewportHeight * 0.06)));
+    this.hint.setFontSize(Math.max(12, Math.round(viewportHeight * 0.02)));
     if (this.visible) {
       this.layout();
       this.menu?.resize(viewportWidth, viewportHeight, PauseOverlay.menuOriginY(viewportHeight));
@@ -189,6 +189,7 @@ export class PauseOverlay {
     this.accent.setPosition(width / 2, height * 0.3);
     this.accent.setSize(width * 0.36, Math.max(3, height * 0.006));
     this.hint.setPosition(width / 2, height * 0.86);
+    this.hint.setWordWrapWidth(width * 0.62);
     this.redrawPanel();
   }
 

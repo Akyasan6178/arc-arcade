@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { fittedRowHeight } from '@ui/menuLayout';
 
 /**
  * ui/SelectMenu.ts
@@ -225,9 +226,18 @@ export class SelectMenu<T extends string = string> {
   }
 
   private layout(): void {
-    const titleSize = Math.round(this.viewportHeight * this.config.titleFontSizeRatio);
-    const descriptionSize = Math.round(this.viewportHeight * this.config.descriptionFontSizeRatio);
-    const rowHeight = this.viewportHeight * this.config.rowHeightRatio;
+    const titleSize = Math.max(14, Math.round(this.viewportHeight * this.config.titleFontSizeRatio));
+    const descriptionSize = Math.max(
+      11,
+      Math.round(this.viewportHeight * this.config.descriptionFontSizeRatio),
+    );
+    const rowHeight = fittedRowHeight(
+      this.viewportHeight,
+      this.originY,
+      this.rows.length,
+      this.config.rowHeightRatio,
+      this.viewportHeight * 0.9,
+    );
     const wrapWidth = this.viewportWidth * 0.72;
 
     for (let i = 0; i < this.rows.length; i++) {

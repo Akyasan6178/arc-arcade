@@ -7,6 +7,15 @@ import { loadPlayableThemeId } from '@entities/dx-ball/Progress';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { SelectMenu } from '@ui/SelectMenu';
 import { bindOptionalMenuShortcuts } from '@scenes/menuNavigation';
+import {
+  createMenuHint,
+  createMenuSubtitle,
+  createMenuTitle,
+  layoutMenuHint,
+  layoutMenuSubtitle,
+  layoutMenuTitle,
+  menuOriginY,
+} from '@ui/menuLayout';
 
 /**
  * scenes/HubScene.ts
@@ -15,6 +24,8 @@ import { bindOptionalMenuShortcuts } from '@scenes/menuNavigation';
  * starts on a tappable Play / Garage / Statistics / Achievements /
  * Settings list instead of keyboard-only side screens. Owns no gameplay.
  * Optional G / S / U shortcuts still open Garage / Stats / Achievements.
+ *
+ * DXB-20: shared menu chrome (title / subtitle / hint spacing and type).
  */
 
 type HubId = 'play' | 'garage' | 'stats' | 'achievements' | 'settings';
@@ -39,14 +50,20 @@ export class HubScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
-    this.titleText = this.createTitle(snapshot.width, snapshot.height, theme.hud.title);
-    this.subtitleText = this.createSubtitle(snapshot.width, snapshot.height, theme.hud.subtitle);
-    this.hintText = this.createHint(snapshot.width, snapshot.height, theme.hud.hint);
+    this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
+    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'MAIN MENU');
+    this.hintText = createMenuHint(
+      this,
+      snapshot,
+      theme.hud.hint,
+      'Tap a row to open',
+      'center',
+    );
     this.menu = new SelectMenu(
       this,
       snapshot.width,
       snapshot.height,
-      HubScene.menuOriginY(snapshot.height),
+      menuOriginY(snapshot),
       [
         {
           id: 'play',
@@ -71,7 +88,7 @@ export class HubScene extends Phaser.Scene {
         {
           id: 'settings',
           title: 'Settings',
-          description: 'Audio mute',
+          description: 'Sound on or off',
         },
       ],
       (id) => this.openHub(id),
@@ -120,90 +137,13 @@ export class HubScene extends Phaser.Scene {
     }
   }
 
-  private createTitle(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.075);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.05, 'DX-BALL', {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color,
-        fontStyle: 'bold',
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 8,
-      })
-      .setOrigin(0.5, 0)
-      .setShadow(1, 3, '#000000', 4, true, true)
-      .setDepth(20);
-  }
-
-  private createSubtitle(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.028);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.14, 'MAIN MENU', {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color,
-        fontStyle: 'bold',
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5, 0)
-      .setShadow(1, 2, '#000000', 3, true, true)
-      .setDepth(20);
-  }
-
-  private createHint(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.018);
-    return this.add
-      .text(
-        viewportWidth / 2,
-        viewportHeight * 0.955,
-        'Tap a button to open  ·  G garage  ·  S stats  ·  U achievements',
-        {
-          fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-          fontSize: `${fontSize}px`,
-          color,
-          align: 'center',
-          stroke: '#0b1320',
-          strokeThickness: 3,
-        },
-      )
-      .setOrigin(0.5, 1)
-      .setShadow(1, 2, '#000000', 3, true, true)
-      .setDepth(20);
-  }
-
   private handleViewportChange(snapshot: ViewportSnapshot): void {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background.resize(snapshot.width, snapshot.height);
 
-    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.05);
-    this.titleText.setFontSize(Math.round(snapshot.height * 0.075));
-
-    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.14);
-    this.subtitleText.setFontSize(Math.round(snapshot.height * 0.028));
-
-    this.hintText.setPosition(snapshot.width / 2, snapshot.height * 0.955);
-    this.hintText.setFontSize(Math.round(snapshot.height * 0.018));
-
-    this.menu.resize(snapshot.width, snapshot.height, HubScene.menuOriginY(snapshot.height));
-  }
-
-  private static menuOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.22;
+    layoutMenuTitle(this.titleText, snapshot);
+    layoutMenuSubtitle(this.subtitleText, snapshot);
+    layoutMenuHint(this.hintText, snapshot, 'center');
+    this.menu.resize(snapshot.width, snapshot.height, menuOriginY(snapshot));
   }
 }

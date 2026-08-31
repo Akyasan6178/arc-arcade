@@ -170,9 +170,9 @@ export class TabBar<T extends string = string> {
       return;
     }
 
-    const fontSize = Math.round(this.viewportHeight * this.config.fontSizeRatio);
-    const startX = this.viewportWidth * 0.12;
-    const endX = this.viewportWidth * 0.88;
+    const fontSize = Math.max(12, Math.round(this.viewportHeight * this.config.fontSizeRatio));
+    const startX = this.viewportWidth * 0.1;
+    const endX = this.viewportWidth * 0.9;
     const span = count === 1 ? 0 : (endX - startX) / (count - 1);
 
     for (let i = 0; i < count; i++) {

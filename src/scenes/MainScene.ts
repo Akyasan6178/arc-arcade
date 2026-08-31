@@ -11,6 +11,7 @@ import type { PowerupType } from '@entities/dx-ball/Powerup';
 import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 import {
   TIME_ATTACK_DURATION_MS,
+  ENDLESS_SPEED_RAMP_CAP,
   computeEndlessSpeedMultiplier,
   formatTimeAttackClock,
   getGameModeInfo,
@@ -24,6 +25,11 @@ import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { ModeLabel } from '@ui/ModeLabel';
 import { PauseOverlay, type PauseOverlayAction } from '@ui/PauseOverlay';
 import { ResultOverlay } from '@ui/ResultOverlay';
+import { TextButton } from '@ui/TextButton';
+import {
+  MENU_LAYOUT,
+  menuFontSize,
+} from '@ui/menuLayout';
 import { getTheme, type ThemeDefinition } from '@entities/dx-ball/Theme';
 import type { BrickGridConfig } from '@entities/dx-ball/BrickGrid';
 import {
@@ -41,6 +47,7 @@ import {
   recordMultiBallActivation,
   recordPlayTime,
   recordPowerupCollected,
+  flushProgressWrites,
 } from '@entities/dx-ball/Progress';
 import { submitScore } from '@entities/dx-ball/Leaderboards';
 import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins';
@@ -217,6 +224,7 @@ export class MainScene extends Phaser.Scene {
   private modeLabel!: ModeLabel;
   private pauseOverlay!: PauseOverlay;
   private resultOverlay!: ResultOverlay;
+  private pauseButton?: TextButton;
   private background!: ArcadeBackground;
   private theme!: ThemeDefinition;
   private bestScore = 0;
@@ -238,6 +246,8 @@ export class MainScene extends Phaser.Scene {
   private unflushedPlayTimeMs = 0;
   /** DXB-17: True once this run's score has been offered to the local board. */
   private runSubmitted = false;
+  /** DXB-20: Last Endless multiplier applied, so live balls skip redundant writes. */
+  private lastEndlessMultiplier = 1;
   private unsubscribeViewport?: () => void;
   private won = false;
   private lost = false;
@@ -274,6 +284,7 @@ export class MainScene extends Phaser.Scene {
     this.runElapsedMs = 0;
     this.unflushedPlayTimeMs = 0;
     this.runSubmitted = false;
+    this.lastEndlessMultiplier = 1;
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
     this.theme = getTheme(loadPlayableThemeId());
     recordGamePlayed();
@@ -314,12 +325,14 @@ export class MainScene extends Phaser.Scene {
       color: this.theme.hud.score,
       stroke: this.theme.hud.stroke,
       anchor: 'top-left',
+      insets: snapshot.safeArea,
     });
     this.bestScoreLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
       prefix: 'Best: ',
       color: this.theme.hud.best,
       stroke: this.theme.hud.stroke,
       anchor: 'top-right',
+      insets: snapshot.safeArea,
     });
     this.bestScoreLabel.setValue(this.bestScore);
     this.livesLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
@@ -327,6 +340,7 @@ export class MainScene extends Phaser.Scene {
       color: this.theme.hud.lives,
       stroke: this.theme.hud.stroke,
       anchor: 'bottom-left',
+      insets: snapshot.safeArea,
     });
     this.livesLabel.setValue(this.lives);
     this.levelLabel = new ScoreLabel(this, snapshot.width, snapshot.height, {
@@ -335,6 +349,7 @@ export class MainScene extends Phaser.Scene {
       stroke: this.theme.hud.stroke,
       anchor: 'bottom-right',
       fontSizeRatio: 0.032,
+      insets: snapshot.safeArea,
     });
     this.refreshLevelLabel();
     this.modeLabel = new ModeLabel(this, snapshot.width, snapshot.height, {
@@ -355,6 +370,7 @@ export class MainScene extends Phaser.Scene {
     });
     this.resultOverlay = new ResultOverlay(this, snapshot.width, snapshot.height);
     this.resultOverlay.applyTheme(this.theme.overlay);
+    this.pauseButton = this.createPauseButton(snapshot);
 
     // The pattern every future game should follow: subscribe once, then
     // reposition/rescale whatever depends on viewport size whenever it
@@ -367,7 +383,10 @@ export class MainScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribeViewport?.();
       this.flushPlayTime();
+      flushProgressWrites();
       this.submitRunIfNeeded();
+      this.pauseButton?.destroy();
+      this.pauseButton = undefined;
     });
 
     // DXB-10: global audio mute toggle. A keybinding rather than a HUD
@@ -636,8 +655,13 @@ export class MainScene extends Phaser.Scene {
     }
 
     this.runElapsedMs += deltaMs;
+    const next = computeEndlessSpeedMultiplier(this.runElapsedMs);
+    if (Math.abs(next - this.lastEndlessMultiplier) < 0.005 && next < ENDLESS_SPEED_RAMP_CAP) {
+      return;
+    }
+    this.lastEndlessMultiplier = next;
     for (const ball of this.balls) {
-      this.applyEndlessSpeed(ball);
+      ball.setProgressionMultiplier(next);
     }
   }
 
@@ -801,17 +825,21 @@ export class MainScene extends Phaser.Scene {
     this.transitioning = true;
 
     const clearedLevelNumber = this.currentLevelIndex + 1;
-    this.resultOverlay.show({
-      tone: 'info',
-      title: `LEVEL ${clearedLevelNumber} CLEARED`,
-      body: `Get ready for Level ${clearedLevelNumber + 1}\nPress Space to continue`,
-    });
+    this.resultOverlay.show(
+      {
+        tone: 'info',
+        title: `LEVEL ${clearedLevelNumber} CLEARED`,
+        body: `Get ready for Level ${clearedLevelNumber + 1}`,
+        hint: 'Tap to continue',
+      },
+      () => this.continueAfterLevelClear(),
+    );
 
     this.input.keyboard?.once('keydown-SPACE', () => this.continueAfterLevelClear());
   }
 
   private continueAfterLevelClear(): void {
-    if (this.paused || this.timedOut || this.won || this.lost) {
+    if (this.paused || this.timedOut || this.won || this.lost || !this.transitioning) {
       return;
     }
 
@@ -873,11 +901,15 @@ export class MainScene extends Phaser.Scene {
     this.submitRunIfNeeded();
 
     const finalScore = this.brickGrid.getScore();
-    this.resultOverlay.show({
-      tone: 'victory',
-      title: 'YOU WIN',
-      body: `All ${LEVELS.length} levels cleared\nScore: ${finalScore}\nPress Space to play again\nPress Esc for menu`,
-    });
+    this.resultOverlay.show(
+      {
+        tone: 'victory',
+        title: 'YOU WIN',
+        body: `All ${LEVELS.length} levels cleared\nScore: ${finalScore}`,
+        hint: 'Tap to play again  ·  Pause for menu',
+      },
+      () => this.restartRunFromOverlay(),
+    );
 
     this.bindEndOfRunInput();
   }
@@ -886,8 +918,7 @@ export class MainScene extends Phaser.Scene {
    * DXB-07: Freezes gameplay (see the `lost` guard at the top of
    * `update()`) once lives reach zero, and shows a one-shot game-over
    * message with a restart prompt — the losing mirror of `handleWin()`,
-   * reusing the exact same one-shot-restart mechanics and message
-   * layout (`createCenteredMessage()`), just different text.
+   * reusing the same one-shot-restart mechanics and `ResultOverlay`.
    */
   private handleGameOver(): void {
     this.lost = true;
@@ -895,11 +926,15 @@ export class MainScene extends Phaser.Scene {
     this.submitRunIfNeeded();
 
     const finalScore = this.brickGrid.getScore();
-    this.resultOverlay.show({
-      tone: 'defeat',
-      title: 'GAME OVER',
-      body: `Score: ${finalScore}\nPress Space to try again\nPress Esc for menu`,
-    });
+    this.resultOverlay.show(
+      {
+        tone: 'defeat',
+        title: 'GAME OVER',
+        body: `Score: ${finalScore}`,
+        hint: 'Tap to try again  ·  Pause for menu',
+      },
+      () => this.restartRunFromOverlay(),
+    );
 
     this.bindEndOfRunInput();
   }
@@ -921,28 +956,67 @@ export class MainScene extends Phaser.Scene {
     this.submitRunIfNeeded();
 
     const finalScore = this.brickGrid.getScore();
-    this.resultOverlay.show({
-      tone: 'defeat',
-      title: "TIME'S UP",
-      body: `Score: ${finalScore}\nPress Space to play again\nPress Esc for menu`,
-    });
+    this.resultOverlay.show(
+      {
+        tone: 'defeat',
+        title: "TIME'S UP",
+        body: `Score: ${finalScore}`,
+        hint: 'Tap to play again  ·  Pause for menu',
+      },
+      () => this.restartRunFromOverlay(),
+    );
 
     this.bindEndOfRunInput();
   }
 
-  /** Space replays the same mode. Esc is the global pause menu (see `togglePauseMenu`). */
+  private restartRunFromOverlay(): void {
+    if (this.paused || !(this.won || this.lost || this.timedOut)) {
+      return;
+    }
+    this.scene.restart({ mode: this.mode });
+  }
+
+  /** Space replays the same mode. Esc / Pause open the pause menu. */
   private bindEndOfRunInput(): void {
     this.input.keyboard?.off('keydown-SPACE');
     this.input.keyboard?.once('keydown-SPACE', () => {
-      if (this.paused) {
-        return;
-      }
-      this.scene.restart({ mode: this.mode });
+      this.restartRunFromOverlay();
     });
   }
 
   private refreshLevelLabel(): void {
-    this.levelLabel.setValue(this.currentLevelIndex + 1, ` / ${LEVELS.length}`);
+    const suffix = this.mode === 'classic' ? ` / ${LEVELS.length}` : '';
+    this.levelLabel.setValue(this.currentLevelIndex + 1, suffix);
+  }
+
+  private createPauseButton(snapshot: ViewportSnapshot): TextButton {
+    const fontSize = menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx);
+    const margin = Math.min(snapshot.width, snapshot.height) * 0.02;
+    return new TextButton(
+      this,
+      snapshot.width - margin - snapshot.safeArea.right,
+      margin + snapshot.safeArea.top + fontSize * 1.75,
+      'Pause',
+      () => this.togglePauseMenu(),
+      {
+        color: this.theme.menu.highlightColor,
+        originX: 1,
+        originY: 0,
+        fontSize,
+        align: 'right',
+        depth: 35,
+      },
+    );
+  }
+
+  private layoutPauseButton(snapshot: ViewportSnapshot): void {
+    const fontSize = menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx);
+    const margin = Math.min(snapshot.width, snapshot.height) * 0.02;
+    this.pauseButton?.setPosition(
+      snapshot.width - margin - snapshot.safeArea.right,
+      margin + snapshot.safeArea.top + fontSize * 1.75,
+    );
+    this.pauseButton?.setFontSize(fontSize);
   }
 
   /**
@@ -1023,13 +1097,14 @@ export class MainScene extends Phaser.Scene {
     }
     this.brickGrid.resize(snapshot.width, snapshot.height);
     this.powerupManager.resize(snapshot.width, snapshot.height);
-    this.scoreLabel.resize(snapshot.width, snapshot.height);
-    this.bestScoreLabel.resize(snapshot.width, snapshot.height);
-    this.livesLabel.resize(snapshot.width, snapshot.height);
-    this.levelLabel.resize(snapshot.width, snapshot.height);
+    this.scoreLabel.resize(snapshot.width, snapshot.height, snapshot.safeArea);
+    this.bestScoreLabel.resize(snapshot.width, snapshot.height, snapshot.safeArea);
+    this.livesLabel.resize(snapshot.width, snapshot.height, snapshot.safeArea);
+    this.levelLabel.resize(snapshot.width, snapshot.height, snapshot.safeArea);
     this.modeLabel.resize(snapshot.width, snapshot.height);
     this.effectsLabel.resize(snapshot.width, snapshot.height);
     this.pauseOverlay.resize(snapshot.width, snapshot.height);
     this.resultOverlay.resize(snapshot.width, snapshot.height);
+    this.layoutPauseButton(snapshot);
   }
 }

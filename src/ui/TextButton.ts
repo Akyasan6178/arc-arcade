@@ -109,7 +109,7 @@ export class TextButton {
 
   setFontSize(size: number): void {
     if (!this.destroyed) {
-      this.text.setFontSize(size);
+      this.text.setFontSize(Math.max(14, size));
     }
   }
 

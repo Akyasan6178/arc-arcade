@@ -31,6 +31,10 @@ import type { GameModeId } from '@entities/dx-ball/GameMode';
  * saves without `classicCompletions` seed it from `classicCompleted`
  * (true → 1). Unlocks stay derived from stats. Collection percents
  * count rows, they are not hardcoded.
+ *
+ * DXB-20: coalesces high-frequency localStorage writes (score / bricks /
+ * metal / fire) to one persist per animation frame, and flushes on
+ * pagehide / visibility hidden so a mid-run refresh still keeps progress.
  */
 
 export type PaddleSkinId =
@@ -229,11 +233,50 @@ function loadStats(): DxBallStats {
     JsonStore.set(PROGRESS_STORAGE_KEY, cached);
   }
 
+  bindProgressFlush();
   return cached;
 }
 
+let persistScheduled = false;
+let persistBound = false;
+
+function bindProgressFlush(): void {
+  if (persistBound || typeof window === 'undefined') {
+    return;
+  }
+  persistBound = true;
+  window.addEventListener('pagehide', () => flushProgressWrites());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushProgressWrites();
+    }
+  });
+}
+
 function saveStats(): void {
-  JsonStore.set(PROGRESS_STORAGE_KEY, loadStats());
+  bindProgressFlush();
+  if (persistScheduled) {
+    return;
+  }
+  persistScheduled = true;
+  const schedule =
+    typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (cb: FrameRequestCallback) => window.setTimeout(cb, 16);
+  schedule(() => {
+    persistScheduled = false;
+    if (cached) {
+      JsonStore.set(PROGRESS_STORAGE_KEY, cached);
+    }
+  });
+}
+
+/** DXB-20: Flush coalesced progress writes (shutdown / pagehide). */
+export function flushProgressWrites(): void {
+  persistScheduled = false;
+  if (cached) {
+    JsonStore.set(PROGRESS_STORAGE_KEY, cached);
+  }
 }
 
 function percent(current: number, target: number): number {
@@ -588,10 +631,6 @@ export function recordClassicComplete(perfect: boolean): void {
     stats.classicPerfect = true;
   }
   saveStats();
-}
-
-export function recordTimeAttackScore(score: number): void {
-  recordModeScore('time-attack', score);
 }
 
 /** `levelNumber` is 1-based (`currentLevelIndex + 1`), including Endless wrap. */
@@ -1056,32 +1095,6 @@ export function getCollectionCompletion(): CollectionCompletion {
     unlockedCount,
     totalCount,
   };
-}
-
-export function getCollectionCompletionRows(): StatDisplayRow[] {
-  const collection = getCollectionCompletion();
-  return [
-    {
-      id: 'themes',
-      title: 'Theme Collection',
-      value: `${collection.themesPercent}%  (${collection.themesUnlocked} / ${collection.themesTotal})`,
-    },
-    {
-      id: 'paddles',
-      title: 'Paddle Collection',
-      value: `${collection.paddlesPercent}%  (${collection.paddlesUnlocked} / ${collection.paddlesTotal})`,
-    },
-    {
-      id: 'balls',
-      title: 'Ball Collection',
-      value: `${collection.ballsPercent}%  (${collection.ballsUnlocked} / ${collection.ballsTotal})`,
-    },
-    {
-      id: 'total',
-      title: 'Total Collection',
-      value: `${collection.totalPercent}%  (${collection.unlockedCount} / ${collection.totalCount})`,
-    },
-  ];
 }
 
 export function getProgressSummaryRows(): StatDisplayRow[] {

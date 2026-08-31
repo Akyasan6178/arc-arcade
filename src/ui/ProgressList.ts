@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { ProgressRow } from '@entities/dx-ball/Progress';
+import { fittedRowHeight } from '@ui/menuLayout';
 
 /**
  * ui/ProgressList.ts
@@ -234,9 +235,18 @@ export class ProgressList {
   }
 
   private layout(): void {
-    const titleSize = Math.round(this.viewportHeight * this.config.titleFontSizeRatio);
-    const descriptionSize = Math.round(this.viewportHeight * this.config.descriptionFontSizeRatio);
-    const rowHeight = this.viewportHeight * this.config.rowHeightRatio;
+    const titleSize = Math.max(12, Math.round(this.viewportHeight * this.config.titleFontSizeRatio));
+    const descriptionSize = Math.max(
+      10,
+      Math.round(this.viewportHeight * this.config.descriptionFontSizeRatio),
+    );
+    const rowHeight = fittedRowHeight(
+      this.viewportHeight,
+      this.originY,
+      this.visualRows.length,
+      this.config.rowHeightRatio,
+      this.viewportHeight * 0.9,
+    );
     const wrapWidth = this.viewportWidth * 0.84;
 
     for (let i = 0; i < this.visualRows.length; i++) {

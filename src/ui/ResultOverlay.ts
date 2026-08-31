@@ -27,6 +27,8 @@ export interface ResultOverlayContent {
   title: string;
   body: string;
   tone?: ResultOverlayTone;
+  /** DXB-20: Shown under the body. Pointer-first; Space still works. */
+  hint?: string;
 }
 
 const OVERLAY_DEPTH = 30;
@@ -51,11 +53,18 @@ export class ResultOverlay {
   private readonly accent: Phaser.GameObjects.Rectangle;
   private readonly title: Phaser.GameObjects.Text;
   private readonly body: Phaser.GameObjects.Text;
+  private readonly hint: Phaser.GameObjects.Text;
   private colors: ResultOverlayColors = { ...DEFAULT_COLORS };
   private viewportWidth = 0;
   private viewportHeight = 0;
   private visible = false;
   private tone: ResultOverlayTone = 'info';
+  private onContinue?: () => void;
+  private readonly handlePointerUp = (): void => {
+    if (this.visible) {
+      this.onContinue?.();
+    }
+  };
 
   constructor(scene: Phaser.Scene, viewportWidth: number, viewportHeight: number) {
     this.viewportWidth = viewportWidth;
@@ -91,17 +100,40 @@ export class ResultOverlay {
     this.body = scene.add
       .text(viewportWidth / 2, viewportHeight * 0.38, '', {
         fontFamily: HUD_FONT_FAMILY,
-        fontSize: `${Math.round(viewportHeight * 0.032)}px`,
+        fontSize: `${Math.max(14, Math.round(viewportHeight * 0.028))}px`,
         color: this.colors.body,
         fontStyle: 'bold',
         align: 'center',
         stroke: '#0b1320',
         strokeThickness: 5,
+        wordWrap: { width: viewportWidth * 0.58 },
       })
       .setOrigin(0.5, 0)
       .setShadow(1, 2, '#000000', 3, true, true)
       .setDepth(OVERLAY_DEPTH + 2)
       .setVisible(false);
+
+    this.hint = scene.add
+      .text(viewportWidth / 2, viewportHeight * 0.58, '', {
+        fontFamily: HUD_FONT_FAMILY,
+        fontSize: `${Math.max(12, Math.round(viewportHeight * 0.02))}px`,
+        color: this.colors.body,
+        align: 'center',
+        stroke: '#0b1320',
+        strokeThickness: 3,
+        wordWrap: { width: viewportWidth * 0.58 },
+      })
+      .setOrigin(0.5, 0)
+      .setShadow(1, 2, '#000000', 3, true, true)
+      .setDepth(OVERLAY_DEPTH + 2)
+      .setVisible(false);
+
+    this.title.setInteractive({ useHandCursor: true });
+    this.body.setInteractive({ useHandCursor: true });
+    this.hint.setInteractive({ useHandCursor: true });
+    this.title.on('pointerup', this.handlePointerUp);
+    this.body.on('pointerup', this.handlePointerUp);
+    this.hint.on('pointerup', this.handlePointerUp);
   }
 
   isVisible(): boolean {
@@ -113,33 +145,46 @@ export class ResultOverlay {
     this.dim.setFillStyle(this.colors.dim, this.colors.dimAlpha);
     this.accent.setFillStyle(this.colors.panelStroke, 1);
     this.body.setColor(this.colors.body);
+    this.hint.setColor(this.colors.body);
     this.title.setColor(this.titleColor());
     if (this.visible) {
       this.redrawPanel();
     }
   }
 
-  show(content: ResultOverlayContent): void {
+  show(content: ResultOverlayContent, onContinue?: () => void): void {
     this.tone = content.tone ?? 'info';
     this.title.setText(content.title);
     this.title.setColor(this.titleColor());
     this.body.setText(content.body);
+    this.hint.setText(content.hint ?? 'Tap to continue');
+    this.onContinue = onContinue;
     this.visible = true;
     this.dim.setVisible(true);
+    this.dim.setInteractive();
+    this.dim.off('pointerup', this.handlePointerUp);
+    if (onContinue) {
+      this.dim.on('pointerup', this.handlePointerUp);
+    }
     this.panel.setVisible(true);
     this.accent.setVisible(true);
     this.title.setVisible(true);
     this.body.setVisible(true);
+    this.hint.setVisible(true);
     this.layout();
   }
 
   hide(): void {
     this.visible = false;
+    this.onContinue = undefined;
+    this.dim.off('pointerup', this.handlePointerUp);
+    this.dim.disableInteractive();
     this.dim.setVisible(false);
     this.panel.setVisible(false);
     this.accent.setVisible(false);
     this.title.setVisible(false);
     this.body.setVisible(false);
+    this.hint.setVisible(false);
   }
 
   resize(viewportWidth: number, viewportHeight: number): void {
@@ -147,8 +192,9 @@ export class ResultOverlay {
     this.viewportHeight = viewportHeight;
     this.dim.setPosition(viewportWidth / 2, viewportHeight / 2);
     this.dim.setSize(viewportWidth, viewportHeight);
-    this.title.setFontSize(Math.round(viewportHeight * 0.07));
-    this.body.setFontSize(Math.round(viewportHeight * 0.032));
+    this.title.setFontSize(Math.max(22, Math.round(viewportHeight * 0.06)));
+    this.body.setFontSize(Math.max(14, Math.round(viewportHeight * 0.028)));
+    this.hint.setFontSize(Math.max(12, Math.round(viewportHeight * 0.02)));
     if (this.visible) {
       this.layout();
     }
@@ -161,6 +207,7 @@ export class ResultOverlay {
     this.accent.destroy();
     this.title.destroy();
     this.body.destroy();
+    this.hint.destroy();
   }
 
   private titleColor(): string {
@@ -180,6 +227,9 @@ export class ResultOverlay {
     this.accent.setPosition(width / 2, height * 0.335);
     this.accent.setSize(width * 0.42, Math.max(3, height * 0.006));
     this.body.setPosition(width / 2, height * 0.38);
+    this.body.setWordWrapWidth(width * 0.58);
+    this.hint.setPosition(width / 2, height * 0.58);
+    this.hint.setWordWrapWidth(width * 0.58);
     this.redrawPanel();
   }
 

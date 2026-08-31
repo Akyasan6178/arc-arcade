@@ -83,7 +83,7 @@ export class ModeLabel extends Phaser.GameObjects.Text {
     viewportHeight: number,
     config: Required<ModeLabelConfig>,
   ): number {
-    return Math.round(viewportHeight * config.fontSizeRatio);
+    return Math.max(13, Math.round(viewportHeight * config.fontSizeRatio));
   }
 
   private static computePosition(

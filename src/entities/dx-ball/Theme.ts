@@ -184,7 +184,7 @@ const NEON_ARCADE: ThemeDefinition = {
     color: '#c5d0dc',
     highlightColor: '#f8f9fa',
     descriptionColor: '#2de2e6',
-    mutedColor: '#6c7a89',
+    mutedColor: '#8b9cb0',
   },
 };
 
@@ -251,7 +251,7 @@ const SPACE: ThemeDefinition = {
     color: '#c7d2fe',
     highlightColor: '#e0e7ff',
     descriptionColor: '#a78bfa',
-    mutedColor: '#64748b',
+    mutedColor: '#94a3b8',
   },
 };
 
@@ -318,7 +318,7 @@ const LABORATORY: ThemeDefinition = {
     color: '#a7f3d0',
     highlightColor: '#ecfdf5',
     descriptionColor: '#5eead4',
-    mutedColor: '#4b7c6f',
+    mutedColor: '#7dd3c0',
   },
 };
 
@@ -385,7 +385,7 @@ const INFERNO: ThemeDefinition = {
     color: '#fdba74',
     highlightColor: '#fff7ed',
     descriptionColor: '#ffd166',
-    mutedColor: '#9a3412',
+    mutedColor: '#f4a261',
   },
 };
 
@@ -452,7 +452,7 @@ const RETRO_GRID: ThemeDefinition = {
     color: '#bbf7d0',
     highlightColor: '#d8ffd8',
     descriptionColor: '#39ff14',
-    mutedColor: '#4b7c5f',
+    mutedColor: '#86c99a',
   },
 };
 
@@ -519,7 +519,7 @@ const FROZEN_CORE: ThemeDefinition = {
     color: '#bae6fd',
     highlightColor: '#f0f9ff',
     descriptionColor: '#7dd3fc',
-    mutedColor: '#64748b',
+    mutedColor: '#94a3b8',
   },
 };
 

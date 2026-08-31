@@ -8,6 +8,19 @@ import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { ProgressList } from '@ui/ProgressList';
 import { TextButton } from '@ui/TextButton';
 import { resolveMenuReturn } from '@scenes/menuNavigation';
+import {
+  MENU_LAYOUT,
+  createMenuHint,
+  createMenuSubtitle,
+  createMenuTitle,
+  layoutMenuHint,
+  layoutMenuSubtitle,
+  layoutMenuTitle,
+  menuBackX,
+  menuContentY,
+  menuFontSize,
+  menuHintY,
+} from '@ui/menuLayout';
 
 /**
  * scenes/AchievementsScene.ts
@@ -16,6 +29,8 @@ import { resolveMenuReturn } from '@scenes/menuNavigation';
  * Unlockables in DXB-16). Owns no gameplay — it paints the saved theme
  * and the locked / unlocked achievement list. The Back button and Esc
  * return to the Hub (or ThemeSelect / ModeSelect if opened from there).
+ *
+ * DXB-20: shared menu chrome.
  */
 
 export interface AchievementsSceneData {
@@ -50,21 +65,20 @@ export class AchievementsScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
-    this.titleText = this.createTitle(snapshot.width, snapshot.height, theme.hud.title);
-    this.subtitleText = this.createSubtitle(
-      snapshot.width,
-      snapshot.height,
+    this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
+    this.subtitleText = createMenuSubtitle(
+      this,
+      snapshot,
       theme.hud.subtitle,
-      complete,
-      rows.length,
+      `ACHIEVEMENTS  ·  ${complete} / ${rows.length}`,
     );
-    this.hintText = this.createHint(snapshot.width, snapshot.height, theme.hud.hint);
-    this.backButton = this.createBackButton(snapshot.width, snapshot.height, theme.menu.color);
+    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Tap a row to read it');
+    this.backButton = this.createBackButton(snapshot, theme.menu.color);
     this.catalogList = new ProgressList(
       this,
       snapshot.width,
       snapshot.height,
-      AchievementsScene.catalogOriginY(snapshot.height),
+      menuContentY(snapshot),
       rows,
       () => undefined,
       {
@@ -105,111 +119,36 @@ export class AchievementsScene extends Phaser.Scene {
     this.scene.start(this.returnTo);
   }
 
-  private createBackButton(viewportWidth: number, viewportHeight: number, color: string): TextButton {
+  private createBackButton(snapshot: ViewportSnapshot, color: string): TextButton {
     return new TextButton(
       this,
-      viewportWidth * 0.08,
-      viewportHeight * 0.955,
+      menuBackX(snapshot),
+      menuHintY(snapshot),
       '← Back',
       () => this.goBack(),
       {
         color,
         originX: 0,
         originY: 1,
-        fontSize: Math.round(viewportHeight * 0.022),
+        fontSize: menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
         align: 'left',
       },
     );
-  }
-
-  private createTitle(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.07);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.05, 'DX-BALL', {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color,
-        fontStyle: 'bold',
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 8,
-      })
-      .setOrigin(0.5, 0)
-      .setShadow(1, 3, '#000000', 4, true, true)
-      .setDepth(20);
-  }
-
-  private createSubtitle(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-    complete: number,
-    total: number,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.026);
-    return this.add
-      .text(viewportWidth / 2, viewportHeight * 0.13, `ACHIEVEMENTS  ·  ${complete} / ${total}`, {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color,
-        fontStyle: 'bold',
-        align: 'center',
-        stroke: '#0b1320',
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5, 0)
-      .setShadow(1, 2, '#000000', 3, true, true)
-      .setDepth(20);
-  }
-
-  private createHint(
-    viewportWidth: number,
-    viewportHeight: number,
-    color: string,
-  ): Phaser.GameObjects.Text {
-    const fontSize = Math.round(viewportHeight * 0.018);
-    return this.add
-      .text(viewportWidth * 0.92, viewportHeight * 0.955, 'Arrows to move', {
-        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
-        fontSize: `${fontSize}px`,
-        color,
-        align: 'right',
-        stroke: '#0b1320',
-        strokeThickness: 3,
-      })
-      .setOrigin(1, 1)
-      .setShadow(1, 2, '#000000', 3, true, true)
-      .setDepth(20);
   }
 
   private handleViewportChange(snapshot: ViewportSnapshot): void {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background.resize(snapshot.width, snapshot.height);
 
-    this.titleText.setPosition(snapshot.width / 2, snapshot.height * 0.05);
-    this.titleText.setFontSize(Math.round(snapshot.height * 0.07));
+    layoutMenuTitle(this.titleText, snapshot);
+    layoutMenuSubtitle(this.subtitleText, snapshot);
+    layoutMenuHint(this.hintText, snapshot);
 
-    this.subtitleText.setPosition(snapshot.width / 2, snapshot.height * 0.13);
-    this.subtitleText.setFontSize(Math.round(snapshot.height * 0.026));
-
-    this.hintText.setPosition(snapshot.width * 0.92, snapshot.height * 0.955);
-    this.hintText.setFontSize(Math.round(snapshot.height * 0.018));
-
-    this.backButton?.setPosition(snapshot.width * 0.08, snapshot.height * 0.955);
-    this.backButton?.setFontSize(Math.round(snapshot.height * 0.022));
-
-    this.catalogList?.resize(
-      snapshot.width,
-      snapshot.height,
-      AchievementsScene.catalogOriginY(snapshot.height),
+    this.backButton?.setPosition(menuBackX(snapshot), menuHintY(snapshot));
+    this.backButton?.setFontSize(
+      menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
     );
-  }
 
-  private static catalogOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.2;
+    this.catalogList?.resize(snapshot.width, snapshot.height, menuContentY(snapshot));
   }
 }

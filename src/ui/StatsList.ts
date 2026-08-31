@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { StatDisplayRow } from '@entities/dx-ball/Progress';
+import { fittedRowHeight } from '@ui/menuLayout';
 
 /**
  * ui/StatsList.ts
@@ -169,9 +170,15 @@ export class StatsList {
   }
 
   private layout(): void {
-    const titleSize = Math.round(this.viewportHeight * this.config.titleFontSizeRatio);
-    const valueSize = Math.round(this.viewportHeight * this.config.valueFontSizeRatio);
-    const rowHeight = this.viewportHeight * this.config.rowHeightRatio;
+    const titleSize = Math.max(12, Math.round(this.viewportHeight * this.config.titleFontSizeRatio));
+    const valueSize = Math.max(11, Math.round(this.viewportHeight * this.config.valueFontSizeRatio));
+    const rowHeight = fittedRowHeight(
+      this.viewportHeight,
+      this.originY,
+      this.visualRows.length,
+      this.config.rowHeightRatio,
+      this.viewportHeight * 0.9,
+    );
     const wrapWidth = this.viewportWidth * 0.84;
 
     for (let i = 0; i < this.visualRows.length; i++) {

@@ -130,6 +130,9 @@ export class CollectionPreview {
     if (this.destroyed) {
       return;
     }
+    if (this.content && collectionPreviewSame(this.content, content)) {
+      return;
+    }
     this.content = content;
     this.redraw();
   }
@@ -364,6 +367,25 @@ export class CollectionPreview {
       this.ball.fillCircle(x, y, radius * (visual.coreScale ?? 0.4));
     }
   }
+}
+
+function collectionPreviewSame(a: CollectionPreviewContent, b: CollectionPreviewContent): boolean {
+  return (
+    a.themeLabel === b.themeLabel &&
+    a.paddleLabel === b.paddleLabel &&
+    a.ballLabel === b.ballLabel &&
+    a.locked === b.locked &&
+    a.backdrop.topColor === b.backdrop.topColor &&
+    a.backdrop.bottomColor === b.backdrop.bottomColor &&
+    a.paddle.fill === b.paddle.fill &&
+    a.paddle.stroke === b.paddle.stroke &&
+    a.paddle.motif === b.paddle.motif &&
+    a.paddle.motifColor === b.paddle.motifColor &&
+    a.ball.fill === b.ball.fill &&
+    a.ball.stroke === b.ball.stroke &&
+    a.ball.glowColor === b.ball.glowColor &&
+    a.ball.coreColor === b.ball.coreColor
+  );
 }
 
 function lerpColor(a: number, b: number, t: number): number {
