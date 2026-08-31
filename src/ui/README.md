@@ -36,7 +36,8 @@ Currently:
   Space / Enter, click). Caller supplies options and an `onSelect`
   callback. DXB-13A adds `destroy()` (so a pause overlay can unbind
   Space) and a configurable `depth`. DXB-15 adds `initialIndex` and
-  `onHighlight` for live theme preview. Not DX-Ball-specific.
+  `onHighlight` for live theme preview. DXB-16 adds `locked` so a
+  highlightable row cannot be confirmed. Not DX-Ball-specific.
 - `PauseOverlay.ts` — DXB-13A's reusable pause/menu overlay. Dims the
   playfield, shows a title, and hosts a `SelectMenu`. Hidden until
   `show()`. DXB-15 adds a framed panel, accent bar, and `applyTheme()`.
@@ -44,3 +45,6 @@ Currently:
 - `ResultOverlay.ts` — DXB-15's reusable end/transition card (victory,
   game over, time-up, level-clear). Dim + framed panel + title + body.
   Not DX-Ball-specific.
+- `ProgressList.ts` — DXB-16's reusable catalog list (title + locked /
+  unlocked / percent / equipped). Space confirms only unlocked
+  selectable rows. Not DX-Ball-specific beyond the `ProgressRow` shape.

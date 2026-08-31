@@ -3,7 +3,8 @@ import { SceneKeys } from '@systems/SceneKeys';
 import { GameViewport, type ViewportSnapshot } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
 import { GAME_MODES, type GameModeId } from '@entities/dx-ball/GameMode';
-import { getTheme, loadThemeId } from '@entities/dx-ball/Theme';
+import { getTheme } from '@entities/dx-ball/Theme';
+import { loadPlayableThemeId } from '@entities/dx-ball/Progress';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { SelectMenu } from '@ui/SelectMenu';
 
@@ -16,8 +17,8 @@ import { SelectMenu } from '@ui/SelectMenu';
  * themed backdrop, a title, and a `SelectMenu`, then starts
  * `MainScene` with `{ mode }`.
  *
- * Esc returns to ThemeSelect. Space on an ended run in MainScene
- * restarts the same mode instead.
+ * Esc returns to ThemeSelect. U opens unlockables (DXB-16). Space on
+ * an ended run in MainScene restarts the same mode instead.
  */
 export class ModeSelectScene extends Phaser.Scene {
   private background!: ArcadeBackground;
@@ -35,7 +36,7 @@ export class ModeSelectScene extends Phaser.Scene {
   create(): void {
     const viewport = GameViewport.get();
     const snapshot = viewport.getSnapshot();
-    const theme = getTheme(loadThemeId());
+    const theme = getTheme(loadPlayableThemeId());
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
@@ -81,6 +82,10 @@ export class ModeSelectScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-ESC', () => {
       this.scene.start(SceneKeys.ThemeSelect);
+    });
+
+    this.input.keyboard?.on('keydown-U', () => {
+      this.scene.start(SceneKeys.Unlockables, { from: SceneKeys.ModeSelect });
     });
   }
 
@@ -157,7 +162,7 @@ export class ModeSelectScene extends Phaser.Scene {
       .text(
         viewportWidth / 2,
         viewportHeight * 0.9,
-        'Arrows to move  ·  Space / Enter / click to start',
+        'Arrows to move  ·  Space / Enter / click to start  ·  U unlockables',
         {
           fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
           fontSize: `${fontSize}px`,

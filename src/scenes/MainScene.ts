@@ -24,8 +24,22 @@ import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { ModeLabel } from '@ui/ModeLabel';
 import { PauseOverlay, type PauseOverlayAction } from '@ui/PauseOverlay';
 import { ResultOverlay } from '@ui/ResultOverlay';
-import { getTheme, loadThemeId, type ThemeDefinition } from '@entities/dx-ball/Theme';
+import { getTheme, type ThemeDefinition } from '@entities/dx-ball/Theme';
 import type { BrickGridConfig } from '@entities/dx-ball/BrickGrid';
+import {
+  loadBallSkinId,
+  loadPaddleSkinId,
+  loadPlayableThemeId,
+  recordClassicComplete,
+  recordEndlessLevel,
+  recordFireBallBrickDestroyed,
+  recordLifetimeScoreDelta,
+  recordMetalBrickHit,
+  recordMultiBallActivation,
+  recordPowerupCollected,
+  recordTimeAttackScore,
+} from '@entities/dx-ball/Progress';
+import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins';
 
 /**
  * scenes/MainScene.ts
@@ -136,6 +150,12 @@ import type { BrickGridConfig } from '@entities/dx-ball/BrickGrid';
  * HUD, brick row/type colors, powerup palette, pause card, and
  * result cards (victory / game over / time-up / level-clear). No
  * gameplay call site is replaced.
+ *
+ * DXB-16: records lifetime stats into `Progress.ts` (score deltas,
+ * powerup catches, metal hits, Fire Ball destroys, Multi Ball
+ * activations, Classic completion / perfect run, Time Attack best,
+ * Endless level reached) and applies the equipped paddle / ball
+ * skins. Gameplay rules are unchanged.
  */
 
 export interface MainSceneData {
@@ -189,6 +209,10 @@ export class MainScene extends Phaser.Scene {
   private bestScore = 0;
   private lives = STARTING_LIVES;
   private lastMissCount = 0;
+  /** DXB-16: Last score already folded into lifetime progress this run. */
+  private lastRunScore = 0;
+  /** DXB-16: True once a life has been lost this run (Perfect Run gate). */
+  private lostLifeThisRun = false;
   /** DXB-08: 0-based index into `LEVELS` of the level currently in play. */
   private currentLevelIndex = 0;
   /** DXB-14: Chosen on the mode-select screen; defaults to Classic. */
@@ -226,11 +250,13 @@ export class MainScene extends Phaser.Scene {
     this.transitioning = false;
     this.lives = STARTING_LIVES;
     this.lastMissCount = 0;
+    this.lastRunScore = 0;
+    this.lostLifeThisRun = false;
     this.currentLevelIndex = 0;
     this.remainingTimeMs = TIME_ATTACK_DURATION_MS;
     this.runElapsedMs = 0;
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
-    this.theme = getTheme(loadThemeId());
+    this.theme = getTheme(loadPlayableThemeId());
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(this.theme.backdrop.canvasBackground);
@@ -241,6 +267,7 @@ export class MainScene extends Phaser.Scene {
       this.theme.backdrop,
     );
     this.paddle = new Paddle(this, snapshot.width, snapshot.height);
+    this.paddle.applySkin(getPaddleSkinVisual(loadPaddleSkinId()));
     const firstLevel = this.getCurrentLevel();
     this.brickGrid = new BrickGrid(
       this,
@@ -258,6 +285,7 @@ export class MainScene extends Phaser.Scene {
         firstLevel.ball,
       ),
     ];
+    this.applyBallSkin(this.balls[0]);
     this.powerupManager = new PowerupManager(this, snapshot.width, snapshot.height, this.paddle, {
       palette: this.theme.powerups,
     });
@@ -353,6 +381,7 @@ export class MainScene extends Phaser.Scene {
 
     this.paddle.update(delta);
     this.updateBalls(delta);
+    this.updateProgressFromHits();
     this.updatePowerups(delta);
     this.updateScore();
     this.updateActiveEffects();
@@ -377,6 +406,15 @@ export class MainScene extends Phaser.Scene {
   private updateScore(): void {
     const score = this.brickGrid.getScore();
     this.scoreLabel.setValue(score);
+
+    const delta = score - this.lastRunScore;
+    if (delta > 0) {
+      recordLifetimeScoreDelta(delta);
+      this.lastRunScore = score;
+      if (this.mode === 'time-attack') {
+        recordTimeAttackScore(score);
+      }
+    }
 
     if (score > this.bestScore) {
       this.bestScore = score;
@@ -409,6 +447,7 @@ export class MainScene extends Phaser.Scene {
 
     this.lastMissCount = missCount;
     this.lives = Math.max(0, this.lives - newMisses);
+    this.lostLifeThisRun = true;
     this.livesLabel.setValue(this.lives);
     playDxBallSfx('life-lost');
   }
@@ -428,7 +467,24 @@ export class MainScene extends Phaser.Scene {
     this.powerupManager.update(deltaMs);
 
     for (const type of this.powerupManager.consumeCaughtPowerups()) {
+      recordPowerupCollected();
       this.applyPowerupEffect(type);
+    }
+  }
+
+  /**
+   * DXB-16: Folds brick contacts into lifetime achievement counters.
+   * Metal hits count even when the brick survives; Fire Ball destroys
+   * count only when pierce actually removed the brick.
+   */
+  private updateProgressFromHits(): void {
+    for (const hit of this.brickGrid.consumePendingHits()) {
+      if (hit.brickType === 'metal') {
+        recordMetalBrickHit();
+      }
+      if (hit.destroyed && hit.pierced) {
+        recordFireBallBrickDestroyed();
+      }
     }
   }
 
@@ -472,6 +528,7 @@ export class MainScene extends Phaser.Scene {
     this.balls = [this.createServeBall()];
     this.lastMissCount = 0;
     this.lives = Math.max(0, this.lives - 1);
+    this.lostLifeThisRun = true;
     this.livesLabel.setValue(this.lives);
     playDxBallSfx('life-lost');
   }
@@ -480,8 +537,13 @@ export class MainScene extends Phaser.Scene {
     const { width, height } = GameViewport.get().getSnapshot();
     const level = this.getCurrentLevel();
     const ball = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
+    this.applyBallSkin(ball);
     this.applyEndlessSpeed(ball);
     return ball;
+  }
+
+  private applyBallSkin(ball: Ball): void {
+    ball.applySkin(getBallSkinVisual(loadBallSkinId()));
   }
 
   /** DXB-14: Current `LEVELS` entry, wrapping in Time Attack / Endless. */
@@ -603,6 +665,7 @@ export class MainScene extends Phaser.Scene {
         this.paddle.applyShrinkEffect(durationMs);
         break;
       case 'multi-ball':
+        recordMultiBallActivation();
         this.spawnMultiBall();
         break;
     }
@@ -630,6 +693,7 @@ export class MainScene extends Phaser.Scene {
     for (let i = 0; i < needed; i++) {
       const extra = new Ball(this, width, height, this.paddle, this.brickGrid, level.ball);
       extra.copyEffectsFrom(source);
+      this.applyBallSkin(extra);
       this.applyEndlessSpeed(extra);
 
       if (launched) {
@@ -706,6 +770,10 @@ export class MainScene extends Phaser.Scene {
     const { width, height } = GameViewport.get().getSnapshot();
     const level = this.getCurrentLevel();
 
+    if (this.mode === 'endless') {
+      recordEndlessLevel(this.currentLevelIndex + 1);
+    }
+
     this.brickGrid.loadLevel(this.withThemeBricks(level.brickGrid), width, height);
 
     for (const ball of this.balls) {
@@ -733,6 +801,10 @@ export class MainScene extends Phaser.Scene {
   private handleWin(): void {
     this.won = true;
     playDxBallSfx('victory');
+
+    if (this.mode === 'classic') {
+      recordClassicComplete(!this.lostLifeThisRun);
+    }
 
     const finalScore = this.brickGrid.getScore();
     this.resultOverlay.show({

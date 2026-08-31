@@ -99,7 +99,21 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * DXB-14: `setProgressionMultiplier()` folds an extra speed scale into
  * launch / resize / travel speed (used by Endless). Slow / fast still
  * apply on top. The ball does not know game modes exist.
+ *
+ * DXB-16: `applySkin()` accepts visual tokens from the owning scene.
+ * Fire Ball still overrides fill/glow while active, then restores the
+ * equipped skin. Collision, pierce, and speed are unchanged.
  */
+
+export interface BallSkinVisual {
+  fill: number;
+  stroke: number;
+  strokeWidthRatio: number;
+  glowColor: number;
+  glowAlpha: number;
+  glowScale: number;
+}
+
 export interface BallConfig {
   color?: number;
   /** Ball radius, as a ratio of the smaller viewport dimension. */
@@ -202,6 +216,15 @@ export class Ball extends Phaser.GameObjects.Arc {
   private overlappingPaddle = false;
   /** DXB-13: Translucent halo shown only while Fire Ball is active. */
   private readonly glow: Phaser.GameObjects.Arc;
+  /** DXB-16: Equipped cosmetic; Fire Ball temporarily overrides it. */
+  private skin: BallSkinVisual = {
+    fill: DEFAULT_CONFIG.color,
+    stroke: DEFAULT_CONFIG.color,
+    strokeWidthRatio: 0,
+    glowColor: FIRE_GLOW_COLOR,
+    glowAlpha: 0,
+    glowScale: FIRE_GLOW_SCALE,
+  };
 
   constructor(
     scene: Phaser.Scene,
@@ -307,6 +330,17 @@ export class Ball extends Phaser.GameObjects.Arc {
       this.applyFireVisuals(true);
     }
     this.fireRemainingMs = durationMs;
+  }
+
+  /**
+   * DXB-16: Applies cosmetic fill / stroke / idle glow. Fire Ball still
+   * wins while its timer is running.
+   */
+  applySkin(visual: BallSkinVisual): void {
+    this.skin = visual;
+    if (this.fireRemainingMs <= 0) {
+      this.applyIdleVisuals();
+    }
   }
 
   /** DXB-12: Remaining slow-effect time, for the active-effects HUD. */
@@ -453,22 +487,37 @@ export class Ball extends Phaser.GameObjects.Arc {
     if (active) {
       this.setFillStyle(FIRE_BALL_COLOR);
       this.setStrokeStyle(Math.max(2, this.radius * 0.38), FIRE_BALL_STROKE);
+      this.glow.setFillStyle(FIRE_GLOW_COLOR, 0.38);
       this.glow.setVisible(true);
     } else {
-      this.setFillStyle(this.config.color);
-      this.setStrokeStyle(0);
-      this.glow.setVisible(false);
+      this.applyIdleVisuals();
     }
+    this.syncFireGlow();
+  }
+
+  private applyIdleVisuals(): void {
+    this.setFillStyle(this.skin.fill);
+    const strokeWidth = this.radius * this.skin.strokeWidthRatio;
+    if (strokeWidth > 0) {
+      this.setStrokeStyle(Math.max(1.5, strokeWidth), this.skin.stroke);
+    } else {
+      this.setStrokeStyle(0);
+    }
+    this.glow.setFillStyle(this.skin.glowColor, this.skin.glowAlpha);
+    this.glow.setVisible(this.skin.glowAlpha > 0 && !this.spent);
     this.syncFireGlow();
   }
 
   private syncFireGlow(): void {
     this.glow.setPosition(this.x, this.y);
-    this.glow.setRadius(this.radius * FIRE_GLOW_SCALE);
+    const scale = this.fireRemainingMs > 0 ? FIRE_GLOW_SCALE : this.skin.glowScale;
+    this.glow.setRadius(this.radius * scale);
     if (this.spent || !this.visible) {
       this.glow.setVisible(false);
     } else if (this.fireRemainingMs > 0) {
       this.glow.setVisible(true);
+    } else {
+      this.glow.setVisible(this.skin.glowAlpha > 0);
     }
   }
 
@@ -577,6 +626,8 @@ export class Ball extends Phaser.GameObjects.Arc {
     this.setRadius(Ball.computeRadius(viewportWidth, viewportHeight, this.config));
     if (this.fireRemainingMs > 0) {
       this.setStrokeStyle(Math.max(2, this.radius * 0.38), FIRE_BALL_STROKE);
+    } else if (this.skin.strokeWidthRatio > 0) {
+      this.setStrokeStyle(Math.max(1.5, this.radius * this.skin.strokeWidthRatio), this.skin.stroke);
     }
     this.syncFireGlow();
 

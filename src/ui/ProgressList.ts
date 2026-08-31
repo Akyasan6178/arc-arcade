@@ -1,72 +1,64 @@
 import Phaser from 'phaser';
+import type { ProgressRow } from '@entities/dx-ball/Progress';
 
 /**
- * ui/SelectMenu.ts
+ * ui/ProgressList.ts
  *
- * DXB-14: A reusable vertical option list (keyboard + pointer). Not
- * DX-Ball-specific — the caller supplies `{ id, title, description }`
- * rows and an `onSelect` callback. Arrow keys move the highlight;
- * Space / Enter / a click confirm. Shares the HUD typeface/stroke
- * language from DXB-13. DXB-16: an option may set `locked` so it stays
- * highlightable (to show a requirement) but Space / click will not
- * confirm it.
+ * DXB-16: Reusable catalog list for unlockables / achievements. Not
+ * DX-Ball-specific beyond consuming a `ProgressRow` shape (title,
+ * requirement, percent, locked/unlocked). Arrow keys move; Space /
+ * Enter / click confirm an unlocked selectable row. Locked rows can be
+ * highlighted so the requirement is readable, but they do not confirm.
  */
 
-export interface SelectMenuOption<T extends string = string> {
-  id: T;
-  title: string;
-  description?: string;
-  /** DXB-16: Highlightable so the requirement is readable, but Space will not confirm. */
-  locked?: boolean;
-}
-
-export interface SelectMenuConfig<T extends string = string> {
+export interface ProgressListConfig {
   color?: string;
   highlightColor?: string;
   descriptionColor?: string;
   mutedColor?: string;
+  completeColor?: string;
   titleFontSizeRatio?: number;
   descriptionFontSizeRatio?: number;
   rowHeightRatio?: number;
-  /** Draw depth. Pause overlays pass a value above gameplay HUD / messages. */
   depth?: number;
-  /** DXB-15: Index highlighted when the menu is created. */
-  initialIndex?: number;
-  /** DXB-15: Fires when the highlight moves, before confirm. */
-  onHighlight?: (id: T) => void;
+  /** When false, confirm is a no-op even on unlocked rows (achievements). */
+  selectable?: boolean;
+  /** Label used at 100% (UNLOCKED for cosmetics, COMPLETE for achievements). */
+  completeLabel?: string;
 }
 
 const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
 const HUD_DEPTH = 20;
 
-const DEFAULT_CONFIG: Required<Omit<SelectMenuConfig, 'onHighlight' | 'initialIndex'>> = {
+const DEFAULT_CONFIG: Required<ProgressListConfig> = {
   color: '#c5d0dc',
   highlightColor: '#f8f9fa',
   descriptionColor: '#90e0ef',
   mutedColor: '#6c7a89',
-  titleFontSizeRatio: 0.042,
-  descriptionFontSizeRatio: 0.022,
-  rowHeightRatio: 0.11,
+  completeColor: '#95d5b2',
+  titleFontSizeRatio: 0.032,
+  descriptionFontSizeRatio: 0.018,
+  rowHeightRatio: 0.1,
   depth: HUD_DEPTH,
+  selectable: true,
+  completeLabel: 'UNLOCKED',
 };
 
-interface SelectMenuRow {
+interface ProgressListRow {
   title: Phaser.GameObjects.Text;
   description: Phaser.GameObjects.Text;
 }
 
-export class SelectMenu<T extends string = string> {
+export class ProgressList {
   private readonly scene: Phaser.Scene;
-  private readonly options: readonly SelectMenuOption<T>[];
-  private readonly onSelect: (id: T) => void;
-  private readonly config: Required<Omit<SelectMenuConfig<T>, 'onHighlight' | 'initialIndex'>> &
-    Pick<SelectMenuConfig<T>, 'onHighlight' | 'initialIndex'>;
-  private readonly rows: SelectMenuRow[] = [];
+  private readonly onSelect: (id: string) => void;
+  private readonly config: Required<ProgressListConfig>;
+  private readonly visualRows: ProgressListRow[] = [];
+  private items: readonly ProgressRow[] = [];
   private selectedIndex = 0;
   private viewportWidth = 0;
   private viewportHeight = 0;
   private originY = 0;
-  private confirmed = false;
   private destroyed = false;
   private readonly onUp = (): void => this.moveSelection(-1);
   private readonly onDown = (): void => this.moveSelection(1);
@@ -78,25 +70,19 @@ export class SelectMenu<T extends string = string> {
     viewportWidth: number,
     viewportHeight: number,
     originY: number,
-    options: readonly SelectMenuOption<T>[],
-    onSelect: (id: T) => void,
-    config: SelectMenuConfig<T> = {},
+    items: readonly ProgressRow[],
+    onSelect: (id: string) => void,
+    config: ProgressListConfig = {},
   ) {
     this.scene = scene;
-    this.options = options;
     this.onSelect = onSelect;
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.selectedIndex = Phaser.Math.Clamp(
-      config.initialIndex ?? 0,
-      0,
-      Math.max(0, options.length - 1),
-    );
     this.viewportWidth = viewportWidth;
     this.viewportHeight = viewportHeight;
     this.originY = originY;
+    this.items = items;
 
-    for (let i = 0; i < options.length; i++) {
-      const option = options[i];
+    for (let i = 0; i < items.length; i++) {
       const title = scene.add
         .text(0, 0, '', {
           fontFamily: HUD_FONT_FAMILY,
@@ -113,24 +99,19 @@ export class SelectMenu<T extends string = string> {
         .setInteractive({ useHandCursor: true });
 
       const description = scene.add
-        .text(0, 0, option.description ?? '', {
+        .text(0, 0, '', {
           fontFamily: HUD_FONT_FAMILY,
           fontSize: '12px',
           color: this.config.mutedColor,
           align: 'center',
-          wordWrap: { width: viewportWidth * 0.72 },
+          wordWrap: { width: viewportWidth * 0.84 },
           stroke: '#0b1320',
           strokeThickness: 3,
         })
         .setOrigin(0.5, 0)
         .setShadow(1, 2, '#000000', 2, true, true)
-        .setDepth(this.config.depth);
-
-      if (option.description) {
-        description.setInteractive({ useHandCursor: true });
-      } else {
-        description.setVisible(false);
-      }
+        .setDepth(this.config.depth)
+        .setInteractive({ useHandCursor: true });
 
       const selectIndex = i;
       title.on('pointerover', () => this.setSelectedIndex(selectIndex));
@@ -138,7 +119,7 @@ export class SelectMenu<T extends string = string> {
       title.on('pointerup', () => this.confirm());
       description.on('pointerup', () => this.confirm());
 
-      this.rows.push({ title, description });
+      this.visualRows.push({ title, description });
     }
 
     this.layout();
@@ -146,25 +127,33 @@ export class SelectMenu<T extends string = string> {
     this.bindKeyboard();
   }
 
-  /** Removes keyboard listeners and texts so a later overlay cannot steal Space. */
+  setItems(items: readonly ProgressRow[]): void {
+    if (this.destroyed) {
+      return;
+    }
+
+    this.items = items;
+    this.selectedIndex = Phaser.Math.Clamp(this.selectedIndex, 0, Math.max(0, items.length - 1));
+    this.refreshHighlight();
+  }
+
   destroy(): void {
     if (this.destroyed) {
       return;
     }
 
     this.destroyed = true;
-    this.confirmed = true;
     const keyboard = this.scene.input.keyboard;
     keyboard?.off('keydown-UP', this.onUp);
     keyboard?.off('keydown-DOWN', this.onDown);
     keyboard?.off('keydown-ENTER', this.onEnter);
     keyboard?.off('keydown-SPACE', this.onSpace);
 
-    for (const row of this.rows) {
+    for (const row of this.visualRows) {
       row.title.destroy();
       row.description.destroy();
     }
-    this.rows.length = 0;
+    this.visualRows.length = 0;
   }
 
   resize(viewportWidth: number, viewportHeight: number, originY: number): void {
@@ -191,73 +180,92 @@ export class SelectMenu<T extends string = string> {
   }
 
   private moveSelection(delta: number): void {
-    if (this.destroyed || this.confirmed || this.options.length === 0) {
+    if (this.destroyed || this.items.length === 0) {
       return;
     }
 
-    const next = (this.selectedIndex + delta + this.options.length) % this.options.length;
+    const next = (this.selectedIndex + delta + this.items.length) % this.items.length;
     this.setSelectedIndex(next);
   }
 
   private setSelectedIndex(index: number): void {
-    if (this.destroyed || this.confirmed || index === this.selectedIndex) {
+    if (this.destroyed || index === this.selectedIndex) {
       return;
     }
 
     this.selectedIndex = index;
     this.refreshHighlight();
-    this.config.onHighlight?.(this.options[index].id);
   }
 
   private confirm(): void {
-    if (this.destroyed || this.confirmed) {
+    if (this.destroyed || !this.config.selectable) {
       return;
     }
 
-    const option = this.options[this.selectedIndex];
-    if (!option || option.locked) {
+    const item = this.items[this.selectedIndex];
+    if (!item || !item.unlocked) {
       return;
     }
 
-    this.confirmed = true;
-    this.onSelect(option.id);
+    this.onSelect(item.id);
   }
 
   private layout(): void {
     const titleSize = Math.round(this.viewportHeight * this.config.titleFontSizeRatio);
     const descriptionSize = Math.round(this.viewportHeight * this.config.descriptionFontSizeRatio);
     const rowHeight = this.viewportHeight * this.config.rowHeightRatio;
-    const wrapWidth = this.viewportWidth * 0.72;
+    const wrapWidth = this.viewportWidth * 0.84;
 
-    for (let i = 0; i < this.rows.length; i++) {
-      const row = this.rows[i];
+    for (let i = 0; i < this.visualRows.length; i++) {
+      const row = this.visualRows[i];
       const y = this.originY + i * rowHeight;
       row.title.setPosition(this.viewportWidth / 2, y);
       row.title.setFontSize(titleSize);
-      row.description.setPosition(this.viewportWidth / 2, y + titleSize * 1.15);
+      row.description.setPosition(this.viewportWidth / 2, y + titleSize * 1.12);
       row.description.setFontSize(descriptionSize);
       row.description.setWordWrapWidth(wrapWidth);
     }
   }
 
   private refreshHighlight(): void {
-    for (let i = 0; i < this.rows.length; i++) {
-      const option = this.options[i];
-      const row = this.rows[i];
+    for (let i = 0; i < this.visualRows.length; i++) {
+      const item = this.items[i];
+      const row = this.visualRows[i];
+      if (!item) {
+        continue;
+      }
+
       const selected = i === this.selectedIndex;
-      const prefix = option.locked ? '[LOCKED] ' : '';
-      const label = `${prefix}${option.title}`;
-      row.title.setText(selected ? `>  ${label}  <` : label);
+      row.title.setText(selected ? `>  ${item.title}  <` : item.title);
       row.title.setColor(
         selected
           ? this.config.highlightColor
-          : option.locked
-            ? this.config.mutedColor
-            : this.config.color,
+          : item.unlocked
+            ? this.config.color
+            : this.config.mutedColor,
+      );
+      row.description.setText(
+        `${ProgressList.statusLabel(item, this.config.completeLabel)}  ·  ${item.requirement}`,
       );
       row.description.setColor(
-        selected && !option.locked ? this.config.descriptionColor : this.config.mutedColor,
+        selected
+          ? item.complete
+            ? this.config.completeColor
+            : this.config.descriptionColor
+          : item.complete
+            ? this.config.completeColor
+            : this.config.mutedColor,
       );
     }
+  }
+
+  private static statusLabel(item: ProgressRow, completeLabel: string): string {
+    if (item.equipped) {
+      return 'EQUIPPED';
+    }
+    if (item.complete || item.unlocked) {
+      return `${completeLabel}  100%`;
+    }
+    return `LOCKED  ${item.percent}%  (${item.current}/${item.target})`;
   }
 }

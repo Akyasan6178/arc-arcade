@@ -40,7 +40,19 @@ import Phaser from 'phaser';
  * mutually exclusive — applying one cancels the other — so the paddle
  * never stacks `1.5 * 0.65`. Catching a second capsule of the same
  * effect still only refreshes the timer, never the multiplier.
+ *
+ * DXB-16: `applySkin()` accepts visual tokens from the owning scene
+ * (fill / stroke / a light motif overlay). Size, speed, and collision
+ * are unchanged — this paddle still does not know unlocks exist.
  */
+export interface PaddleSkinVisual {
+  fill: number;
+  stroke: number;
+  strokeWidthRatio: number;
+  motif: 'flat' | 'bands' | 'glow' | 'core';
+  motifColor: number;
+}
+
 export interface PaddleConfig {
   color?: number;
   widthRatio?: number;
@@ -81,6 +93,15 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
   private widenRemainingMs = 0;
   /** DXB-12: Milliseconds remaining on the current small-paddle effect, if any. */
   private smallRemainingMs = 0;
+  /** DXB-16: Cosmetic overlay; the rectangle remains the collision body. */
+  private readonly overlay: Phaser.GameObjects.Graphics;
+  private skin: PaddleSkinVisual = {
+    fill: DEFAULT_CONFIG.color,
+    stroke: DEFAULT_CONFIG.color,
+    strokeWidthRatio: 0,
+    motif: 'flat',
+    motifColor: DEFAULT_CONFIG.color,
+  };
 
   constructor(
     scene: Phaser.Scene,
@@ -101,6 +122,9 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
 
     scene.add.existing(this);
     this.setDepth(10);
+    this.overlay = scene.add.graphics();
+    this.overlay.setDepth(11);
+    this.overlay.setPosition(x, y);
 
     // `pointermove` covers mouse movement on desktop and finger drags on
     // touch devices alike — Phaser normalizes both into the same event.
@@ -136,6 +160,16 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     const maxStep = maxSpeed * deltaSeconds;
     const step = Phaser.Math.Clamp(this.targetX - this.x, -maxStep, maxStep);
     this.setX(Phaser.Math.Clamp(this.x + step, minX, maxX));
+    this.overlay.setPosition(this.x, this.y);
+  }
+
+  /**
+   * DXB-16: Applies cosmetic fill / stroke / motif. Collision size and
+   * movement are untouched.
+   */
+  applySkin(visual: PaddleSkinVisual): void {
+    this.skin = visual;
+    this.refreshSkin();
   }
 
   /**
@@ -280,11 +314,58 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     const halfWidth = width / 2;
     this.setPosition(Phaser.Math.Clamp(this.x, halfWidth, this.viewportWidth - halfWidth), y);
     this.targetX = Phaser.Math.Clamp(this.targetX, halfWidth, this.viewportWidth - halfWidth);
+    this.overlay.setPosition(this.x, this.y);
+    this.refreshSkin();
   }
 
   protected preDestroy(): void {
     this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.handlePointerMove);
+    this.overlay.destroy();
     super.preDestroy();
+  }
+
+  private refreshSkin(): void {
+    this.setFillStyle(this.skin.fill);
+    const strokeWidth = this.height * this.skin.strokeWidthRatio;
+    if (strokeWidth > 0) {
+      this.setStrokeStyle(strokeWidth, this.skin.stroke);
+    } else {
+      this.setStrokeStyle(0);
+    }
+    this.redrawMotif();
+  }
+
+  private redrawMotif(): void {
+    this.overlay.clear();
+    const halfWidth = this.width / 2;
+    const halfHeight = this.height / 2;
+
+    switch (this.skin.motif) {
+      case 'bands': {
+        this.overlay.fillStyle(this.skin.motifColor, 0.85);
+        this.overlay.fillRect(-halfWidth * 0.82, -halfHeight * 0.45, this.width * 0.82, Math.max(1, this.height * 0.18));
+        this.overlay.fillRect(-halfWidth * 0.7, halfHeight * 0.12, this.width * 0.7, Math.max(1, this.height * 0.14));
+        break;
+      }
+      case 'glow': {
+        this.overlay.fillStyle(this.skin.motifColor, 0.28);
+        this.overlay.fillRoundedRect(
+          -halfWidth - 4,
+          -halfHeight - 4,
+          this.width + 8,
+          this.height + 8,
+          Math.max(2, this.height * 0.35),
+        );
+        break;
+      }
+      case 'core': {
+        this.overlay.fillStyle(this.skin.motifColor, 0.95);
+        this.overlay.fillRect(-halfWidth * 0.55, -Math.max(1, this.height * 0.12), this.width * 0.55, Math.max(2, this.height * 0.24));
+        break;
+      }
+      default:
+        break;
+    }
   }
 
   private static computeSize(

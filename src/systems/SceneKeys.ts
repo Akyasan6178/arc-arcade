@@ -9,13 +9,14 @@
  *
  * This file centralizes scene key strings so scenes can reference each
  * other (e.g. `this.scene.start(SceneKeys.Main)`) without hardcoding and
- * risking typos scattered across the codebase.
+ * risking typos scattered across the codebase. DXB-16 adds `Unlockables`.
  */
 export const SceneKeys = {
   Boot: 'BootScene',
   Preload: 'PreloadScene',
   ThemeSelect: 'ThemeSelectScene',
   ModeSelect: 'ModeSelectScene',
+  Unlockables: 'UnlockablesScene',
   Main: 'MainScene',
 } as const;
 

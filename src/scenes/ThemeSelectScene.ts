@@ -5,10 +5,14 @@ import { AudioManager } from '@systems/AudioManager';
 import {
   THEME_INFOS,
   getTheme,
-  loadThemeId,
   saveThemeId,
   type ThemeId,
 } from '@entities/dx-ball/Theme';
+import {
+  getThemeUnlockHint,
+  isThemeUnlocked,
+  loadPlayableThemeId,
+} from '@entities/dx-ball/Progress';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { SelectMenu } from '@ui/SelectMenu';
 
@@ -21,7 +25,8 @@ import { SelectMenu } from '@ui/SelectMenu';
  * title, and a `SelectMenu`, then starts `ModeSelectScene`.
  *
  * Returning here from ModeSelect (Esc) lets the player change theme
- * without starting a run.
+ * without starting a run. U opens the unlockables / achievements
+ * catalog (DXB-16). Locked themes can be previewed but not confirmed.
  */
 export class ThemeSelectScene extends Phaser.Scene {
   private background!: ArcadeBackground;
@@ -38,7 +43,7 @@ export class ThemeSelectScene extends Phaser.Scene {
   create(): void {
     const viewport = GameViewport.get();
     const snapshot = viewport.getSnapshot();
-    const currentId = loadThemeId();
+    const currentId = loadPlayableThemeId();
     const current = getTheme(currentId);
 
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
@@ -52,11 +57,15 @@ export class ThemeSelectScene extends Phaser.Scene {
       snapshot.width,
       snapshot.height,
       ThemeSelectScene.menuOriginY(snapshot.height),
-      THEME_INFOS.map((theme) => ({
-        id: theme.id,
-        title: theme.label,
-        description: theme.description,
-      })),
+      THEME_INFOS.map((theme) => {
+        const unlocked = isThemeUnlocked(theme.id);
+        return {
+          id: theme.id,
+          title: theme.label,
+          description: unlocked ? theme.description : getThemeUnlockHint(theme.id),
+          locked: !unlocked,
+        };
+      }),
       (theme) => this.confirmTheme(theme),
       {
         initialIndex: Math.max(0, THEME_INFOS.findIndex((theme) => theme.id === currentId)),
@@ -78,9 +87,16 @@ export class ThemeSelectScene extends Phaser.Scene {
         // AudioManager missing/unavailable — ignore the toggle.
       }
     });
+
+    this.input.keyboard?.on('keydown-U', () => {
+      this.scene.start(SceneKeys.Unlockables, { from: SceneKeys.ThemeSelect });
+    });
   }
 
   private confirmTheme(id: ThemeId): void {
+    if (!isThemeUnlocked(id)) {
+      return;
+    }
     saveThemeId(id);
     this.scene.start(SceneKeys.ModeSelect);
   }
@@ -146,7 +162,7 @@ export class ThemeSelectScene extends Phaser.Scene {
       .text(
         viewportWidth / 2,
         viewportHeight * 0.9,
-        'Arrows to preview  ·  Space / Enter / click to choose',
+        'Arrows to preview  ·  Space / Enter / click to choose  ·  U unlockables',
         {
           fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
           fontSize: `${fontSize}px`,

@@ -18,7 +18,7 @@ Currently:
 
 - `SceneKeys.ts` — string keys used to register and start scenes
   (`Boot`, `Preload`, `ThemeSelect` since DXB-15, `ModeSelect` since
-  DXB-14, `Main`).
+  DXB-14, `Unlockables` since DXB-16, `Main`).
 - `GameViewport.ts` — ARC-01 responsive-viewport service. Wraps Phaser's
   Scale Manager plus browser orientation/safe-area concerns into a single
   `GameViewport.get()` accessor (`width`, `height`, `centerX`, `centerY`,
@@ -43,3 +43,6 @@ Currently:
 - `ThemeStore.ts` — DXB-15 string persistence for a selected theme id.
   Same localStorage wrapper shape as `HighScoreStore`, but for strings.
   Knows nothing about palettes; `entities/dx-ball/Theme.ts` owns those.
+- `JsonStore.ts` — DXB-16 JSON persistence. Tiny static `get<T>(key)` /
+  `set(key, value)` wrapper around `localStorage`. Knows nothing about
+  achievements or unlocks; `entities/dx-ball/Progress.ts` owns those.

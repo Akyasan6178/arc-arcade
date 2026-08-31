@@ -80,6 +80,10 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * `null` so the ball keeps travelling instead of bouncing. Score, the
  * `'brick-break'` cue, and the drop queue still run only on actual
  * destruction — same side-effect site as a normal hit.
+ *
+ * DXB-16: each contact is also queued as a `BrickHitEvent` so
+ * `MainScene` can count metal hits and Fire Ball destroys without this
+ * grid knowing achievements exist.
  */
 export interface BrickGridConfig {
   rows?: number;
@@ -144,6 +148,16 @@ export interface PowerupSpawnPoint {
 }
 
 /**
+ * DXB-16: One ball/brick contact, whether or not the brick was destroyed.
+ * `MainScene` polls these the same way it already polls powerup spawns.
+ */
+export interface BrickHitEvent {
+  brickType: BrickType;
+  destroyed: boolean;
+  pierced: boolean;
+}
+
+/**
  * DXB-11: Result of one ball/brick overlap. Same axis the ball has
  * always bounced on, plus a position correction so a brick that
  * *survives* the hit (metal, or a cracked brick's first hit) cannot
@@ -170,6 +184,8 @@ export class BrickGrid {
   private score = 0;
   /** DXB-09: Spawn points queued since the last `consumePendingPowerupSpawns()` call. */
   private pendingPowerupSpawns: PowerupSpawnPoint[] = [];
+  /** DXB-16: Hits queued since the last `consumePendingHits()` call. */
+  private pendingHits: BrickHitEvent[] = [];
 
   constructor(
     scene: Phaser.Scene,
@@ -265,6 +281,11 @@ export class BrickGrid {
       // `null` (no bounce / no separation) so the ball keeps travelling
       // through the cell; the next DXB-05 substep hits the next brick.
       const destroyed = brick.takeHit({ fire: options?.pierce });
+      this.pendingHits.push({
+        brickType: brick.brickType,
+        destroyed,
+        pierced: options?.pierce === true,
+      });
       if (!destroyed) {
         return result;
       }
@@ -332,6 +353,21 @@ export class BrickGrid {
     const spawns = this.pendingPowerupSpawns;
     this.pendingPowerupSpawns = [];
     return spawns;
+  }
+
+  /**
+   * DXB-16: Drains every brick contact queued since the last call —
+   * metal hits that bounce, Fire Ball pierces, ordinary breaks. Polled
+   * by `MainScene` into lifetime achievement counters.
+   */
+  consumePendingHits(): BrickHitEvent[] {
+    if (this.pendingHits.length === 0) {
+      return [];
+    }
+
+    const hits = this.pendingHits;
+    this.pendingHits = [];
+    return hits;
   }
 
   /** Recomputes every brick's size and position for a new viewport size (e.g. on resize). */
