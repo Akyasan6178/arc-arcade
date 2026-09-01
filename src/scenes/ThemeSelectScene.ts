@@ -21,9 +21,11 @@ import { bindOptionalMenuShortcuts } from '@scenes/menuNavigation';
 import {
   MENU_LAYOUT,
   createMenuHint,
+  createMenuRule,
   createMenuSubtitle,
   createMenuTitle,
   layoutMenuHint,
+  layoutMenuRule,
   layoutMenuSubtitle,
   layoutMenuTitle,
   menuBackX,
@@ -50,6 +52,8 @@ export class ThemeSelectScene extends Phaser.Scene {
   private titleText!: Phaser.GameObjects.Text;
   private subtitleText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
+  private rule!: Phaser.GameObjects.Graphics;
+  private ruleColor = 0x2de2e6;
   private backButton?: TextButton;
   private menu!: SelectMenu<ThemeId>;
   private unsubscribeViewport?: () => void;
@@ -70,7 +74,9 @@ export class ThemeSelectScene extends Phaser.Scene {
     playDxBallThemeMusic(currentId);
     this.titleText = createMenuTitle(this, snapshot, current.hud.title);
     this.subtitleText = createMenuSubtitle(this, snapshot, current.hud.subtitle, 'SELECT THEME');
-    this.hintText = createMenuHint(this, snapshot, current.hud.hint, 'Tap a theme to choose');
+    this.ruleColor = current.overlay.panelStroke;
+    this.rule = createMenuRule(this, snapshot, this.ruleColor);
+    this.hintText = createMenuHint(this, snapshot, current.hud.hint, 'Locked themes preview only');
     this.backButton = this.createBackButton(snapshot, current.menu.color);
     this.menu = new SelectMenu(
       this,
@@ -138,6 +144,8 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.subtitleText.setColor(theme.hud.subtitle);
     this.hintText.setColor(theme.hud.hint);
     this.backButton?.setColor(theme.menu.color, theme.menu.highlightColor);
+    this.ruleColor = theme.overlay.panelStroke;
+    layoutMenuRule(this.rule, GameViewport.get().getSnapshot(), this.ruleColor);
     playDxBallThemeMusic(id);
   }
 
@@ -164,6 +172,7 @@ export class ThemeSelectScene extends Phaser.Scene {
 
     layoutMenuTitle(this.titleText, snapshot);
     layoutMenuSubtitle(this.subtitleText, snapshot);
+    layoutMenuRule(this.rule, snapshot, this.ruleColor);
     layoutMenuHint(this.hintText, snapshot);
 
     this.backButton?.setPosition(menuBackX(snapshot), menuHintY(snapshot));

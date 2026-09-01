@@ -4,6 +4,9 @@ import { PreloadScene } from '@scenes/PreloadScene';
 import { HubScene } from '@scenes/HubScene';
 import { ThemeSelectScene } from '@scenes/ThemeSelectScene';
 import { ModeSelectScene } from '@scenes/ModeSelectScene';
+import { LevelSelectScene } from '@scenes/LevelSelectScene';
+import { TutorialScene } from '@scenes/TutorialScene';
+import { CreditsScene } from '@scenes/CreditsScene';
 import { AchievementsScene } from '@scenes/AchievementsScene';
 import { StatsScene } from '@scenes/StatsScene';
 import { GarageScene } from '@scenes/GarageScene';
@@ -18,11 +21,12 @@ import { AudioManager } from '@systems/AudioManager';
  * Application entry point. Creates the single Phaser.Game instance shared
  * by every game built on this foundation and registers the base scene
  * pipeline (Boot -> Preload -> Hub -> Play: ThemeSelect -> ModeSelect ->
- * Main). Individual games plug additional scenes into this same array as
- * they're built. DXB-16's achievements catalog is now `AchievementsScene`,
- * opened from the Hub. DXB-17 registers `StatsScene`. DXB-18 registers
- * `GarageScene`. DXB-18A registers `HubScene` and `SettingsScene` so
- * every side screen is reachable from visible buttons.
+ * LevelSelect (Classic) -> Main). Individual games plug additional scenes
+ * into this same array as they're built. DXB-16's achievements catalog is
+ * now `AchievementsScene`, opened from the Hub. DXB-17 registers
+ * `StatsScene`. DXB-18 registers `GarageScene`. DXB-18A registers
+ * `HubScene` and `SettingsScene`. DXB-23 registers `LevelSelectScene`,
+ * `TutorialScene`, and `CreditsScene`.
  *
  * ARC-01: `scale` is configured with Phaser.Scale.RESIZE so the canvas
  * always fills its parent container (`#app`, styled to 100% of the
@@ -54,6 +58,9 @@ const config: Phaser.Types.Core.GameConfig = {
     HubScene,
     ThemeSelectScene,
     ModeSelectScene,
+    LevelSelectScene,
+    TutorialScene,
+    CreditsScene,
     AchievementsScene,
     StatsScene,
     GarageScene,

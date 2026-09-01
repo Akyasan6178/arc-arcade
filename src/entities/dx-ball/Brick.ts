@@ -37,9 +37,11 @@ import type { ThemeBrickTypeVisual } from '@entities/dx-ball/Theme';
  *
  * DXB-13: the collision body stays this `Rectangle` (so `BrickGrid`'s
  * x/y/width/height math is unchanged); type-specific drawing lives on a
- * sibling `Graphics` overlay — clean bevel for normal, crack lines for
- * a damaged cracked brick, metallic bands for metal, gold highlight for
- * bonus. Gameplay fields and `takeHit()` are untouched.
+ * sibling `Graphics` overlay — clean bevel, crack lines, metallic bands,
+ * gold bonus pip. Gameplay fields and `takeHit()` are untouched.
+ *
+ * DXB-23: richer type recipes on that same overlay (3D bevel, split
+ * cracked damage, riveted steel, gem bonus). Mechanics are unchanged.
  */
 
 export type { BrickType } from '@entities/dx-ball/BrickType';
@@ -210,7 +212,7 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     this.drawNormal(g, x, y, width, height, fill);
   }
 
-  /** Clean solid body: a short top highlight and a thin bottom shade. */
+  /** Clean 3D body: left catch-light, top sheen, right/bottom shade. */
   private drawNormal(
     g: Phaser.GameObjects.Graphics,
     x: number,
@@ -219,15 +221,21 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     height: number,
     fill: number,
   ): void {
-    const highlightH = Math.max(1, height * 0.28);
-    const shadeH = Math.max(1, height * 0.22);
-    g.fillStyle(lightenColor(fill, 0.28), 0.55);
-    g.fillRect(x + 1, y + 1, width - 2, highlightH);
-    g.fillStyle(0x000000, 0.2);
-    g.fillRect(x + 1, y + height - shadeH - 1, width - 2, shadeH);
+    const radius = Math.max(1, height * 0.14);
+    const highlightH = Math.max(1, height * 0.32);
+    const shadeW = Math.max(2, width * 0.14);
+    g.fillStyle(lightenColor(fill, 0.38), 0.7);
+    g.fillRoundedRect(x + 1, y + 1, width - 2, highlightH, radius * 0.6);
+    g.fillStyle(0x000000, 0.22);
+    g.fillRect(x + width - shadeW - 1, y + 2, shadeW, height - 4);
+    g.fillRect(x + 1, y + height * 0.68, width - 2, Math.max(1, height * 0.28));
+    g.fillStyle(lightenColor(fill, 0.55), 0.35);
+    g.fillRect(x + 3, y + 2, Math.max(2, width * 0.08), height * 0.55);
+    g.lineStyle(Math.max(1, height * 0.06), 0x000000, 0.28);
+    g.strokeRoundedRect(x + 0.5, y + 0.5, width - 1, height - 1, radius);
   }
 
-  /** Healthy = pale outline; damaged = darker body already applied + cracks. */
+  /** Healthy shows a hairline fissure; damaged splits open with chips. */
   private drawCracked(
     g: Phaser.GameObjects.Graphics,
     x: number,
@@ -238,27 +246,61 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     damaged: boolean,
     strokeColor: number,
   ): void {
+    g.fillStyle(lightenColor(this.rowColor, damaged ? 0.08 : 0.22), damaged ? 0.18 : 0.4);
+    g.fillRoundedRect(x + 2, y + 1, width - 4, height * 0.3, radius * 0.5);
     g.lineStyle(Math.max(2, height * 0.12), strokeColor, 1);
     g.strokeRoundedRect(x, y, width, height, radius);
 
     if (!damaged) {
+      g.lineStyle(Math.max(1, height * 0.06), 0x1b1b1b, 0.45);
+      g.beginPath();
+      g.moveTo(x + width * 0.22, y + height * 0.2);
+      g.lineTo(x + width * 0.42, y + height * 0.55);
+      g.lineTo(x + width * 0.36, y + height * 0.88);
+      g.strokePath();
       return;
     }
 
-    g.lineStyle(Math.max(1.5, height * 0.1), 0x1b1b1b, 0.9);
+    g.fillStyle(0x0b0b0b, 0.55);
     g.beginPath();
-    g.moveTo(x + width * 0.18, y + height * 0.15);
-    g.lineTo(x + width * 0.48, y + height * 0.52);
-    g.lineTo(x + width * 0.32, y + height * 0.9);
+    g.moveTo(x + width * 0.4, y + height * 0.08);
+    g.lineTo(x + width * 0.52, y + height * 0.48);
+    g.lineTo(x + width * 0.38, y + height * 0.95);
+    g.lineTo(x + width * 0.28, y + height * 0.92);
+    g.lineTo(x + width * 0.44, y + height * 0.48);
+    g.closePath();
+    g.fillPath();
+
+    g.lineStyle(Math.max(2, height * 0.14), 0x1b1b1b, 0.95);
+    g.beginPath();
+    g.moveTo(x + width * 0.12, y + height * 0.18);
+    g.lineTo(x + width * 0.48, y + height * 0.5);
+    g.lineTo(x + width * 0.28, y + height * 0.95);
     g.strokePath();
     g.beginPath();
-    g.moveTo(x + width * 0.72, y + height * 0.12);
-    g.lineTo(x + width * 0.58, y + height * 0.48);
-    g.lineTo(x + width * 0.84, y + height * 0.88);
+    g.moveTo(x + width * 0.78, y + height * 0.08);
+    g.lineTo(x + width * 0.58, y + height * 0.46);
+    g.lineTo(x + width * 0.88, y + height * 0.92);
     g.strokePath();
+    g.beginPath();
+    g.moveTo(x + width * 0.5, y + height * 0.22);
+    g.lineTo(x + width * 0.7, y + height * 0.7);
+    g.strokePath();
+
+    g.fillStyle(0x1b1b1b, 0.85);
+    g.fillTriangle(
+      x + width * 0.86,
+      y + height * 0.08,
+      x + width * 0.98,
+      y + height * 0.22,
+      x + width * 0.78,
+      y + height * 0.28,
+    );
+    g.lineStyle(Math.max(1.5, height * 0.08), 0xffe066, 0.55);
+    g.strokeRoundedRect(x + 1, y + 1, width - 2, height - 2, radius);
   }
 
-  /** Steel body + highlight band + silver rim, never a row color. */
+  /** Steel plate: brushed bands, corner rivets, specular streak. Never a row color. */
   private drawMetal(
     g: Phaser.GameObjects.Graphics,
     x: number,
@@ -268,17 +310,44 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     radius: number,
     strokeColor: number,
   ): void {
-    g.fillStyle(0xcfd4da, 0.85);
-    g.fillRect(x + 2, y + 2, width - 4, Math.max(2, height * 0.32));
-    g.fillStyle(0x4a5560, 0.7);
-    g.fillRect(x + 2, y + height * 0.58, width - 4, Math.max(2, height * 0.32));
-    g.fillStyle(0xf8f9fa, 0.55);
-    g.fillRect(x + width * 0.14, y + height * 0.16, width * 0.16, Math.max(1, height * 0.14));
-    g.lineStyle(Math.max(2, height * 0.14), strokeColor, 1);
+    g.fillStyle(0x6d7680, 1);
+    g.fillRoundedRect(x, y, width, height, radius);
+    g.fillStyle(0xb8c0c8, 0.95);
+    g.fillRect(x + 2, y + 2, width - 4, Math.max(2, height * 0.28));
+    g.fillStyle(0x3d454d, 0.9);
+    g.fillRect(x + 2, y + height * 0.62, width - 4, Math.max(2, height * 0.3));
+
+    g.fillStyle(0x9aa3ad, 0.55);
+    const bandH = Math.max(1, height * 0.08);
+    for (let i = 1; i < 4; i++) {
+      g.fillRect(x + 3, y + height * (0.22 * i), width - 6, bandH);
+    }
+
+    g.fillStyle(0xf8f9fa, 0.7);
+    const streakX = x + width * 0.18;
+    g.fillRect(streakX, y + height * 0.12, Math.max(2, width * 0.1), Math.max(1, height * 0.18));
+
+    const rivet = Math.max(1.6, Math.min(width, height) * 0.12);
+    const insetX = Math.max(4, width * 0.12);
+    const insetY = Math.max(3, height * 0.22);
+    g.fillStyle(0xdfe3e8, 1);
+    g.fillCircle(x + insetX, y + insetY, rivet);
+    g.fillCircle(x + width - insetX, y + insetY, rivet);
+    g.fillCircle(x + insetX, y + height - insetY, rivet);
+    g.fillCircle(x + width - insetX, y + height - insetY, rivet);
+    g.fillStyle(0x2f353b, 0.55);
+    g.fillCircle(x + insetX, y + insetY, rivet * 0.4);
+    g.fillCircle(x + width - insetX, y + insetY, rivet * 0.4);
+    g.fillCircle(x + insetX, y + height - insetY, rivet * 0.4);
+    g.fillCircle(x + width - insetX, y + height - insetY, rivet * 0.4);
+
+    g.lineStyle(Math.max(2.5, height * 0.16), strokeColor, 1);
     g.strokeRoundedRect(x, y, width, height, radius);
+    g.lineStyle(Math.max(1, height * 0.06), 0x1c2126, 0.55);
+    g.strokeRoundedRect(x + 1.5, y + 1.5, width - 3, height - 3, radius * 0.8);
   }
 
-  /** Gold rim, inner wash, and center pip — reads as a special cell. */
+  /** Gold frame, gem facets, and a bright pip — reads as a special cell. */
   private drawBonus(
     g: Phaser.GameObjects.Graphics,
     x: number,
@@ -288,12 +357,20 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     radius: number,
     strokeColor: number,
   ): void {
-    g.fillStyle(strokeColor, 0.32);
-    g.fillRoundedRect(x + width * 0.1, y + height * 0.12, width * 0.8, height * 0.38, radius);
+    g.fillStyle(strokeColor, 0.28);
+    g.fillRoundedRect(x + width * 0.08, y + height * 0.1, width * 0.84, height * 0.36, radius);
     g.lineStyle(Math.max(2.5, height * 0.16), strokeColor, 1);
     g.strokeRoundedRect(x, y, width, height, radius);
+    g.lineStyle(Math.max(1.2, height * 0.08), 0xffffff, 0.35);
+    g.strokeRoundedRect(x + 2, y + 2, width - 4, height - 4, radius * 0.7);
+
+    const gem = Math.min(width, height) * 0.28;
     g.fillStyle(strokeColor, 1);
-    g.fillCircle(0, 0, Math.min(width, height) * 0.18);
+    g.fillTriangle(0, -gem, -gem * 0.72, gem * 0.2, gem * 0.72, gem * 0.2);
+    g.fillStyle(0xffffff, 0.55);
+    g.fillTriangle(0, -gem * 0.55, -gem * 0.28, gem * 0.05, gem * 0.12, -gem * 0.1);
+    g.fillStyle(strokeColor, 0.9);
+    g.fillCircle(width * 0.28, -height * 0.18, Math.max(1.2, gem * 0.18));
   }
 }
 

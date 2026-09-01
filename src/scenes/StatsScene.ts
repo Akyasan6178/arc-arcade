@@ -85,7 +85,7 @@ export class StatsScene extends Phaser.Scene {
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
     playDxBallThemeMusic(theme.id);
     this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
-    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'STATISTICS');
+    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'STATISTICS  ·  LOCAL');
     this.hintText = createMenuHint(this, snapshot, theme.hud.hint, '');
     this.tabBar = new TabBar(
       this,

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Paddle } from '@entities/dx-ball/Paddle';
 import { Powerup, type PowerupType } from '@entities/dx-ball/Powerup';
+import { pickWeightedPowerupType } from '@entities/dx-ball/PowerupDropTable';
 import type { ThemePowerupVisual } from '@entities/dx-ball/Theme';
 import { playDxBallSfx } from '@entities/dx-ball/audioCues';
 
@@ -34,12 +35,13 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * the caught-queue it drains afterward.
  *
  * DXB-12 expands the default spawn pool with Fire Ball, Multi Ball,
- * Small Paddle, and Fast Ball. Type picking is still a uniform random
- * draw from `config.types` — positives and negatives share the existing
- * drop pipeline; this manager still does not know what any type does.
+ * Small Paddle, and Fast Ball. DXB-23 replaces the uniform draw with a
+ * weighted table in `PowerupDropTable.ts` so Extra Life is very rare
+ * and Fire Ball is rare. This manager still does not know what any
+ * type does.
  */
 export interface PowerupManagerConfig {
-  /** Which effect types can spawn; one is picked at random per `spawn()` call. */
+  /** Which effect types can spawn; one is picked from the weighted table per `spawn()` call. */
   types?: PowerupType[];
   /** Capsule width, as a ratio of viewport width. */
   widthRatio?: number;
@@ -92,9 +94,9 @@ export class PowerupManager {
     this.viewportHeight = viewportHeight;
   }
 
-  /** Spawns one falling capsule of a randomly chosen configured type, centered at (x, y) — e.g. a just-destroyed brick's position. */
+  /** Spawns one falling capsule of a weighted configured type, centered at (x, y) — e.g. a just-destroyed brick's position. */
   spawn(x: number, y: number): void {
-    const type = this.config.types[Math.floor(Math.random() * this.config.types.length)];
+    const type = pickWeightedPowerupType(this.config.types);
     const width = this.viewportWidth * this.config.widthRatio;
     const height = this.viewportHeight * this.config.heightRatio;
     const fallSpeed = this.viewportHeight * this.config.fallSpeedRatio;

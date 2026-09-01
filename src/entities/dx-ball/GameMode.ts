@@ -24,7 +24,7 @@ export const GAME_MODES: readonly GameModeInfo[] = [
   {
     id: 'classic',
     label: 'Classic',
-    description: 'Clear every level. Score, lives, and powerups carry through.',
+    description: 'Browse the campaign, then clear levels. Score and lives carry through.',
   },
   {
     id: 'time-attack',

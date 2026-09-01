@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { ArcadeBackdropStyle } from '@ui/ArcadeBackground';
+import { drawPaddleCosmetic } from '@entities/dx-ball/paddleCosmetic';
 
 /**
  * ui/CollectionPreview.ts
@@ -368,94 +369,7 @@ export class CollectionPreview {
     const height = Math.max(8, playfieldH * 0.11);
     const x = playfieldX + playfieldW / 2;
     const y = playfieldY + playfieldH - height * 1.45;
-    const halfW = width / 2;
-    const halfH = height / 2;
-
-    this.paddle.fillStyle(visual.fill, 1);
-    this.paddle.fillRect(x - halfW, y - halfH, width, height);
-    const strokeWidth = height * visual.strokeWidthRatio;
-    if (strokeWidth > 0) {
-      this.paddle.lineStyle(strokeWidth, visual.stroke, 1);
-      this.paddle.strokeRect(x - halfW, y - halfH, width, height);
-    }
-
-    switch (visual.motif) {
-      case 'bands': {
-        this.paddle.fillStyle(visual.motifColor, 0.85);
-        this.paddle.fillRect(x - halfW * 0.82, y - halfH * 0.45, width * 0.82, Math.max(1, height * 0.18));
-        this.paddle.fillRect(x - halfW * 0.7, y + halfH * 0.12, width * 0.7, Math.max(1, height * 0.14));
-        break;
-      }
-      case 'glow': {
-        this.paddle.fillStyle(visual.motifColor, 0.2 + 0.18 * this.wave(240));
-        this.paddle.fillRoundedRect(x - halfW - 6, y - halfH - 6, width + 12, height + 12, Math.max(2, height * 0.4));
-        break;
-      }
-      case 'core': {
-        this.paddle.fillStyle(visual.motifColor, 0.18 + 0.22 * this.wave(160));
-        this.paddle.fillRoundedRect(x - halfW * 0.72, y - halfH * 0.85, width * 0.72, height * 0.85, Math.max(2, height * 0.25));
-        const coreW = width * (0.42 + 0.18 * this.wave(160));
-        this.paddle.fillStyle(visual.motifColor, 0.95);
-        this.paddle.fillRect(x - coreW / 2, y - Math.max(1, height * 0.12), coreW, Math.max(2, height * 0.28));
-        break;
-      }
-      case 'crystal': {
-        this.paddle.fillStyle(visual.motifColor, 0.4 + 0.4 * this.wave(220));
-        this.paddle.fillTriangle(x, y - halfH * 0.95, x - halfW * 0.22, y + halfH * 0.2, x + halfW * 0.22, y + halfH * 0.2);
-        this.paddle.fillStyle(visual.motifColor, 0.7 + 0.25 * this.wave(180));
-        this.paddle.fillTriangle(x - halfW * 0.72, y, x - halfW * 0.28, y - halfH * 0.55, x - halfW * 0.18, y + halfH * 0.55);
-        this.paddle.fillTriangle(x + halfW * 0.72, y, x + halfW * 0.28, y - halfH * 0.55, x + halfW * 0.18, y + halfH * 0.55);
-        const hx = x + Math.sin(this.fxTimeMs / 380) * halfW * 0.65;
-        this.paddle.fillStyle(0xffffff, 0.1 + 0.22 * this.wave(140));
-        this.paddle.fillRect(hx - 3, y - halfH, 6, height);
-        break;
-      }
-      case 'plates': {
-        this.paddle.fillStyle(visual.motifColor, 0.92);
-        const plateW = width * 0.22;
-        const plateH = Math.max(2, height * 0.7);
-        this.paddle.fillRect(x - halfW * 0.82, y - plateH / 2, plateW, plateH);
-        this.paddle.fillRect(x - plateW / 2, y - plateH / 2, plateW, plateH);
-        this.paddle.fillRect(x + halfW * 0.82 - plateW, y - plateH / 2, plateW, plateH);
-        const sweep = (Math.sin(this.fxTimeMs / 320) + 1) / 2;
-        const shineX = x - halfW * 0.82 + sweep * (width * 0.82);
-        this.paddle.fillStyle(0xf8ead4, 0.18 + 0.35 * this.wave(320));
-        this.paddle.fillRect(shineX, y - plateH / 2, Math.max(3, plateW * 0.45), plateH);
-        break;
-      }
-      case 'pulse': {
-        const beat = this.wave(180);
-        const outer = 0.78 + 0.12 * beat;
-        this.paddle.lineStyle(Math.max(1.5, height * 0.18), visual.motifColor, 0.45 + 0.5 * beat);
-        this.paddle.strokeRoundedRect(
-          x - halfW * outer,
-          y - halfH * (0.5 + 0.2 * beat),
-          width * outer,
-          height * (0.5 + 0.2 * beat),
-          Math.max(2, height * 0.28),
-        );
-        this.paddle.lineStyle(Math.max(1, height * 0.12), visual.motifColor, 0.3 + 0.4 * (1 - beat));
-        this.paddle.strokeRoundedRect(
-          x - halfW * 0.5,
-          y - halfH * 0.28,
-          width * 0.5,
-          height * 0.28,
-          Math.max(1, height * 0.18),
-        );
-        break;
-      }
-      case 'shard': {
-        this.paddle.fillStyle(0x2e1065, 0.1 + 0.16 * this.wave(260));
-        this.paddle.fillRoundedRect(x - halfW - 8, y - halfH - 8, width + 16, height + 16, Math.max(3, height * 0.45));
-        this.paddle.fillStyle(visual.motifColor, 0.85 + 0.1 * this.wave(260));
-        this.paddle.fillTriangle(x - halfW * 0.15, y - halfH * 0.95, x + halfW * 0.62, y, x - halfW * 0.15, y + halfH * 0.95);
-        this.paddle.fillStyle(visual.motifColor, 0.35 + 0.2 * this.wave(200));
-        this.paddle.fillRect(x - halfW * 0.88, y - halfH * 0.2, width * 0.28, Math.max(2, height * 0.4));
-        break;
-      }
-      default:
-        break;
-    }
+    drawPaddleCosmetic(this.paddle, visual, width, height, this.fxTimeMs, x, y);
   }
 
   private drawBall(playfieldX: number, playfieldY: number, playfieldW: number, playfieldH: number): void {

@@ -180,10 +180,16 @@ import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins'
  * Multi Ball extras split ±10° (was ±20°), Time Attack applies a 1.15×
  * speed fold (timer still 90s), and Endless ramps at +0.15%/s (was
  * +0.4%/s, cap still 2×). No new systems, types, or content.
+ *
+ * DXB-23: Classic may start at a browsed campaign index
+ * (`startLevelIndex`). Multi Ball extras split ±5° so they stay
+ * grouped. Powerup rarity lives in `PowerupDropTable.ts`.
  */
 
 export interface MainSceneData {
   mode?: GameModeId;
+  /** DXB-23: Classic campaign start (0-based). Ignored in other modes. */
+  startLevelIndex?: number;
 }
 const HIGH_SCORE_KEY = 'dx-ball-high-score';
 
@@ -207,8 +213,8 @@ const POWERUP_DURATION_MS: Record<PowerupType, number> = {
 /** DXB-12: Multi Ball always tops up to this many balls, never more. */
 const MULTI_BALL_TOTAL = 3;
 
-/** DXB-12/DXB-21: Heading offsets (degrees) applied to extras split from a launched ball. */
-const MULTI_BALL_SPLIT_ANGLES_DEG = [-10, 10] as const;
+/** DXB-12/DXB-21/DXB-23: Heading offsets (degrees) for extras. Tightened to ±5° so the group stays readable. */
+const MULTI_BALL_SPLIT_ANGLES_DEG = [-5, 5] as const;
 
 /** DXB-22: Lightweight collection flashes. Visual only — dispatch is unchanged. */
 const POWERUP_COLLECT_FLASH: Record<PowerupType, number> = {
@@ -257,6 +263,8 @@ export class MainScene extends Phaser.Scene {
   private lostLifeThisRun = false;
   /** DXB-08: 0-based index into `LEVELS` of the level currently in play. */
   private currentLevelIndex = 0;
+  /** DXB-23: Classic start index from Level Select; Restart Run returns here. */
+  private startLevelIndex = 0;
   /** DXB-14: Chosen on the mode-select screen; defaults to Classic. */
   private mode: GameModeId = 'classic';
   /** DXB-14: Time Attack remaining ms. Unused in other modes. */
@@ -285,6 +293,11 @@ export class MainScene extends Phaser.Scene {
 
   init(data: MainSceneData = {}): void {
     this.mode = isGameModeId(data.mode) ? data.mode : 'classic';
+    const requested = data.startLevelIndex;
+    this.startLevelIndex =
+      this.mode === 'classic' && typeof requested === 'number' && Number.isFinite(requested)
+        ? Phaser.Math.Clamp(Math.floor(requested), 0, LEVELS.length - 1)
+        : 0;
   }
 
   create(): void {
@@ -300,7 +313,7 @@ export class MainScene extends Phaser.Scene {
     this.lastMissCount = 0;
     this.lastRunScore = 0;
     this.lostLifeThisRun = false;
-    this.currentLevelIndex = 0;
+    this.currentLevelIndex = this.startLevelIndex;
     this.remainingTimeMs = TIME_ATTACK_DURATION_MS;
     this.runElapsedMs = 0;
     this.unflushedPlayTimeMs = 0;
@@ -1029,7 +1042,7 @@ export class MainScene extends Phaser.Scene {
     if (this.paused || !(this.won || this.lost || this.timedOut)) {
       return;
     }
-    this.scene.restart({ mode: this.mode });
+    this.scene.restart({ mode: this.mode, startLevelIndex: this.startLevelIndex });
   }
 
   /** Space replays the same mode. Esc / Pause open the pause menu. */
@@ -1109,7 +1122,7 @@ export class MainScene extends Phaser.Scene {
       case 'restart':
         this.pauseOverlay.hide();
         this.paused = false;
-        this.scene.restart({ mode: this.mode });
+        this.scene.restart({ mode: this.mode, startLevelIndex: this.startLevelIndex });
         break;
       case 'mode-select':
         this.pauseOverlay.hide();

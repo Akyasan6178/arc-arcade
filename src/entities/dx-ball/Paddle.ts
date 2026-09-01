@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { drawPaddleCosmetic, type PaddleCosmeticVisual } from '@entities/dx-ball/paddleCosmetic';
 
 /**
  * entities/dx-ball/Paddle.ts
@@ -48,14 +49,12 @@ import Phaser from 'phaser';
  * DXB-22: motif overlays animate with Phaser Graphics (no GIF files).
  * Crystal shimmers, Titan gets a metallic sweep, Pulse rings beat,
  * Reactor's core glows, Obsidian has a dark aura. Collision is unchanged.
+ *
+ * DXB-23: each motif paints a unique silhouette (robot pistons, alien
+ * waves, reactor core, pulse slug) via `paddleCosmetic.ts`. The
+ * rectangle stays the collision body and is hidden; size is unchanged.
  */
-export interface PaddleSkinVisual {
-  fill: number;
-  stroke: number;
-  strokeWidthRatio: number;
-  motif: 'flat' | 'bands' | 'glow' | 'core' | 'crystal' | 'plates' | 'pulse' | 'shard';
-  motifColor: number;
-}
+export type PaddleSkinVisual = PaddleCosmeticVisual;
 
 export interface PaddleConfig {
   color?: number;
@@ -332,13 +331,8 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
   }
 
   private refreshSkin(): void {
-    this.setFillStyle(this.skin.fill);
-    const strokeWidth = this.height * this.skin.strokeWidthRatio;
-    if (strokeWidth > 0) {
-      this.setStrokeStyle(strokeWidth, this.skin.stroke);
-    } else {
-      this.setStrokeStyle(0);
-    }
+    this.setFillStyle(this.skin.fill, 0);
+    this.setStrokeStyle(0);
     this.redrawMotif();
   }
 
@@ -350,149 +344,9 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     this.redrawMotif();
   }
 
-  private wave(periodMs: number): number {
-    return 0.5 + 0.5 * Math.sin(this.fxTimeMs / periodMs);
-  }
-
   private redrawMotif(): void {
     this.overlay.clear();
-    const halfWidth = this.width / 2;
-    const halfHeight = this.height / 2;
-
-    switch (this.skin.motif) {
-      case 'bands': {
-        this.overlay.fillStyle(this.skin.motifColor, 0.85);
-        this.overlay.fillRect(-halfWidth * 0.82, -halfHeight * 0.45, this.width * 0.82, Math.max(1, this.height * 0.18));
-        this.overlay.fillRect(-halfWidth * 0.7, halfHeight * 0.12, this.width * 0.7, Math.max(1, this.height * 0.14));
-        break;
-      }
-      case 'glow': {
-        this.overlay.fillStyle(this.skin.motifColor, 0.2 + 0.18 * this.wave(240));
-        this.overlay.fillRoundedRect(
-          -halfWidth - 6,
-          -halfHeight - 6,
-          this.width + 12,
-          this.height + 12,
-          Math.max(2, this.height * 0.4),
-        );
-        break;
-      }
-      case 'core': {
-        const glow = 0.18 + 0.22 * this.wave(160);
-        this.overlay.fillStyle(this.skin.motifColor, glow);
-        this.overlay.fillRoundedRect(
-          -halfWidth * 0.72,
-          -halfHeight * 0.85,
-          this.width * 0.72,
-          this.height * 0.85,
-          Math.max(2, this.height * 0.25),
-        );
-        const coreW = this.width * (0.42 + 0.18 * this.wave(160));
-        this.overlay.fillStyle(this.skin.motifColor, 0.95);
-        this.overlay.fillRect(-coreW / 2, -Math.max(1, this.height * 0.12), coreW, Math.max(2, this.height * 0.28));
-        break;
-      }
-      case 'crystal': {
-        const shimmer = 0.4 + 0.4 * this.wave(220);
-        this.overlay.fillStyle(this.skin.motifColor, shimmer);
-        this.overlay.fillTriangle(
-          0,
-          -halfHeight * 0.95,
-          -halfWidth * 0.22,
-          halfHeight * 0.2,
-          halfWidth * 0.22,
-          halfHeight * 0.2,
-        );
-        this.overlay.fillStyle(this.skin.motifColor, 0.7 + 0.25 * this.wave(180));
-        this.overlay.fillTriangle(
-          -halfWidth * 0.72,
-          0,
-          -halfWidth * 0.28,
-          -halfHeight * 0.55,
-          -halfWidth * 0.18,
-          halfHeight * 0.55,
-        );
-        this.overlay.fillTriangle(
-          halfWidth * 0.72,
-          0,
-          halfWidth * 0.28,
-          -halfHeight * 0.55,
-          halfWidth * 0.18,
-          halfHeight * 0.55,
-        );
-        const hx = Math.sin(this.fxTimeMs / 380) * halfWidth * 0.65;
-        this.overlay.fillStyle(0xffffff, 0.1 + 0.22 * this.wave(140));
-        this.overlay.fillRect(hx - 3, -halfHeight, 6, this.height);
-        break;
-      }
-      case 'plates': {
-        this.overlay.fillStyle(this.skin.motifColor, 0.92);
-        const plateW = this.width * 0.22;
-        const plateH = Math.max(2, this.height * 0.7);
-        this.overlay.fillRect(-halfWidth * 0.82, -plateH / 2, plateW, plateH);
-        this.overlay.fillRect(-plateW / 2, -plateH / 2, plateW, plateH);
-        this.overlay.fillRect(halfWidth * 0.82 - plateW, -plateH / 2, plateW, plateH);
-        const sweep = (Math.sin(this.fxTimeMs / 320) + 1) / 2;
-        const shineX = -halfWidth * 0.82 + sweep * (this.width * 0.82);
-        this.overlay.fillStyle(0xf8ead4, 0.18 + 0.35 * this.wave(320));
-        this.overlay.fillRect(shineX, -plateH / 2, Math.max(3, plateW * 0.45), plateH);
-        break;
-      }
-      case 'pulse': {
-        const beat = this.wave(180);
-        const outer = 0.78 + 0.12 * beat;
-        this.overlay.lineStyle(Math.max(1.5, this.height * 0.18), this.skin.motifColor, 0.45 + 0.5 * beat);
-        this.overlay.strokeRoundedRect(
-          -halfWidth * outer,
-          -halfHeight * (0.5 + 0.2 * beat),
-          this.width * outer,
-          this.height * (0.5 + 0.2 * beat),
-          Math.max(2, this.height * 0.28),
-        );
-        this.overlay.lineStyle(Math.max(1, this.height * 0.12), this.skin.motifColor, 0.3 + 0.4 * (1 - beat));
-        this.overlay.strokeRoundedRect(
-          -halfWidth * 0.5,
-          -halfHeight * 0.28,
-          this.width * 0.5,
-          this.height * 0.28,
-          Math.max(1, this.height * 0.18),
-        );
-        this.overlay.lineStyle(Math.max(1, this.height * 0.1), this.skin.motifColor, 0.12 + 0.28 * beat);
-        this.overlay.strokeRoundedRect(
-          -halfWidth * 0.95,
-          -halfHeight * 0.9,
-          this.width * 0.95,
-          this.height * 0.9,
-          Math.max(2, this.height * 0.32),
-        );
-        break;
-      }
-      case 'shard': {
-        const aura = 0.1 + 0.16 * this.wave(260);
-        this.overlay.fillStyle(0x2e1065, aura);
-        this.overlay.fillRoundedRect(
-          -halfWidth - 8,
-          -halfHeight - 8,
-          this.width + 16,
-          this.height + 16,
-          Math.max(3, this.height * 0.45),
-        );
-        this.overlay.fillStyle(this.skin.motifColor, 0.85 + 0.1 * this.wave(260));
-        this.overlay.fillTriangle(
-          -halfWidth * 0.15,
-          -halfHeight * 0.95,
-          halfWidth * 0.62,
-          0,
-          -halfWidth * 0.15,
-          halfHeight * 0.95,
-        );
-        this.overlay.fillStyle(this.skin.motifColor, 0.35 + 0.2 * this.wave(200));
-        this.overlay.fillRect(-halfWidth * 0.88, -halfHeight * 0.2, this.width * 0.28, Math.max(2, this.height * 0.4));
-        break;
-      }
-      default:
-        break;
-    }
+    drawPaddleCosmetic(this.overlay, this.skin, this.width, this.height, this.fxTimeMs);
   }
 
   private static computeSize(

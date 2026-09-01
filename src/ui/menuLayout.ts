@@ -82,6 +82,57 @@ export function menuContentBottom(snapshot: ViewportSnapshot): number {
   return snapshot.height * MENU_LAYOUT.contentBottomRatio - snapshot.safeArea.bottom;
 }
 
+export function menuRuleY(snapshot: ViewportSnapshot): number {
+  return menuSubtitleY(snapshot) + menuFontSize(snapshot.height, MENU_LAYOUT.subtitleFontRatio, MENU_LAYOUT.subtitleMinPx) * 1.45;
+}
+
+export function createMenuRule(
+  scene: Phaser.Scene,
+  snapshot: ViewportSnapshot,
+  color: number,
+): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics().setDepth(MENU_DEPTH);
+  layoutMenuRule(g, snapshot, color);
+  return g;
+}
+
+export function layoutMenuRule(
+  g: Phaser.GameObjects.Graphics,
+  snapshot: ViewportSnapshot,
+  color: number,
+): void {
+  const y = menuRuleY(snapshot);
+  const width = snapshot.width * 0.16;
+  g.clear();
+  g.fillStyle(color, 0.95);
+  g.fillRect(snapshot.width / 2 - width / 2, y, width, 3);
+}
+
+export function createMenuVersion(
+  scene: Phaser.Scene,
+  snapshot: ViewportSnapshot,
+  color: string,
+  caption: string,
+): Phaser.GameObjects.Text {
+  return scene.add
+    .text(menuBackX(snapshot), menuHintY(snapshot), caption, {
+      fontFamily: MENU_FONT_FAMILY,
+      fontSize: `${menuFontSize(snapshot.height, MENU_LAYOUT.hintFontRatio, MENU_LAYOUT.hintMinPx)}px`,
+      color,
+      align: 'left',
+      stroke: MENU_STROKE,
+      strokeThickness: 3,
+    })
+    .setOrigin(0, 1)
+    .setShadow(1, 2, '#000000', 3, true, true)
+    .setDepth(MENU_DEPTH);
+}
+
+export function layoutMenuVersion(text: Phaser.GameObjects.Text, snapshot: ViewportSnapshot): void {
+  text.setPosition(menuBackX(snapshot), menuHintY(snapshot));
+  text.setFontSize(menuFontSize(snapshot.height, MENU_LAYOUT.hintFontRatio, MENU_LAYOUT.hintMinPx));
+}
+
 export function fittedRowHeight(
   viewportHeight: number,
   originY: number,

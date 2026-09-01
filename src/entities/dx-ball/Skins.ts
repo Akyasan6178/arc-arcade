@@ -14,6 +14,10 @@ import type { BallSkinId, PaddleSkinId } from '@entities/dx-ball/Progress';
  *
  * DXB-22: ball skins name an idle `fx` token so gameplay and Garage
  * preview can animate without new skin ids. Fire Ball still overrides.
+ *
+ * DXB-23: paddle motifs still use these same ids. Distinct silhouettes
+ * live in `paddleCosmetic.ts` (robot pistons, alien waves, reactor core,
+ * pulse slug) so skins are not color-only.
  */
 
 export type PaddleSkinMotif =

@@ -1,5 +1,6 @@
 import type { BrickGridConfig } from '@entities/dx-ball/BrickGrid';
 import type { BallConfig } from '@entities/dx-ball/Ball';
+import { parseBrickLayout, type BrickType } from '@entities/dx-ball/BrickType';
 
 /**
  * entities/dx-ball/levels.ts
@@ -40,18 +41,24 @@ import type { BallConfig } from '@entities/dx-ball/Ball';
  * is bonus-brick risk/reward; level 10 mixes every current type as the
  * Classic finale. Metal still never counts toward clear, so leftover
  * cages cannot lock a level. Time Attack / Endless still wrap `LEVELS`.
+ *
+ * DXB-23: each entry has a display `name` for the Classic level browser.
+ * Layouts are unchanged.
  */
 export interface LevelConfig {
+  /** DXB-23: Shown on Level Select. Gameplay ignores this. */
+  name?: string;
   brickGrid?: BrickGridConfig;
   ball?: BallConfig;
 }
 
 export const LEVELS: readonly LevelConfig[] = [
   // Level 1: unchanged from DXB-06A's tuned defaults — all normal bricks.
-  {},
+  { name: 'Opening Volley' },
   // Level 2: one more row, a touch tighter, worth more, a bit faster.
   // Cracked bricks in the back row and a mid-field band.
   {
+    name: 'First Cracks',
     brickGrid: {
       gapRatio: 0.012,
       basePointsPerRow: 12,
@@ -69,6 +76,7 @@ export const LEVELS: readonly LevelConfig[] = [
   // Level 3: more rows and columns, tighter rows, highest points/speed.
   // Cracked, metal (indestructible obstacles with bounce gaps), and bonus.
   {
+    name: 'Mixed Field',
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.026,
@@ -87,6 +95,7 @@ export const LEVELS: readonly LevelConfig[] = [
   },
   // Level 4: heavier metal — corridors and bounce cages, still clearable.
   {
+    name: 'Steel Corridors',
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.024,
@@ -106,6 +115,7 @@ export const LEVELS: readonly LevelConfig[] = [
   },
   // Level 5: mixed field of every current brick type.
   {
+    name: 'Type Mix',
     brickGrid: {
       gapRatio: 0.011,
       rowHeightRatio: 0.024,
@@ -125,6 +135,7 @@ export const LEVELS: readonly LevelConfig[] = [
   },
   // Level 6: precision — sparse columns and holes; every required brick is open.
   {
+    name: 'Precision',
     brickGrid: {
       gapRatio: 0.014,
       rowHeightRatio: 0.024,
@@ -144,6 +155,7 @@ export const LEVELS: readonly LevelConfig[] = [
   },
   // Level 7: cracked-heavy — two-hit bricks dominate, with lanes so nothing is boxed in.
   {
+    name: 'Fracture',
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.024,
@@ -163,6 +175,7 @@ export const LEVELS: readonly LevelConfig[] = [
   },
   // Level 8: metal-obstacle maze — bounce lanes keep every required brick reachable.
   {
+    name: 'Metal Maze',
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.022,
@@ -182,6 +195,7 @@ export const LEVELS: readonly LevelConfig[] = [
   },
   // Level 9: bonus risk/reward — guaranteed-drop bricks near metal, plus safer clusters.
   {
+    name: 'Bonus Hunt',
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.022,
@@ -201,6 +215,7 @@ export const LEVELS: readonly LevelConfig[] = [
   },
   // Level 10: finale — every current brick type, metal as obstacles only.
   {
+    name: 'Finale',
     brickGrid: {
       gapRatio: 0.011,
       rowHeightRatio: 0.022,
@@ -219,3 +234,79 @@ export const LEVELS: readonly LevelConfig[] = [
     ball: { speedRatio: 0.98 },
   },
 ];
+
+const PREVIEW_ROW_COLORS = [0xe63946, 0xf3722c, 0xf9c74f, 0x90be6d, 0x4d96ff];
+const PREVIEW_METAL = 0x8b95a1;
+const PREVIEW_BONUS = 0x9b5de5;
+const DEFAULT_PREVIEW_ROWS = 5;
+const DEFAULT_PREVIEW_COLUMNS = 8;
+
+export interface LevelPreviewCell {
+  type: BrickType;
+  color: number;
+}
+
+export interface LevelPreviewModel {
+  index: number;
+  number: number;
+  name: string;
+  cells: (LevelPreviewCell | null)[][];
+}
+
+export function getLevelName(index: number): string {
+  return LEVELS[index]?.name ?? `Level ${index + 1}`;
+}
+
+/** DXB-23: Compact cell map for Level Select thumbnails. Layouts are unchanged. */
+export function getLevelPreviewModel(index: number): LevelPreviewModel {
+  const level = LEVELS[index] ?? {};
+  const brick = level.brickGrid ?? {};
+  const parsed = brick.layout
+    ? parseBrickLayout(brick.layout)
+    : defaultPreviewLayout(brick.rows ?? DEFAULT_PREVIEW_ROWS, brick.columns ?? DEFAULT_PREVIEW_COLUMNS);
+
+  const cells = parsed.map((row, rowIndex) =>
+    row.map((type) => {
+      if (type === null) {
+        return null;
+      }
+      return { type, color: previewCellColor(type, rowIndex) };
+    }),
+  );
+
+  return {
+    index,
+    number: index + 1,
+    name: getLevelName(index),
+    cells,
+  };
+}
+
+export function getAllLevelPreviewModels(): LevelPreviewModel[] {
+  return LEVELS.map((_, index) => getLevelPreviewModel(index));
+}
+
+function defaultPreviewLayout(rows: number, columns: number): (BrickType | null)[][] {
+  return Array.from({ length: rows }, () => Array.from({ length: columns }, () => 'normal' as const));
+}
+
+function previewCellColor(type: BrickType, rowIndex: number): number {
+  if (type === 'metal') {
+    return PREVIEW_METAL;
+  }
+  if (type === 'bonus') {
+    return PREVIEW_BONUS;
+  }
+  const rowColor = PREVIEW_ROW_COLORS[rowIndex % PREVIEW_ROW_COLORS.length];
+  if (type === 'cracked') {
+    return darkenPreview(rowColor, 0.72);
+  }
+  return rowColor;
+}
+
+function darkenPreview(color: number, factor: number): number {
+  const r = Math.round(((color >> 16) & 0xff) * factor);
+  const g = Math.round(((color >> 8) & 0xff) * factor);
+  const b = Math.round((color & 0xff) * factor);
+  return (r << 16) | (g << 8) | b;
+}

@@ -13,6 +13,7 @@
  * unlockables catalog; DXB-18A replaces that side screen with a
  * dedicated `Achievements` destination from the Hub. DXB-17 adds
  * `Stats`. DXB-18 adds `Garage`. DXB-18A adds `Hub` and `Settings`.
+ * DXB-23 adds `LevelSelect`, `Tutorial`, and `Credits`.
  */
 export const SceneKeys = {
   Boot: 'BootScene',
@@ -20,6 +21,9 @@ export const SceneKeys = {
   Hub: 'HubScene',
   ThemeSelect: 'ThemeSelectScene',
   ModeSelect: 'ModeSelectScene',
+  LevelSelect: 'LevelSelectScene',
+  Tutorial: 'TutorialScene',
+  Credits: 'CreditsScene',
   Achievements: 'AchievementsScene',
   Stats: 'StatsScene',
   Garage: 'GarageScene',

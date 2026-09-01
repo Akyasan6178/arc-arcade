@@ -78,4 +78,8 @@ Currently:
 - `menuLayout.ts` — DXB-20's shared menu chrome tokens (title /
   subtitle / hint / Back placement, minimum font sizes, safe-area
   offsets). Hub and every side screen read these so spacing stays
-  consistent. Not a new screen.
+  consistent. DXB-23 adds a short accent rule and a version caption
+  helper. Not a new screen.
+- `LevelBrowser.ts` — DXB-23's Classic campaign thumbnail grid. Draws
+  miniature brick maps plus name/number captions. Confirm reports the
+  highlighted index. Not a gameplay system.

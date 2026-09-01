@@ -3,6 +3,7 @@ import { SceneKeys } from '@systems/SceneKeys';
 import { GameViewport, type ViewportSnapshot } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
 import { playDxBallThemeMusic } from '@entities/dx-ball/audioCues';
+import { formatGameVersion } from '@entities/dx-ball/Version';
 import { getTheme } from '@entities/dx-ball/Theme';
 import { loadPlayableThemeId } from '@entities/dx-ball/Progress';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
@@ -10,9 +11,11 @@ import { SelectMenu } from '@ui/SelectMenu';
 import { bindOptionalMenuShortcuts } from '@scenes/menuNavigation';
 import {
   createMenuHint,
+  createMenuRule,
   createMenuSubtitle,
   createMenuTitle,
   layoutMenuHint,
+  layoutMenuRule,
   layoutMenuSubtitle,
   layoutMenuTitle,
   menuOriginY,
@@ -27,15 +30,17 @@ import {
  * Optional G / S / U shortcuts still open Garage / Stats / Achievements.
  *
  * DXB-20: shared menu chrome (title / subtitle / hint spacing and type).
+ * DXB-23: Tutorial / Credits rows, version caption, tighter hierarchy.
  */
 
-type HubId = 'play' | 'garage' | 'stats' | 'achievements' | 'settings';
+type HubId = 'play' | 'garage' | 'tutorial' | 'stats' | 'achievements' | 'credits' | 'settings';
 
 export class HubScene extends Phaser.Scene {
   private background!: ArcadeBackground;
   private titleText!: Phaser.GameObjects.Text;
   private subtitleText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
+  private rule!: Phaser.GameObjects.Graphics;
   private menu!: SelectMenu<HubId>;
   private unsubscribeViewport?: () => void;
 
@@ -53,39 +58,49 @@ export class HubScene extends Phaser.Scene {
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
     playDxBallThemeMusic(theme.id);
     this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
-    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'MAIN MENU');
-    this.hintText = createMenuHint(
+    this.subtitleText = createMenuSubtitle(
       this,
       snapshot,
-      theme.hud.hint,
-      'Tap a row to open',
-      'center',
+      theme.hud.subtitle,
+      `MAIN MENU  ·  ${formatGameVersion()}`,
     );
+    this.rule = createMenuRule(this, snapshot, theme.overlay.panelStroke);
+    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Tap a row to open', 'center');
     this.menu = new SelectMenu(
       this,
       snapshot.width,
       snapshot.height,
-      menuOriginY(snapshot),
+      menuOriginY(snapshot, true),
       [
         {
           id: 'play',
           title: 'Play',
-          description: 'Choose a theme and mode',
+          description: 'Theme, mode, then Classic level previews',
         },
         {
           id: 'garage',
           title: 'Garage',
-          description: 'Themes, paddles, and balls',
+          description: 'Equip themes, paddles, and balls',
+        },
+        {
+          id: 'tutorial',
+          title: 'Tutorial',
+          description: 'Paddle, bricks, powerups, modes, unlocks',
         },
         {
           id: 'stats',
           title: 'Statistics',
-          description: 'Lifetime stats, leaderboards, progress',
+          description: 'Lifetime stats, boards, and progress',
         },
         {
           id: 'achievements',
           title: 'Achievements',
           description: 'Lifetime unlocks and completion',
+        },
+        {
+          id: 'credits',
+          title: 'Credits',
+          description: 'Title, version, and development',
         },
         {
           id: 'settings',
@@ -99,9 +114,9 @@ export class HubScene extends Phaser.Scene {
         highlightColor: theme.menu.highlightColor,
         descriptionColor: theme.menu.descriptionColor,
         mutedColor: theme.menu.mutedColor,
-        rowHeightRatio: 0.092,
-        titleFontSizeRatio: 0.036,
-        descriptionFontSizeRatio: 0.018,
+        rowHeightRatio: 0.078,
+        titleFontSizeRatio: 0.032,
+        descriptionFontSizeRatio: 0.016,
       },
     );
 
@@ -127,11 +142,17 @@ export class HubScene extends Phaser.Scene {
       case 'garage':
         this.scene.start(SceneKeys.Garage, { from: SceneKeys.Hub });
         return;
+      case 'tutorial':
+        this.scene.start(SceneKeys.Tutorial, { from: SceneKeys.Hub });
+        return;
       case 'stats':
         this.scene.start(SceneKeys.Stats, { from: SceneKeys.Hub });
         return;
       case 'achievements':
         this.scene.start(SceneKeys.Achievements, { from: SceneKeys.Hub });
+        return;
+      case 'credits':
+        this.scene.start(SceneKeys.Credits, { from: SceneKeys.Hub });
         return;
       case 'settings':
         this.scene.start(SceneKeys.Settings, { from: SceneKeys.Hub });
@@ -143,9 +164,11 @@ export class HubScene extends Phaser.Scene {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background.resize(snapshot.width, snapshot.height);
 
+    const theme = getTheme(loadPlayableThemeId());
     layoutMenuTitle(this.titleText, snapshot);
     layoutMenuSubtitle(this.subtitleText, snapshot);
+    layoutMenuRule(this.rule, snapshot, theme.overlay.panelStroke);
     layoutMenuHint(this.hintText, snapshot, 'center');
-    this.menu.resize(snapshot.width, snapshot.height, menuOriginY(snapshot));
+    this.menu.resize(snapshot.width, snapshot.height, menuOriginY(snapshot, true));
   }
 }
