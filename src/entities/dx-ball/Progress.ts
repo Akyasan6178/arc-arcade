@@ -1071,6 +1071,44 @@ export function getProgressSummary(): ProgressSummary {
   };
 }
 
+export function getModeBestScore(mode: GameModeId): number {
+  const stats = loadStats();
+  if (mode === 'classic') {
+    return stats.classicBestScore;
+  }
+  if (mode === 'time-attack') {
+    return stats.timeAttackBestScore;
+  }
+  return stats.endlessBestScore;
+}
+
+export interface UnlockHint {
+  title: string;
+  requirement: string;
+  current: number;
+  target: number;
+}
+
+/** First locked catalog/achievement row, for end-of-run copy. */
+export function getNextUnlockHint(): UnlockHint | null {
+  const rows = [
+    ...getThemeUnlockRows(loadPlayableThemeId()),
+    ...getPaddleUnlockRows(loadPaddleSkinId()),
+    ...getBallUnlockRows(loadBallSkinId()),
+    ...getAchievementRows(),
+  ];
+  const next = rows.find((row) => !row.unlocked);
+  if (!next) {
+    return null;
+  }
+  return {
+    title: next.title,
+    requirement: next.requirement,
+    current: next.current,
+    target: next.target,
+  };
+}
+
 export function getCollectionCompletion(): CollectionCompletion {
   const themeRows = getThemeUnlockRows(loadPlayableThemeId());
   const paddleRows = getPaddleUnlockRows(loadPaddleSkinId());

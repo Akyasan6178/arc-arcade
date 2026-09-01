@@ -49,7 +49,7 @@ const TUTORIAL_PAGES: Record<TutorialTab, { title: string; body: string }> = {
     body:
       'Normal — one hit, may drop a capsule.\n\n' +
       'Cracked — two hits. The split face is the damaged state.\n\n' +
-      'Metal — silver riveted plates. Indestructible obstacles (Fire Ball can still pierce them). Metal does not block a clear.\n\n' +
+      'Metal — silver riveted plates. Indestructible to the ball (Fire Ball can still pierce them; Laser Paddle chips them in a few hits). Metal does not block a clear.\n\n' +
       'Bonus — gold gem. Always drops a powerup.',
   },
   powerups: {
@@ -58,7 +58,7 @@ const TUTORIAL_PAGES: Record<TutorialTab, { title: string; body: string }> = {
       'Capsules fall when bricks break. Catch them with the paddle.\n\n' +
       'Common: Widen, Slow, Fast, Small Paddle.\n' +
       'Uncommon: Multi Ball (extras stay grouped).\n' +
-      'Rare: Fire Ball (pierces bricks for a short time).\n' +
+      'Rare: Fire Ball (pierces bricks for a short time) and Laser Paddle (fires bolts that break bricks and chip metal).\n' +
       'Very Rare: Extra Life — a special reward, not a regular drop.',
   },
   modes: {

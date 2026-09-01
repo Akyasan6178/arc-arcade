@@ -48,6 +48,9 @@ export type { BrickType } from '@entities/dx-ball/BrickType';
 
 const PLAYFIELD_DEPTH = 10;
 
+/** DXB-24: Laser bolts needed to destroy a metal brick. Normal balls still bounce forever. */
+const METAL_LASER_HITS = 3;
+
 export class Brick extends Phaser.GameObjects.Rectangle {
   readonly row: number;
   readonly column: number;
@@ -59,6 +62,8 @@ export class Brick extends Phaser.GameObjects.Rectangle {
   /** Row color assigned by the grid; cracked/normal fills start from this. */
   private readonly rowColor: number;
   private remainingHits: number;
+  /** DXB-24: Laser-only durability for metal. Unused for other types. */
+  private laserHitsRemaining: number;
   /** DXB-15: Theme-driven type colors; gameplay specs stay in BrickType. */
   private typeVisual: ThemeBrickTypeVisual;
   /** DXB-13: type-specific drawing layered on top of the collision rect. */
@@ -89,6 +94,7 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     this.rowColor = color;
     this.typeVisual = typeVisual;
     this.remainingHits = spec.hitsToDestroy;
+    this.laserHitsRemaining = brickType === 'metal' ? METAL_LASER_HITS : 0;
 
     this.overlay = scene.add.graphics();
     this.overlay.setPosition(x, y);
@@ -123,15 +129,24 @@ export class Brick extends Phaser.GameObjects.Rectangle {
    * enters its damaged visual state and returns `false`.
    *
    * DXB-12: `{ fire: true }` is the Fire Ball path — the brick is
-   * destroyed in one hit, including metal (which a normal ball can
-   * never remove). The ball still does not know brick types exist;
-   * `BrickGrid` decides whether to pass this flag.
+   * destroyed in one hit, including metal. The ball still does not know
+   * brick types exist; `BrickGrid` decides whether to pass this flag.
+   *
+   * DXB-24: `{ laser: true }` on metal spends one of `METAL_LASER_HITS`
+   * instead of bouncing forever. Destructible types take a normal hit.
    */
-  takeHit(options?: { fire?: boolean }): boolean {
+  takeHit(options?: { fire?: boolean; laser?: boolean }): boolean {
     if (options?.fire) {
       this.remainingHits = 0;
+      this.laserHitsRemaining = 0;
       this.applyVisuals();
       return true;
+    }
+
+    if (options?.laser && this.brickType === 'metal') {
+      this.laserHitsRemaining = Math.max(0, this.laserHitsRemaining - 1);
+      this.applyVisuals();
+      return this.laserHitsRemaining <= 0;
     }
 
     if (!Number.isFinite(this.remainingHits)) {
@@ -345,6 +360,19 @@ export class Brick extends Phaser.GameObjects.Rectangle {
     g.strokeRoundedRect(x, y, width, height, radius);
     g.lineStyle(Math.max(1, height * 0.06), 0x1c2126, 0.55);
     g.strokeRoundedRect(x + 1.5, y + 1.5, width - 3, height - 3, radius * 0.8);
+
+    const laserTaken = METAL_LASER_HITS - this.laserHitsRemaining;
+    if (laserTaken > 0) {
+      g.fillStyle(0x1c2126, 0.45 + laserTaken * 0.12);
+      g.fillRect(x + width * 0.18, y + height * 0.35, width * 0.22, Math.max(2, height * 0.12));
+      if (laserTaken >= 2) {
+        g.fillRect(x + width * 0.58, y + height * 0.22, width * 0.18, Math.max(2, height * 0.16));
+      }
+      if (laserTaken >= 3) {
+        g.fillStyle(0xff6b35, 0.35);
+        g.fillRoundedRect(x + 2, y + 2, width - 4, height - 4, radius * 0.7);
+      }
+    }
   }
 
   /** Gold frame, gem facets, and a bright pip — reads as a special cell. */

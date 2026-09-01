@@ -81,6 +81,14 @@ const WIDEN_BOOST_MULTIPLIER = 1.5;
 /** DXB-12: Width multiplier applied while a "small paddle" effect is active. */
 const SMALL_PADDLE_MULTIPLIER = 0.65;
 
+/** DXB-24: Laser Paddle fire interval while the timed effect is active. */
+const LASER_FIRE_INTERVAL_MS = 280;
+
+export interface LaserShot {
+  x: number;
+  y: number;
+}
+
 export class Paddle extends Phaser.GameObjects.Rectangle {
   private readonly config: Required<PaddleConfig>;
   private readonly cursorKeys?: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -96,6 +104,10 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
   private widenRemainingMs = 0;
   /** DXB-12: Milliseconds remaining on the current small-paddle effect, if any. */
   private smallRemainingMs = 0;
+  /** DXB-24: Milliseconds remaining on Laser Paddle. */
+  private laserRemainingMs = 0;
+  private laserCooldownMs = 0;
+  private readonly pendingLaserShots: LaserShot[] = [];
   /** DXB-16: Cosmetic overlay; the rectangle remains the collision body. */
   private readonly overlay: Phaser.GameObjects.Graphics;
   /** DXB-22: Idle motif animation clock. */
@@ -148,6 +160,7 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
    */
   update(deltaMs: number): void {
     this.tickWidthEffects(deltaMs);
+    this.tickLaser(deltaMs);
 
     const deltaSeconds = deltaMs / 1000;
     const maxSpeed = this.viewportWidth * this.config.speedRatio;
@@ -220,6 +233,34 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     return this.smallRemainingMs;
   }
 
+  /**
+   * DXB-24: Applies (or refreshes) Laser Paddle. Catching a second
+   * capsule extends the timer; the paddle still does not know bricks
+   * exist — shots are queued for the owning scene.
+   */
+  applyLaserEffect(durationMs: number): void {
+    if (this.laserRemainingMs <= 0) {
+      this.laserCooldownMs = 0;
+    }
+    this.laserRemainingMs = durationMs;
+    this.redrawMotif();
+  }
+
+  /** DXB-24: Remaining Laser Paddle time, for the active-effects HUD. */
+  getLaserRemainingMs(): number {
+    return this.laserRemainingMs;
+  }
+
+  /** DXB-24: Drains muzzle points queued since the last call (two per volley). */
+  consumePendingLaserShots(): LaserShot[] {
+    if (this.pendingLaserShots.length === 0) {
+      return [];
+    }
+    const shots = this.pendingLaserShots.slice();
+    this.pendingLaserShots.length = 0;
+    return shots;
+  }
+
   /** Counts down an active width effect by one frame, reverting the width the instant it expires. */
   private tickWidthEffects(deltaMs: number): void {
     if (this.widenRemainingMs > 0) {
@@ -253,6 +294,31 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     }
     this.smallRemainingMs = 0;
     this.revertWidthMultiplier();
+  }
+
+  private tickLaser(deltaMs: number): void {
+    if (this.laserRemainingMs <= 0) {
+      return;
+    }
+
+    this.laserRemainingMs -= deltaMs;
+    this.laserCooldownMs -= deltaMs;
+    if (this.laserCooldownMs <= 0) {
+      this.queueLaserVolley();
+      this.laserCooldownMs = LASER_FIRE_INTERVAL_MS;
+    }
+    if (this.laserRemainingMs <= 0) {
+      this.laserRemainingMs = 0;
+      this.laserCooldownMs = 0;
+      this.redrawMotif();
+    }
+  }
+
+  private queueLaserVolley(): void {
+    const offsetX = this.width * 0.32;
+    const muzzleY = this.y - this.height / 2;
+    this.pendingLaserShots.push({ x: this.x - offsetX, y: muzzleY });
+    this.pendingLaserShots.push({ x: this.x + offsetX, y: muzzleY });
   }
 
   private revertWidthMultiplier(): void {
@@ -347,6 +413,26 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
   private redrawMotif(): void {
     this.overlay.clear();
     drawPaddleCosmetic(this.overlay, this.skin, this.width, this.height, this.fxTimeMs);
+    if (this.laserRemainingMs > 0) {
+      this.drawLaserCannons();
+    }
+  }
+
+  private drawLaserCannons(): void {
+    const g = this.overlay;
+    const halfW = this.width / 2;
+    const halfH = this.height / 2;
+    const barrelW = Math.max(3, this.width * 0.07);
+    const barrelH = Math.max(6, this.height * 1.15);
+    const offset = this.width * 0.32;
+    g.fillStyle(0x7df9ff, 0.95);
+    g.fillRect(-offset - barrelW / 2, -halfH - barrelH * 0.35, barrelW, barrelH);
+    g.fillRect(offset - barrelW / 2, -halfH - barrelH * 0.35, barrelW, barrelH);
+    g.fillStyle(0xffffff, 0.55);
+    g.fillRect(-offset - barrelW * 0.2, -halfH - barrelH * 0.35, barrelW * 0.4, barrelH * 0.45);
+    g.fillRect(offset - barrelW * 0.2, -halfH - barrelH * 0.35, barrelW * 0.4, barrelH * 0.45);
+    g.fillStyle(0x2de2e6, 0.35);
+    g.fillRoundedRect(-halfW, -halfH, this.width, this.height, Math.max(2, this.height * 0.2));
   }
 
   private static computeSize(

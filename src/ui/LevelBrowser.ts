@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { LevelPreviewModel } from '@entities/dx-ball/levels';
+import type { BrickType } from '@entities/dx-ball/BrickType';
 
 /**
  * ui/LevelBrowser.ts
@@ -34,7 +35,9 @@ interface LevelBrowserTile {
   hit: Phaser.GameObjects.Rectangle;
   frame: Phaser.GameObjects.Graphics;
   map: Phaser.GameObjects.Graphics;
+  icons: Phaser.GameObjects.Graphics;
   caption: Phaser.GameObjects.Text;
+  rating: Phaser.GameObjects.Text;
 }
 
 export class LevelBrowser {
@@ -80,6 +83,7 @@ export class LevelBrowser {
     for (let i = 0; i < levels.length; i++) {
       const frame = scene.add.graphics().setDepth(HUD_DEPTH);
       const map = scene.add.graphics().setDepth(HUD_DEPTH + 1);
+      const icons = scene.add.graphics().setDepth(HUD_DEPTH + 1);
       const hit = scene.add
         .rectangle(0, 0, 10, 10, 0x000000, 0.001)
         .setDepth(HUD_DEPTH + 2)
@@ -96,6 +100,18 @@ export class LevelBrowser {
         })
         .setOrigin(0.5, 0)
         .setDepth(HUD_DEPTH + 1);
+      const rating = scene.add
+        .text(0, 0, '', {
+          fontFamily: HUD_FONT_FAMILY,
+          fontSize: '11px',
+          color: this.colors.highlightColor,
+          fontStyle: 'bold',
+          align: 'center',
+          stroke: '#0b1320',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5, 0)
+        .setDepth(HUD_DEPTH + 1);
 
       const index = i;
       hit.on('pointerover', () => this.setSelectedIndex(index));
@@ -104,7 +120,7 @@ export class LevelBrowser {
       caption.on('pointerover', () => this.setSelectedIndex(index));
       caption.on('pointerup', () => this.confirm());
 
-      this.tiles.push({ hit, frame, map, caption });
+      this.tiles.push({ hit, frame, map, icons, caption, rating });
     }
 
     this.layout();
@@ -132,7 +148,9 @@ export class LevelBrowser {
       tile.hit.destroy();
       tile.frame.destroy();
       tile.map.destroy();
+      tile.icons.destroy();
       tile.caption.destroy();
+      tile.rating.destroy();
     }
     this.tiles.length = 0;
   }
@@ -199,8 +217,8 @@ export class LevelBrowser {
     const availableW = this.viewportWidth - side * 2;
     const availableH = this.viewportHeight * 0.9 - this.originY;
     const tileW = (availableW - gap * (columns - 1)) / columns;
-    const tileH = Math.min(tileW * 0.78, (availableH - gap * (rows - 1)) / rows);
-    const fontSize = Math.max(10, Math.round(this.viewportHeight * 0.016));
+    const tileH = Math.min(tileW * 0.98, (availableH - gap * (rows - 1)) / rows);
+    const fontSize = Math.max(9, Math.round(this.viewportHeight * 0.014));
 
     for (let i = 0; i < this.tiles.length; i++) {
       const col = i % columns;
@@ -223,10 +241,10 @@ export class LevelBrowser {
     const level = this.levels[index];
     const selected = index === this.selectedIndex;
     const radius = Math.max(4, tileH * 0.08);
-    const mapH = tileH * 0.68;
+    const mapH = tileH * 0.52;
     const mapW = tileW * 0.88;
     const mapX = centerX - mapW / 2;
-    const mapY = topY + tileH * 0.06;
+    const mapY = topY + tileH * 0.05;
 
     tile.frame.clear();
     tile.frame.fillStyle(this.colors.panel, 0.92);
@@ -241,7 +259,16 @@ export class LevelBrowser {
     tile.map.clear();
     drawBrickThumbnail(tile.map, level, mapX, mapY, mapW, mapH);
 
-    tile.caption.setPosition(centerX, topY + mapH + tileH * 0.1);
+    tile.icons.clear();
+    const iconY = mapY + mapH + tileH * 0.04;
+    drawTypeIcons(tile.icons, level.brickTypes, centerX, iconY, tileW * 0.8);
+
+    tile.rating.setPosition(centerX, iconY + tileH * 0.07);
+    tile.rating.setFontSize(Math.max(9, fontSize - 1));
+    tile.rating.setColor(selected ? this.colors.highlightColor : this.colors.color);
+    tile.rating.setText(difficultyStars(level.difficulty));
+
+    tile.caption.setPosition(centerX, iconY + tileH * 0.15);
     tile.caption.setFontSize(fontSize);
     tile.caption.setColor(selected ? this.colors.highlightColor : this.colors.color);
     tile.caption.setText(`${level.number}. ${level.name}`);
@@ -300,4 +327,48 @@ function drawBrickThumbnail(
       }
     }
   }
+}
+
+const TYPE_ICON_COLORS: Record<BrickType, number> = {
+  normal: 0xe63946,
+  cracked: 0xf9c74f,
+  metal: 0x8b95a1,
+  bonus: 0x9b5de5,
+};
+
+function drawTypeIcons(
+  g: Phaser.GameObjects.Graphics,
+  types: readonly BrickType[],
+  centerX: number,
+  y: number,
+  maxWidth: number,
+): void {
+  if (types.length === 0) {
+    return;
+  }
+  const size = Math.max(7, maxWidth * 0.08);
+  const gap = size * 0.35;
+  const total = types.length * size + gap * (types.length - 1);
+  let x = centerX - total / 2;
+  for (const type of types) {
+    g.fillStyle(TYPE_ICON_COLORS[type], 1);
+    if (type === 'bonus') {
+      g.fillTriangle(x + size / 2, y, x, y + size, x + size, y + size);
+    } else if (type === 'metal') {
+      g.fillRect(x, y, size, size);
+      g.fillStyle(0xe9ecef, 0.9);
+      g.fillRect(x, y, size, size * 0.28);
+    } else if (type === 'cracked') {
+      g.fillRect(x, y, size, size);
+      g.fillStyle(0x1b1b1b, 0.7);
+      g.fillRect(x + size * 0.42, y + size * 0.12, size * 0.16, size * 0.76);
+    } else {
+      g.fillRoundedRect(x, y, size, size, 2);
+    }
+    x += size + gap;
+  }
+}
+
+function difficultyStars(rating: 1 | 2 | 3 | 4 | 5): string {
+  return `${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}`;
 }

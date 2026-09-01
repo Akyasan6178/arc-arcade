@@ -11,6 +11,8 @@ import Phaser from 'phaser';
 const FLASH_DEPTH = 16;
 const FLASH_DURATION_MS = 200;
 const FLASH_ALPHA = 0.3;
+const CELEBRATE_DURATION_MS = 420;
+const CELEBRATE_ALPHA = 0.48;
 
 export class CatchFlash {
   private readonly scene: Phaser.Scene;
@@ -26,15 +28,16 @@ export class CatchFlash {
       .setAlpha(0);
   }
 
-  flash(color: number): void {
+  flash(color: number, options?: { celebrate?: boolean }): void {
     this.tween?.stop();
+    const celebrate = options?.celebrate === true;
     this.rect.setFillStyle(color, 1);
     this.rect.setVisible(true);
-    this.rect.setAlpha(FLASH_ALPHA);
+    this.rect.setAlpha(celebrate ? CELEBRATE_ALPHA : FLASH_ALPHA);
     this.tween = this.scene.tweens.add({
       targets: this.rect,
       alpha: 0,
-      duration: FLASH_DURATION_MS,
+      duration: celebrate ? CELEBRATE_DURATION_MS : FLASH_DURATION_MS,
       onComplete: () => {
         this.rect.setVisible(false);
       },

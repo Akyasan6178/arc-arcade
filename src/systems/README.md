@@ -43,3 +43,6 @@ Currently:
   `set(key, value)` wrapper around `localStorage`. Knows nothing about
   achievements, unlocks, statistics, leaderboards, or favorites;
   `entities/dx-ball/Progress.ts` and `Leaderboards.ts` own those.
+  DXB-24 keeps the local Top 10 in `LeaderboardAdapter.ts` (`LocalLeaderboardAdapter`)
+  with an unwired `OnlineLeaderboardAdapter` seam — still no accounts
+  or network.

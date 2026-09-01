@@ -17,8 +17,11 @@ import type { ThemeId } from '@entities/dx-ball/Theme';
 export type DxBallSfxKey =
   | 'paddle-hit'
   | 'brick-break'
+  | 'brick-hit'
   | 'powerup-spawn'
   | 'powerup-collect'
+  | 'powerup-celebrate'
+  | 'laser-fire'
   | 'life-lost'
   | 'level-complete'
   | 'game-over'
@@ -34,6 +37,9 @@ const DX_BALL_SFX_TONES: Record<DxBallSfxKey, ToneSpec> = {
       { frequency: 220, durationMs: 50, type: 'square', gain: 0.18 },
     ],
   },
+  'brick-hit': {
+    steps: [{ frequency: 310, durationMs: 45, type: 'triangle', gain: 0.16 }],
+  },
   'powerup-spawn': {
     steps: [
       { frequency: 400, durationMs: 80, type: 'sine', gain: 0.15 },
@@ -45,6 +51,20 @@ const DX_BALL_SFX_TONES: Record<DxBallSfxKey, ToneSpec> = {
       { frequency: 523.25, durationMs: 80, type: 'sine', gain: 0.2 },
       { frequency: 659.25, durationMs: 80, type: 'sine', gain: 0.2 },
       { frequency: 783.99, durationMs: 120, type: 'sine', gain: 0.22 },
+    ],
+  },
+  'powerup-celebrate': {
+    steps: [
+      { frequency: 659.25, durationMs: 70, type: 'square', gain: 0.18 },
+      { frequency: 783.99, durationMs: 80, type: 'square', gain: 0.2 },
+      { frequency: 1046.5, durationMs: 90, type: 'square', gain: 0.22 },
+      { frequency: 1318.5, durationMs: 140, type: 'sine', gain: 0.2 },
+    ],
+  },
+  'laser-fire': {
+    steps: [
+      { frequency: 880, durationMs: 40, type: 'square', gain: 0.14 },
+      { frequency: 1320, durationMs: 50, type: 'square', gain: 0.12 },
     ],
   },
   'life-lost': {

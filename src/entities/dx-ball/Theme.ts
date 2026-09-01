@@ -106,7 +106,8 @@ export interface ThemeDefinition {
     | 'fire-ball'
     | 'multi-ball'
     | 'small-paddle'
-    | 'fast-ball',
+    | 'fast-ball'
+    | 'laser-paddle',
     ThemePowerupVisual
   >;
   overlay: ThemeOverlayColors;
@@ -167,6 +168,7 @@ const NEON_ARCADE: ThemeDefinition = {
     'multi-ball': { color: 0x74c69d, stroke: 0xf0fff4 },
     'small-paddle': { color: 0xe85d04, stroke: 0xffd166 },
     'fast-ball': { color: 0xc1121f, stroke: 0xffba08 },
+    'laser-paddle': { color: 0x0d3b66, stroke: 0x7df9ff },
   },
   overlay: {
     dim: 0x050814,
@@ -234,6 +236,7 @@ const SPACE: ThemeDefinition = {
     'multi-ball': { color: 0x1e1b4b, stroke: 0xc4b5fd },
     'small-paddle': { color: 0x9a3412, stroke: 0xfdba74 },
     'fast-ball': { color: 0x7f1d1d, stroke: 0xfca5a5 },
+    'laser-paddle': { color: 0x1e3a8a, stroke: 0x93c5fd },
   },
   overlay: {
     dim: 0x010108,
@@ -301,6 +304,7 @@ const LABORATORY: ThemeDefinition = {
     'multi-ball': { color: 0x0f766e, stroke: 0xccfbf1 },
     'small-paddle': { color: 0xc2410c, stroke: 0xfdba74 },
     'fast-ball': { color: 0xb45309, stroke: 0xfde68a },
+    'laser-paddle': { color: 0x155e75, stroke: 0x67e8f9 },
   },
   overlay: {
     dim: 0x022c22,
@@ -368,6 +372,7 @@ const INFERNO: ThemeDefinition = {
     'multi-ball': { color: 0x9a3412, stroke: 0xfed7aa },
     'small-paddle': { color: 0x9f1239, stroke: 0xfda4af },
     'fast-ball': { color: 0x7c2d12, stroke: 0xfdba74 },
+    'laser-paddle': { color: 0x1d4ed8, stroke: 0x93c5fd },
   },
   overlay: {
     dim: 0x140202,
@@ -435,6 +440,7 @@ const RETRO_GRID: ThemeDefinition = {
     'multi-ball': { color: 0x15803d, stroke: 0xdcfce7 },
     'small-paddle': { color: 0x9a3412, stroke: 0xfdba74 },
     'fast-ball': { color: 0xb45309, stroke: 0xfde68a },
+    'laser-paddle': { color: 0x164e63, stroke: 0x22d3ee },
   },
   overlay: {
     dim: 0x021008,
@@ -502,6 +508,7 @@ const FROZEN_CORE: ThemeDefinition = {
     'multi-ball': { color: 0x164e63, stroke: 0xe0f2fe },
     'small-paddle': { color: 0x9a3412, stroke: 0xfdba74 },
     'fast-ball': { color: 0x7f1d1d, stroke: 0xfca5a5 },
+    'laser-paddle': { color: 0x0e7490, stroke: 0xa5f3fc },
   },
   overlay: {
     dim: 0x020617,

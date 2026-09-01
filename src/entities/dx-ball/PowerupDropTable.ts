@@ -7,6 +7,9 @@ import type { PowerupType } from '@entities/dx-ball/Powerup';
  * only decides *whether* a capsule drops; this file decides *which*
  * type. Weights are integers, not equal shares — power strength tracks
  * rarity. Extra Life is a special reward, not a regular catch.
+ *
+ * DXB-24 adds Laser Paddle as a rare type. Weights still unique and
+ * still sum to 100.
  */
 
 export type PowerupRarity = 'very-rare' | 'rare' | 'uncommon' | 'common';
@@ -18,34 +21,37 @@ export interface PowerupDropEntry {
 }
 
 /**
- * Final DXB-23 table. Weights sum to 100 so a roll is a percent.
+ * Final DXB-24 table. Weights sum to 100 so a roll is a percent.
  *
- * Extra Life  3%  Very Rare
- * Fire Ball   8%  Rare
- * Multi Ball 14%  Uncommon
- * Small Paddle 15% Common
- * Fast Ball  17%  Common
- * Widen Paddle 19% Common
- * Slow Ball  24%  Common
+ * Extra Life     3%  Very Rare
+ * Laser Paddle   6%  Rare
+ * Fire Ball      8%  Rare
+ * Multi Ball    13%  Uncommon
+ * Small Paddle  14%  Common
+ * Fast Ball     16%  Common
+ * Widen Paddle  18%  Common
+ * Slow Ball     22%  Common
  */
 export const POWERUP_DROP_TABLE: readonly PowerupDropEntry[] = [
   { type: 'extra-life', weight: 3, rarity: 'very-rare' },
+  { type: 'laser-paddle', weight: 6, rarity: 'rare' },
   { type: 'fire-ball', weight: 8, rarity: 'rare' },
-  { type: 'multi-ball', weight: 14, rarity: 'uncommon' },
-  { type: 'small-paddle', weight: 15, rarity: 'common' },
-  { type: 'fast-ball', weight: 17, rarity: 'common' },
-  { type: 'widen-paddle', weight: 19, rarity: 'common' },
-  { type: 'slow-ball', weight: 24, rarity: 'common' },
+  { type: 'multi-ball', weight: 13, rarity: 'uncommon' },
+  { type: 'small-paddle', weight: 14, rarity: 'common' },
+  { type: 'fast-ball', weight: 16, rarity: 'common' },
+  { type: 'widen-paddle', weight: 18, rarity: 'common' },
+  { type: 'slow-ball', weight: 22, rarity: 'common' },
 ];
 
 const WEIGHT_BY_TYPE: Record<PowerupType, number> = {
   'extra-life': 3,
+  'laser-paddle': 6,
   'fire-ball': 8,
-  'multi-ball': 14,
-  'small-paddle': 15,
-  'fast-ball': 17,
-  'widen-paddle': 19,
-  'slow-ball': 24,
+  'multi-ball': 13,
+  'small-paddle': 14,
+  'fast-ball': 16,
+  'widen-paddle': 18,
+  'slow-ball': 22,
 };
 
 export function pickWeightedPowerupType(types: readonly PowerupType[]): PowerupType {

@@ -1,106 +1,79 @@
-import { JsonStore } from '@systems/JsonStore';
 import { formatCount, type StatDisplayRow } from '@entities/dx-ball/Progress';
-import { getGameModeInfo, isGameModeId, type GameModeId } from '@entities/dx-ball/GameMode';
+import { getGameModeInfo, type GameModeId } from '@entities/dx-ball/GameMode';
+import {
+  LEADERBOARD_SIZE,
+  LocalLeaderboardAdapter,
+  OnlineLeaderboardAdapter,
+  createDefaultLeaderboardAdapter,
+  type LeaderboardAdapter,
+  type LeaderboardEntry,
+  type LeaderboardSubmitResult,
+} from '@entities/dx-ball/LeaderboardAdapter';
 
 /**
  * entities/dx-ball/Leaderboards.ts
  *
- * DXB-17: Local Top 10 scores per mode. Kept next to `Progress.ts` the
- * same way that file keeps unlock counters out of `MainScene` — this
- * module owns the board shape and rank rules. Persistence is a
- * game-agnostic `JsonStore`; a separate key from `dx-ball-progress`
- * so a malformed board cannot wipe achievements.
+ * DXB-17: Local Top 10 scores per mode. DXB-24 splits persistence into
+ * `LeaderboardAdapter.ts` so a future online backend can plug in without
+ * touching gameplay. The active adapter is local-only; no accounts,
+ * cloud save, or network calls ship in this task.
  *
- * Local only: no accounts, no cloud, no online services.
+ * Public helpers (`submitScore` / `getLeaderboard` / `getLeaderboardRows`)
+ * stay stable so MainScene and StatsScene do not change their call sites
+ * beyond reading the richer submit result.
  */
 
-export interface LeaderboardEntry {
-  score: number;
-  recordedAt: number;
-}
+export type { LeaderboardEntry, LeaderboardSubmitResult, LeaderboardAdapter };
+export { LEADERBOARD_SIZE, LocalLeaderboardAdapter, OnlineLeaderboardAdapter };
 
 export type Leaderboards = Record<GameModeId, LeaderboardEntry[]>;
 
-export const LEADERBOARD_SIZE = 10;
+class LeaderboardService {
+  private adapter: LeaderboardAdapter;
 
-const LEADERBOARD_STORAGE_KEY = 'dx-ball-leaderboards';
-
-let cached: Leaderboards | null = null;
-
-function clampNonNegInt(value: unknown): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n) || n < 0) {
-    return 0;
-  }
-  return Math.floor(n);
-}
-
-function normalizeEntry(raw: Partial<LeaderboardEntry> | null | undefined): LeaderboardEntry | null {
-  const score = clampNonNegInt(raw?.score);
-  if (score <= 0) {
-    return null;
-  }
-  return {
-    score,
-    recordedAt: clampNonNegInt(raw?.recordedAt) || Date.now(),
-  };
-}
-
-function normalizeList(raw: unknown): LeaderboardEntry[] {
-  if (!Array.isArray(raw)) {
-    return [];
+  constructor(adapter: LeaderboardAdapter) {
+    this.adapter = adapter;
   }
 
-  const entries: LeaderboardEntry[] = [];
-  for (const item of raw) {
-    const entry = normalizeEntry(item as Partial<LeaderboardEntry>);
-    if (entry) {
-      entries.push(entry);
-    }
+  /** Replaces the persistence backend. Gameplay does not call this. */
+  setAdapter(adapter: LeaderboardAdapter): void {
+    this.adapter = adapter;
   }
 
-  entries.sort((a, b) => b.score - a.score || a.recordedAt - b.recordedAt);
-  return entries.slice(0, LEADERBOARD_SIZE);
-}
-
-function normalizeBoards(raw: Partial<Leaderboards> | null | undefined): Leaderboards {
-  return {
-    classic: normalizeList(raw?.classic),
-    'time-attack': normalizeList(raw?.['time-attack']),
-    endless: normalizeList(raw?.endless),
-  };
-}
-
-function loadBoards(): Leaderboards {
-  if (cached) {
-    return cached;
+  getAdapter(): LeaderboardAdapter {
+    return this.adapter;
   }
 
-  cached = normalizeBoards(JsonStore.get<Partial<Leaderboards>>(LEADERBOARD_STORAGE_KEY));
-  return cached;
+  submit(mode: GameModeId, score: number): LeaderboardSubmitResult {
+    return this.adapter.submit(mode, score);
+  }
+
+  list(mode: GameModeId): readonly LeaderboardEntry[] {
+    return this.adapter.list(mode);
+  }
 }
 
-function saveBoards(): void {
-  JsonStore.set(LEADERBOARD_STORAGE_KEY, loadBoards());
+const service = new LeaderboardService(createDefaultLeaderboardAdapter());
+
+/**
+ * Architecture seam for a future online adapter. Not used by gameplay.
+ * Passing `OnlineLeaderboardAdapter` still does not contact a server.
+ */
+export function setLeaderboardAdapter(adapter: LeaderboardAdapter): void {
+  service.setAdapter(adapter);
+}
+
+export function getLeaderboardAdapter(): LeaderboardAdapter {
+  return service.getAdapter();
 }
 
 /** Inserts `score` into that mode's Top 10. Scores of 0 are ignored. */
-export function submitScore(mode: GameModeId, score: number): void {
-  const value = clampNonNegInt(score);
-  if (value <= 0 || !isGameModeId(mode)) {
-    return;
-  }
-
-  const boards = loadBoards();
-  const list = boards[mode];
-  list.push({ score: value, recordedAt: Date.now() });
-  list.sort((a, b) => b.score - a.score || a.recordedAt - b.recordedAt);
-  boards[mode] = list.slice(0, LEADERBOARD_SIZE);
-  saveBoards();
+export function submitScore(mode: GameModeId, score: number): LeaderboardSubmitResult {
+  return service.submit(mode, score);
 }
 
 export function getLeaderboard(mode: GameModeId): readonly LeaderboardEntry[] {
-  return loadBoards()[mode];
+  return service.list(mode);
 }
 
 export function getLeaderboardRows(mode: GameModeId): StatDisplayRow[] {

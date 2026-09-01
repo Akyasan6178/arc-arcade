@@ -3,6 +3,7 @@ import { Brick } from '@entities/dx-ball/Brick';
 import { parseBrickLayout, type BrickType } from '@entities/dx-ball/BrickType';
 import type { ThemeBrickTypeVisual } from '@entities/dx-ball/Theme';
 import { playDxBallSfx } from '@entities/dx-ball/audioCues';
+import { spawnBrickImpact } from '@entities/dx-ball/BrickImpactFx';
 
 /**
  * entities/dx-ball/BrickGrid.ts
@@ -281,36 +282,11 @@ export class BrickGrid {
       // `null` (no bounce / no separation) so the ball keeps travelling
       // through the cell; the next DXB-05 substep hits the next brick.
       const destroyed = brick.takeHit({ fire: options?.pierce });
-      this.pendingHits.push({
-        brickType: brick.brickType,
-        destroyed,
-        pierced: options?.pierce === true,
-      });
+      this.finishContact(brick, i, destroyed, options?.pierce === true);
+
       if (!destroyed) {
         return result;
       }
-
-      this.bricks.splice(i, 1);
-      if (brick.awardsScore) {
-        this.score += brick.points;
-      }
-      playDxBallSfx('brick-break');
-
-      // DXB-09/DXB-11: drop policy is per-type. Bonus always queues a
-      // spawn; normal/cracked still roll `powerupDropChance`; metal
-      // (`'never'`) can now reach here when a Fire Ball destroys it,
-      // and still does not drop. Rolled independently of scoring, right
-      // before the brick's own position is lost to `destroy()`.
-      if (brick.powerupDrop === 'always') {
-        this.pendingPowerupSpawns.push({ x: brick.x, y: brick.y });
-      } else if (
-        brick.powerupDrop === 'chance' &&
-        Math.random() < this.config.powerupDropChance
-      ) {
-        this.pendingPowerupSpawns.push({ x: brick.x, y: brick.y });
-      }
-
-      brick.destroy();
 
       if (options?.pierce) {
         return null;
@@ -320,6 +296,34 @@ export class BrickGrid {
     }
 
     return null;
+  }
+
+  /**
+   * DXB-24: Laser bolt overlap. Hits the first overlapping brick and
+   * consumes the projectile. Destructible bricks take a normal hit;
+   * metal spends laser durability. Score / drops / break audio still
+   * run only on actual destruction.
+   */
+  resolveProjectileCollision(
+    x: number,
+    y: number,
+    halfWidth: number,
+    halfHeight: number,
+  ): boolean {
+    for (let i = 0; i < this.bricks.length; i++) {
+      const brick = this.bricks[i];
+      const overlapX = brick.width / 2 + halfWidth - Math.abs(x - brick.x);
+      const overlapY = brick.height / 2 + halfHeight - Math.abs(y - brick.y);
+      if (overlapX <= 0 || overlapY <= 0) {
+        continue;
+      }
+
+      const destroyed = brick.takeHit({ laser: true });
+      this.finishContact(brick, i, destroyed, false);
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -368,6 +372,50 @@ export class BrickGrid {
     const hits = this.pendingHits;
     this.pendingHits = [];
     return hits;
+  }
+
+  /**
+   * Shared ball/laser contact side effects: impact FX, score, drops,
+   * and removal. The collision loops still decide bounce vs consume.
+   */
+  private finishContact(brick: Brick, index: number, destroyed: boolean, pierced: boolean): void {
+    this.pendingHits.push({
+      brickType: brick.brickType,
+      destroyed,
+      pierced,
+    });
+
+    spawnBrickImpact(this.scene, {
+      x: brick.x,
+      y: brick.y,
+      width: brick.width,
+      height: brick.height,
+      brickType: brick.brickType,
+      destroyed,
+      crackedOpened: brick.brickType === 'cracked' && !destroyed && brick.remainingHitPoints === 1,
+    });
+
+    if (!destroyed) {
+      playDxBallSfx('brick-hit');
+      return;
+    }
+
+    this.bricks.splice(index, 1);
+    if (brick.awardsScore) {
+      this.score += brick.points;
+    }
+    playDxBallSfx('brick-break');
+
+    if (brick.powerupDrop === 'always') {
+      this.pendingPowerupSpawns.push({ x: brick.x, y: brick.y });
+    } else if (
+      brick.powerupDrop === 'chance' &&
+      Math.random() < this.config.powerupDropChance
+    ) {
+      this.pendingPowerupSpawns.push({ x: brick.x, y: brick.y });
+    }
+
+    brick.destroy();
   }
 
   /** Recomputes every brick's size and position for a new viewport size (e.g. on resize). */

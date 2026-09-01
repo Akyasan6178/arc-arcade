@@ -52,7 +52,8 @@ Currently:
   game over, time-up, level-clear). Dim + framed panel + title + body.
   DXB-20 adds a tap-to-continue hint and word wrap. DXB-22 adds a
   kicker, a reward line, and stronger theme-colored panel treatment.
-  Not DX-Ball-specific.
+  DXB-24 lengthens the card so Classic / Endless / Time Attack can show
+  score, best, records, and unlock progress. Not DX-Ball-specific.
 - `ProgressList.ts` — DXB-16's reusable catalog list (title + locked /
   unlocked / percent / equipped). Space confirms only unlocked
   selectable rows. DXB-18 adds `onHighlight`, `initialIndex`,
@@ -68,7 +69,11 @@ Currently:
   DXB-22 animates those tokens and the theme motif so Garage shows
   why a cosmetic is worth unlocking. No gameplay. Not DX-Ball-specific.
 - `CatchFlash.ts` — DXB-22's one-shot full-viewport color flash.
-  `MainScene` uses it for powerup collection. Not DX-Ball-specific.
+  `MainScene` uses it for powerup collection. DXB-24 adds a stronger
+  `celebrate` flash for Fire Ball / Multi Ball / Laser Paddle / Extra
+  Life. Not DX-Ball-specific.
+- `PowerupCelebrate.ts` — DXB-24's strong-catch burst (label + ring) at
+  the paddle. Not a gameplay system.
 - `TextButton.ts` — DXB-18A's reusable tappable label (hover brightens,
   pointerup clicks). Used for visible Back / Favorite / Settings /
   Pause controls. Not DX-Ball-specific.
@@ -80,6 +85,6 @@ Currently:
   offsets). Hub and every side screen read these so spacing stays
   consistent. DXB-23 adds a short accent rule and a version caption
   helper. Not a new screen.
-- `LevelBrowser.ts` — DXB-23's Classic campaign thumbnail grid. Draws
-  miniature brick maps plus name/number captions. Confirm reports the
-  highlighted index. Not a gameplay system.
+- `LevelBrowser.ts` — DXB-23's Classic campaign thumbnail grid. DXB-24
+  adds brick-type icons and a 1–5 difficulty rating under the miniature
+  layout. Confirm reports the highlighted index. Not a gameplay system.

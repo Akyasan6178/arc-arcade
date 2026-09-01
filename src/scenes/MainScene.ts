@@ -8,6 +8,7 @@ import { BrickGrid } from '@entities/dx-ball/BrickGrid';
 import { LEVELS, type LevelConfig } from '@entities/dx-ball/levels';
 import { PowerupManager } from '@entities/dx-ball/PowerupManager';
 import type { PowerupType } from '@entities/dx-ball/Powerup';
+import { isStrongPowerup, powerupCelebrateLabel } from '@entities/dx-ball/Powerup';
 import { playDxBallSfx, playDxBallThemeMusic } from '@entities/dx-ball/audioCues';
 import {
   TIME_ATTACK_DURATION_MS,
@@ -27,6 +28,7 @@ import { ModeLabel } from '@ui/ModeLabel';
 import { PauseOverlay, type PauseOverlayAction } from '@ui/PauseOverlay';
 import { ResultOverlay } from '@ui/ResultOverlay';
 import { CatchFlash } from '@ui/CatchFlash';
+import { PowerupCelebrate } from '@ui/PowerupCelebrate';
 import { TextButton } from '@ui/TextButton';
 import {
   MENU_LAYOUT,
@@ -50,9 +52,12 @@ import {
   recordPlayTime,
   recordPowerupCollected,
   flushProgressWrites,
+  getModeBestScore,
 } from '@entities/dx-ball/Progress';
-import { submitScore } from '@entities/dx-ball/Leaderboards';
+import { submitScore, type LeaderboardSubmitResult } from '@entities/dx-ball/Leaderboards';
 import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins';
+import { LaserBolt } from '@entities/dx-ball/LaserBolt';
+import { buildRunSummary } from '@entities/dx-ball/RunSummary';
 
 /**
  * scenes/MainScene.ts
@@ -184,6 +189,10 @@ import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins'
  * DXB-23: Classic may start at a browsed campaign index
  * (`startLevelIndex`). Multi Ball extras split ±5° so they stay
  * grouped. Powerup rarity lives in `PowerupDropTable.ts`.
+ *
+ * DXB-24: Laser Paddle, brick impact FX, strong-powerup celebration,
+ * richer end-of-run copy, and a local leaderboard adapter seam. Score /
+ * lives / modes are unchanged.
  */
 
 export interface MainSceneData {
@@ -208,6 +217,7 @@ const POWERUP_DURATION_MS: Record<PowerupType, number> = {
   'multi-ball': 0,
   'small-paddle': 15000,
   'fast-ball': 10000,
+  'laser-paddle': 10000,
 };
 
 /** DXB-12: Multi Ball always tops up to this many balls, never more. */
@@ -225,9 +235,13 @@ const POWERUP_COLLECT_FLASH: Record<PowerupType, number> = {
   'fast-ball': 0xfb7185,
   'widen-paddle': 0x86efac,
   'small-paddle': 0xf97316,
+  'laser-paddle': 0x22d3ee,
 };
 
-/** DXB-17: Flush accumulated play time to localStorage at this interval. */
+/** DXB-24: Laser bolt size/speed as viewport ratios. */
+const LASER_BOLT_WIDTH_RATIO = 0.012;
+const LASER_BOLT_HEIGHT_RATIO = 0.028;
+const LASER_BOLT_SPEED_RATIO = 1.45;
 const PLAY_TIME_FLUSH_MS = 5000;
 
 export class MainScene extends Phaser.Scene {
@@ -238,6 +252,7 @@ export class MainScene extends Phaser.Scene {
    * Lives still only decrement when the last remaining ball misses.
    */
   private balls: Ball[] = [];
+  private lasers: LaserBolt[] = [];
   private brickGrid!: BrickGrid;
   private powerupManager!: PowerupManager;
   private scoreLabel!: ScoreLabel;
@@ -249,12 +264,16 @@ export class MainScene extends Phaser.Scene {
   private pauseOverlay!: PauseOverlay;
   private resultOverlay!: ResultOverlay;
   private catchFlash!: CatchFlash;
+  private powerupCelebrate!: PowerupCelebrate;
   private pauseButton?: TextButton;
   private background!: ArcadeBackground;
   private theme!: ThemeDefinition;
   private bestScore = 0;
   /** DXB-22: Best at run start, so "NEW BEST" is not true of every finished run. */
   private startingBestScore = 0;
+  /** DXB-24: Per-mode best at run start, for end-of-run records. */
+  private startingModeBest = 0;
+  private lastSubmitResult: LeaderboardSubmitResult | null = null;
   private lives = STARTING_LIVES;
   private lastMissCount = 0;
   /** DXB-16: Last score already folded into lifetime progress this run. */
@@ -321,6 +340,9 @@ export class MainScene extends Phaser.Scene {
     this.lastEndlessMultiplier = 1;
     this.bestScore = HighScoreStore.get(HIGH_SCORE_KEY);
     this.startingBestScore = this.bestScore;
+    this.startingModeBest = getModeBestScore(this.mode);
+    this.lastSubmitResult = null;
+    this.lasers = [];
     this.theme = getTheme(loadPlayableThemeId());
     recordGamePlayed();
 
@@ -407,6 +429,7 @@ export class MainScene extends Phaser.Scene {
     this.resultOverlay = new ResultOverlay(this, snapshot.width, snapshot.height);
     this.resultOverlay.applyTheme(this.theme.overlay);
     this.catchFlash = new CatchFlash(this, snapshot.width, snapshot.height);
+    this.powerupCelebrate = new PowerupCelebrate(this);
     this.pauseButton = this.createPauseButton(snapshot);
     playDxBallThemeMusic(this.theme.id);
 
@@ -423,9 +446,11 @@ export class MainScene extends Phaser.Scene {
       this.flushPlayTime();
       flushProgressWrites();
       this.submitRunIfNeeded();
+      this.clearLasers();
       this.pauseButton?.destroy();
       this.pauseButton = undefined;
       this.catchFlash?.destroy();
+      this.powerupCelebrate?.destroy();
     });
 
     // DXB-10: global audio mute toggle. A keybinding rather than a HUD
@@ -465,6 +490,7 @@ export class MainScene extends Phaser.Scene {
     this.accumulatePlayTime(delta);
 
     this.paddle.update(delta);
+    this.updateLasers(delta);
     this.updateBalls(delta);
     this.updateProgressFromHits();
     this.updatePowerups(delta);
@@ -551,7 +577,18 @@ export class MainScene extends Phaser.Scene {
 
     for (const type of this.powerupManager.consumeCaughtPowerups()) {
       recordPowerupCollected();
-      this.catchFlash.flash(POWERUP_COLLECT_FLASH[type]);
+      const strong = isStrongPowerup(type);
+      this.catchFlash.flash(POWERUP_COLLECT_FLASH[type], { celebrate: strong });
+      if (strong) {
+        playDxBallSfx('powerup-celebrate');
+        this.powerupCelebrate.play(
+          this.paddle.x,
+          this.paddle.y - this.paddle.height,
+          powerupCelebrateLabel(type),
+          POWERUP_COLLECT_FLASH[type],
+          GameViewport.get().getSnapshot().height,
+        );
+      }
       this.applyPowerupEffect(type);
     }
   }
@@ -608,7 +645,7 @@ export class MainScene extends Phaser.Scene {
 
     this.runSubmitted = true;
     this.flushPlayTime();
-    submitScore(this.mode, this.brickGrid.getScore());
+    this.lastSubmitResult = submitScore(this.mode, this.brickGrid.getScore());
   }
 
   /**
@@ -736,12 +773,16 @@ export class MainScene extends Phaser.Scene {
     const fastMs = this.maxBallEffect((ball) => ball.getFastRemainingMs());
     const widenMs = this.paddle.getWidenRemainingMs();
     const smallMs = this.paddle.getSmallRemainingMs();
+    const laserMs = this.paddle.getLaserRemainingMs();
 
     if (fireMs > 0) {
       effects.push({ label: 'FIRE', remainingMs: fireMs });
     }
     if (this.balls.length > 1) {
       effects.push({ label: 'MULTI', detail: `x${this.balls.length}` });
+    }
+    if (laserMs > 0) {
+      effects.push({ label: 'LASER', remainingMs: laserMs });
     }
     if (widenMs > 0) {
       effects.push({ label: 'WIDE', remainingMs: widenMs });
@@ -800,6 +841,9 @@ export class MainScene extends Phaser.Scene {
       case 'multi-ball':
         recordMultiBallActivation();
         this.spawnMultiBall();
+        break;
+      case 'laser-paddle':
+        this.paddle.applyLaserEffect(durationMs);
         break;
     }
   }
@@ -924,6 +968,7 @@ export class MainScene extends Phaser.Scene {
     // DXB-09: a stray capsule still falling from the just-cleared level
     // shouldn't carry into the next one's fresh brick layout.
     this.powerupManager.clear();
+    this.clearLasers();
     this.effectsLabel.setEffects([]);
 
     this.lastMissCount = 0;
@@ -949,14 +994,14 @@ export class MainScene extends Phaser.Scene {
 
     this.submitRunIfNeeded();
 
-    const finalScore = this.brickGrid.getScore();
+    const summary = this.buildEndOfRunSummary('victory');
     this.resultOverlay.show(
       {
-        tone: 'victory',
-        kicker: 'Classic Mode',
-        title: 'VICTORY',
-        reward: this.resultReward(finalScore),
-        body: `All ${LEVELS.length} levels cleared`,
+        tone: summary.tone,
+        kicker: summary.kicker,
+        title: summary.title,
+        reward: summary.reward,
+        body: summary.body,
         hint: 'Tap to play again  ·  Pause for menu',
       },
       () => this.restartRunFromOverlay(),
@@ -976,32 +1021,18 @@ export class MainScene extends Phaser.Scene {
     playDxBallSfx('game-over');
     this.submitRunIfNeeded();
 
-    const finalScore = this.brickGrid.getScore();
-    if (this.mode === 'endless') {
-      this.resultOverlay.show(
-        {
-          tone: 'info',
-          kicker: 'Endless',
-          title: 'RUN COMPLETE',
-          reward: this.resultReward(finalScore),
-          body: `Reached Level ${this.currentLevelIndex + 1}`,
-          hint: 'Tap to try again  ·  Pause for menu',
-        },
-        () => this.restartRunFromOverlay(),
-      );
-    } else {
-      this.resultOverlay.show(
-        {
-          tone: 'defeat',
-          kicker: getGameModeInfo(this.mode).label,
-          title: 'GAME OVER',
-          reward: this.resultReward(finalScore),
-          body: 'No lives remaining',
-          hint: 'Tap to try again  ·  Pause for menu',
-        },
-        () => this.restartRunFromOverlay(),
-      );
-    }
+    const summary = this.buildEndOfRunSummary('game-over');
+    this.resultOverlay.show(
+      {
+        tone: summary.tone,
+        kicker: summary.kicker,
+        title: summary.title,
+        reward: summary.reward,
+        body: summary.body,
+        hint: 'Tap to try again  ·  Pause for menu',
+      },
+      () => this.restartRunFromOverlay(),
+    );
 
     this.bindEndOfRunInput();
   }
@@ -1022,14 +1053,14 @@ export class MainScene extends Phaser.Scene {
     playDxBallSfx('game-over');
     this.submitRunIfNeeded();
 
-    const finalScore = this.brickGrid.getScore();
+    const summary = this.buildEndOfRunSummary('time-up');
     this.resultOverlay.show(
       {
-        tone: 'info',
-        kicker: 'Time Attack',
-        title: "TIME'S UP",
-        reward: this.resultReward(finalScore),
-        body: 'Clock expired',
+        tone: summary.tone,
+        kicker: summary.kicker,
+        title: summary.title,
+        reward: summary.reward,
+        body: summary.body,
         hint: 'Tap to play again  ·  Pause for menu',
       },
       () => this.restartRunFromOverlay(),
@@ -1175,7 +1206,66 @@ export class MainScene extends Phaser.Scene {
     this.pauseOverlay.resize(snapshot.width, snapshot.height);
     this.resultOverlay.resize(snapshot.width, snapshot.height);
     this.catchFlash.resize(snapshot.width, snapshot.height);
+    this.clearLasersSpeed(snapshot.height);
     this.layoutPauseButton(snapshot);
+  }
+
+  private updateLasers(deltaMs: number): void {
+    const snapshot = GameViewport.get().getSnapshot();
+    const width = snapshot.width * LASER_BOLT_WIDTH_RATIO;
+    const height = snapshot.height * LASER_BOLT_HEIGHT_RATIO;
+    const speed = snapshot.height * LASER_BOLT_SPEED_RATIO;
+
+    const shots = this.paddle.consumePendingLaserShots();
+    if (shots.length > 0) {
+      playDxBallSfx('laser-fire');
+      for (const shot of shots) {
+        this.lasers.push(new LaserBolt(this, shot.x, shot.y, width, height, speed));
+      }
+    }
+
+    for (let i = this.lasers.length - 1; i >= 0; i--) {
+      const bolt = this.lasers[i];
+      bolt.update(deltaMs);
+      const hit = this.brickGrid.resolveProjectileCollision(
+        bolt.x,
+        bolt.y,
+        bolt.halfWidth,
+        bolt.halfHeight,
+      );
+      if (hit || bolt.isOffPlayfield()) {
+        bolt.destroy();
+        this.lasers.splice(i, 1);
+      }
+    }
+  }
+
+  private clearLasers(): void {
+    for (const bolt of this.lasers) {
+      bolt.destroy();
+    }
+    this.lasers.length = 0;
+  }
+
+  private clearLasersSpeed(viewportHeight: number): void {
+    const speed = viewportHeight * LASER_BOLT_SPEED_RATIO;
+    for (const bolt of this.lasers) {
+      bolt.setSpeed(speed);
+    }
+  }
+
+  private buildEndOfRunSummary(outcome: 'victory' | 'game-over' | 'time-up') {
+    return buildRunSummary({
+      mode: this.mode,
+      score: this.brickGrid.getScore(),
+      bestScore: this.bestScore,
+      startingBestScore: this.startingBestScore,
+      startingModeBest: this.startingModeBest,
+      levelReached: this.currentLevelIndex + 1,
+      campaignLength: LEVELS.length,
+      leaderboard: this.lastSubmitResult,
+      outcome,
+    });
   }
 
   private resultReward(score: number): string {

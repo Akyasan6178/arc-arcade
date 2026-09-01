@@ -20,7 +20,35 @@ export type PowerupType =
   | 'fire-ball'
   | 'multi-ball'
   | 'small-paddle'
-  | 'fast-ball';
+  | 'fast-ball'
+  | 'laser-paddle';
+
+/** DXB-24: Strong catches get extra collection feedback. */
+export const STRONG_POWERUP_TYPES: readonly PowerupType[] = [
+  'extra-life',
+  'fire-ball',
+  'multi-ball',
+  'laser-paddle',
+];
+
+export function isStrongPowerup(type: PowerupType): boolean {
+  return (STRONG_POWERUP_TYPES as readonly string[]).includes(type);
+}
+
+export function powerupCelebrateLabel(type: PowerupType): string {
+  switch (type) {
+    case 'extra-life':
+      return 'EXTRA LIFE';
+    case 'fire-ball':
+      return 'FIRE BALL';
+    case 'multi-ball':
+      return 'MULTI BALL';
+    case 'laser-paddle':
+      return 'LASER PADDLE';
+    default:
+      return type.toUpperCase();
+  }
+}
 
 interface PowerupVisual extends ThemePowerupVisual {
   letter: string;
@@ -34,6 +62,7 @@ const POWERUP_LETTERS: Record<PowerupType, string> = {
   'multi-ball': 'M',
   'small-paddle': 'N',
   'fast-ball': 'T',
+  'laser-paddle': 'Z',
 };
 
 const DEFAULT_POWERUP_COLORS: Record<PowerupType, ThemePowerupVisual> = {
@@ -44,6 +73,7 @@ const DEFAULT_POWERUP_COLORS: Record<PowerupType, ThemePowerupVisual> = {
   'multi-ball': { color: 0x74c69d, stroke: 0xf0fff4 },
   'small-paddle': { color: 0xe85d04, stroke: 0xffd166 },
   'fast-ball': { color: 0xc1121f, stroke: 0xffba08 },
+  'laser-paddle': { color: 0x0d3b66, stroke: 0x7df9ff },
 };
 
 /** Corner radius of the capsule background, as a ratio of its own height. */
@@ -155,6 +185,9 @@ function drawPowerupIcon(
     case 'fast-ball':
       drawFast(g, s * 0.4);
       break;
+    case 'laser-paddle':
+      drawLaser(g, s * 0.4);
+      break;
   }
 }
 
@@ -214,4 +247,13 @@ function drawSlow(g: Phaser.GameObjects.Graphics, r: number): void {
 function drawFast(g: Phaser.GameObjects.Graphics, r: number): void {
   g.fillTriangle(-r * 0.15, -r * 0.7, r * 0.7, 0, -r * 0.15, r * 0.7);
   g.fillTriangle(-r * 0.75, -r * 0.55, 0.05 * r, 0, -r * 0.75, r * 0.55);
+}
+
+function drawLaser(g: Phaser.GameObjects.Graphics, r: number): void {
+  g.fillRect(-r * 0.55, r * 0.22, r * 1.1, r * 0.22);
+  g.fillRect(-r * 0.42, -r * 0.85, r * 0.22, r * 1.05);
+  g.fillRect(r * 0.2, -r * 0.85, r * 0.22, r * 1.05);
+  g.fillStyle(0xffffff, 0.55);
+  g.fillRect(-r * 0.36, -r * 0.85, r * 0.1, r * 0.55);
+  g.fillRect(r * 0.26, -r * 0.85, r * 0.1, r * 0.55);
 }

@@ -48,17 +48,20 @@ import { parseBrickLayout, type BrickType } from '@entities/dx-ball/BrickType';
 export interface LevelConfig {
   /** DXB-23: Shown on Level Select. Gameplay ignores this. */
   name?: string;
+  /** DXB-24: 1–5 rating shown on Level Select cards. Gameplay ignores this. */
+  difficulty?: 1 | 2 | 3 | 4 | 5;
   brickGrid?: BrickGridConfig;
   ball?: BallConfig;
 }
 
 export const LEVELS: readonly LevelConfig[] = [
   // Level 1: unchanged from DXB-06A's tuned defaults — all normal bricks.
-  { name: 'Opening Volley' },
+  { name: 'Opening Volley', difficulty: 1 },
   // Level 2: one more row, a touch tighter, worth more, a bit faster.
   // Cracked bricks in the back row and a mid-field band.
   {
     name: 'First Cracks',
+    difficulty: 2,
     brickGrid: {
       gapRatio: 0.012,
       basePointsPerRow: 12,
@@ -77,6 +80,7 @@ export const LEVELS: readonly LevelConfig[] = [
   // Cracked, metal (indestructible obstacles with bounce gaps), and bonus.
   {
     name: 'Mixed Field',
+    difficulty: 3,
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.026,
@@ -96,6 +100,7 @@ export const LEVELS: readonly LevelConfig[] = [
   // Level 4: heavier metal — corridors and bounce cages, still clearable.
   {
     name: 'Steel Corridors',
+    difficulty: 3,
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.024,
@@ -116,6 +121,7 @@ export const LEVELS: readonly LevelConfig[] = [
   // Level 5: mixed field of every current brick type.
   {
     name: 'Type Mix',
+    difficulty: 3,
     brickGrid: {
       gapRatio: 0.011,
       rowHeightRatio: 0.024,
@@ -136,6 +142,7 @@ export const LEVELS: readonly LevelConfig[] = [
   // Level 6: precision — sparse columns and holes; every required brick is open.
   {
     name: 'Precision',
+    difficulty: 4,
     brickGrid: {
       gapRatio: 0.014,
       rowHeightRatio: 0.024,
@@ -156,6 +163,7 @@ export const LEVELS: readonly LevelConfig[] = [
   // Level 7: cracked-heavy — two-hit bricks dominate, with lanes so nothing is boxed in.
   {
     name: 'Fracture',
+    difficulty: 4,
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.024,
@@ -176,6 +184,7 @@ export const LEVELS: readonly LevelConfig[] = [
   // Level 8: metal-obstacle maze — bounce lanes keep every required brick reachable.
   {
     name: 'Metal Maze',
+    difficulty: 4,
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.022,
@@ -196,6 +205,7 @@ export const LEVELS: readonly LevelConfig[] = [
   // Level 9: bonus risk/reward — guaranteed-drop bricks near metal, plus safer clusters.
   {
     name: 'Bonus Hunt',
+    difficulty: 3,
     brickGrid: {
       gapRatio: 0.012,
       rowHeightRatio: 0.022,
@@ -216,6 +226,7 @@ export const LEVELS: readonly LevelConfig[] = [
   // Level 10: finale — every current brick type, metal as obstacles only.
   {
     name: 'Finale',
+    difficulty: 5,
     brickGrid: {
       gapRatio: 0.011,
       rowHeightRatio: 0.022,
@@ -250,6 +261,8 @@ export interface LevelPreviewModel {
   index: number;
   number: number;
   name: string;
+  difficulty: 1 | 2 | 3 | 4 | 5;
+  brickTypes: BrickType[];
   cells: (LevelPreviewCell | null)[][];
 }
 
@@ -274,12 +287,28 @@ export function getLevelPreviewModel(index: number): LevelPreviewModel {
     }),
   );
 
+  const brickTypes: BrickType[] = [];
+  for (const row of cells) {
+    for (const cell of row) {
+      if (cell && !brickTypes.includes(cell.type)) {
+        brickTypes.push(cell.type);
+      }
+    }
+  }
+
   return {
     index,
     number: index + 1,
     name: getLevelName(index),
+    difficulty: level.difficulty ?? defaultDifficulty(index),
+    brickTypes,
     cells,
   };
+}
+
+function defaultDifficulty(index: number): 1 | 2 | 3 | 4 | 5 {
+  const rating = Math.min(5, Math.floor(index / 2) + 1);
+  return rating as 1 | 2 | 3 | 4 | 5;
 }
 
 export function getAllLevelPreviewModels(): LevelPreviewModel[] {

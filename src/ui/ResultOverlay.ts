@@ -139,13 +139,14 @@ export class ResultOverlay {
     this.body = scene.add
       .text(viewportWidth / 2, viewportHeight * 0.46, '', {
         fontFamily: HUD_FONT_FAMILY,
-        fontSize: `${Math.max(14, Math.round(viewportHeight * 0.026))}px`,
+        fontSize: `${Math.max(13, Math.round(viewportHeight * 0.022))}px`,
         color: this.colors.body,
         fontStyle: 'bold',
         align: 'center',
         stroke: '#0b1320',
         strokeThickness: 5,
         wordWrap: { width: viewportWidth * 0.58 },
+        lineSpacing: 4,
       })
       .setOrigin(0.5, 0)
       .setShadow(1, 2, '#000000', 3, true, true)
@@ -243,7 +244,7 @@ export class ResultOverlay {
     this.kicker.setFontSize(Math.max(11, Math.round(viewportHeight * 0.018)));
     this.title.setFontSize(Math.max(24, Math.round(viewportHeight * 0.064)));
     this.reward.setFontSize(Math.max(16, Math.round(viewportHeight * 0.036)));
-    this.body.setFontSize(Math.max(14, Math.round(viewportHeight * 0.026)));
+    this.body.setFontSize(Math.max(13, Math.round(viewportHeight * 0.022)));
     this.hint.setFontSize(Math.max(12, Math.round(viewportHeight * 0.02)));
     if (this.visible) {
       this.layout();
@@ -306,9 +307,9 @@ export class ResultOverlay {
     this.accent.setSize(width * 0.38, Math.max(3, height * 0.007));
     this.reward.setPosition(width / 2, height * 0.375);
     this.reward.setVisible(hasReward && this.visible);
-    this.body.setPosition(width / 2, hasReward ? height * 0.445 : height * 0.385);
-    this.body.setWordWrapWidth(width * 0.56);
-    this.hint.setPosition(width / 2, height * 0.575);
+    this.body.setPosition(width / 2, hasReward ? height * 0.43 : height * 0.375);
+    this.body.setWordWrapWidth(width * 0.58);
+    this.hint.setPosition(width / 2, height * 0.64);
     this.hint.setWordWrapWidth(width * 0.56);
     this.redrawPanel();
   }
@@ -317,7 +318,7 @@ export class ResultOverlay {
     const width = this.viewportWidth;
     const height = this.viewportHeight;
     const panelW = width * 0.74;
-    const panelH = height * 0.52;
+    const panelH = height * 0.58;
     const x = (width - panelW) / 2;
     const y = height * 0.15;
     const radius = Math.min(width, height) * 0.02;
