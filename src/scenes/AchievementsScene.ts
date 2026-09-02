@@ -74,7 +74,7 @@ export class AchievementsScene extends Phaser.Scene {
       theme.hud.subtitle,
       `ACHIEVEMENTS  ·  ${complete} / ${rows.length}`,
     );
-    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Tap a row to read it');
+    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Gold cards are complete');
     this.backButton = this.createBackButton(snapshot, theme.menu.color);
     this.catalogList = new ProgressList(
       this,
@@ -91,6 +91,7 @@ export class AchievementsScene extends Phaser.Scene {
         mutedColor: theme.menu.mutedColor,
         completeColor: theme.hud.lives,
         completeLabel: 'COMPLETE',
+        completeChrome: true,
         rowHeightRatio: 0.078,
         titleFontSizeRatio: 0.026,
         descriptionFontSizeRatio: 0.015,

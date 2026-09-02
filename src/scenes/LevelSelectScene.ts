@@ -58,8 +58,8 @@ export class LevelSelectScene extends Phaser.Scene {
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
     playDxBallThemeMusic(theme.id);
     this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
-    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'SELECT LEVEL');
-    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Tap a layout to start Classic');
+    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'CAMPAIGN');
+    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Tap a card to start');
     this.backButton = this.createBackButton(snapshot, theme.menu.color);
     this.browser = new LevelBrowser(
       this,

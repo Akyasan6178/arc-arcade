@@ -6,8 +6,10 @@ import type { BrickType } from '@entities/dx-ball/BrickType';
  * ui/LevelBrowser.ts
  *
  * DXB-23: Visual Classic campaign browser. Draws miniature brick-map
- * thumbnails plus name/number captions. Not a gameplay system — confirm
- * only reports the highlighted index.
+ * thumbnails plus name/number captions. DXB-24 added type icons and a
+ * difficulty rating. DXB-25 strengthens the card: inner thumbnail well,
+ * colored difficulty pips, and labeled brick-type chips. Not a gameplay
+ * system — confirm only reports the highlighted index.
  */
 
 export interface LevelBrowserColors {
@@ -240,39 +242,43 @@ export class LevelBrowser {
     const tile = this.tiles[index];
     const level = this.levels[index];
     const selected = index === this.selectedIndex;
-    const radius = Math.max(4, tileH * 0.08);
-    const mapH = tileH * 0.52;
-    const mapW = tileW * 0.88;
+    const radius = Math.max(6, tileH * 0.08);
+    const mapH = tileH * 0.46;
+    const mapW = tileW * 0.86;
     const mapX = centerX - mapW / 2;
-    const mapY = topY + tileH * 0.05;
+    const mapY = topY + tileH * 0.07;
+    const wellPad = 4;
 
     tile.frame.clear();
-    tile.frame.fillStyle(this.colors.panel, 0.92);
+    tile.frame.fillStyle(this.colors.panel, 0.94);
     tile.frame.fillRoundedRect(centerX - tileW / 2, topY, tileW, tileH, radius);
     tile.frame.lineStyle(selected ? 3 : 1.5, selected ? this.colors.accent : this.colors.panelStroke, 1);
     tile.frame.strokeRoundedRect(centerX - tileW / 2, topY, tileW, tileH, radius);
+    tile.frame.fillStyle(0x070b14, 0.92);
+    tile.frame.fillRoundedRect(mapX - wellPad, mapY - wellPad, mapW + wellPad * 2, mapH + wellPad * 2, 4);
     if (selected) {
       tile.frame.fillStyle(this.colors.accent, 1);
-      tile.frame.fillRect(centerX - tileW * 0.22, topY, tileW * 0.44, 3);
+      tile.frame.fillRect(centerX - tileW * 0.22, topY, tileW * 0.44, 4);
     }
 
     tile.map.clear();
     drawBrickThumbnail(tile.map, level, mapX, mapY, mapW, mapH);
 
     tile.icons.clear();
-    const iconY = mapY + mapH + tileH * 0.04;
-    drawTypeIcons(tile.icons, level.brickTypes, centerX, iconY, tileW * 0.8);
+    const metaY = mapY + mapH + tileH * 0.05;
+    drawDifficultyPips(tile.icons, level.difficulty, centerX, metaY, tileW * 0.72);
+    drawTypeIcons(tile.icons, level.brickTypes, centerX, metaY + tileH * 0.08, tileW * 0.86);
 
-    tile.rating.setPosition(centerX, iconY + tileH * 0.07);
-    tile.rating.setFontSize(Math.max(9, fontSize - 1));
-    tile.rating.setColor(selected ? this.colors.highlightColor : this.colors.color);
-    tile.rating.setText(difficultyStars(level.difficulty));
+    tile.rating.setPosition(centerX, metaY + tileH * 0.155);
+    tile.rating.setFontSize(Math.max(8, fontSize - 2));
+    tile.rating.setColor(selected ? this.colors.highlightColor : this.colors.mutedColor);
+    tile.rating.setText(`${difficultyLabel(level.difficulty)}  ·  ${typeLetters(level.brickTypes)}`);
 
-    tile.caption.setPosition(centerX, iconY + tileH * 0.15);
+    tile.caption.setPosition(centerX, topY + tileH - fontSize * 1.7);
     tile.caption.setFontSize(fontSize);
     tile.caption.setColor(selected ? this.colors.highlightColor : this.colors.color);
-    tile.caption.setText(`${level.number}. ${level.name}`);
-    tile.caption.setWordWrapWidth(tileW * 0.92);
+    tile.caption.setText(level.name);
+    tile.caption.setWordWrapWidth(tileW * 0.9);
 
     tile.hit.setPosition(centerX, topY + tileH / 2);
     tile.hit.setSize(tileW, tileH);
@@ -336,6 +342,15 @@ const TYPE_ICON_COLORS: Record<BrickType, number> = {
   bonus: 0x9b5de5,
 };
 
+const TYPE_CHIP_LABEL: Record<BrickType, string> = {
+  normal: 'N',
+  cracked: 'C',
+  metal: 'M',
+  bonus: 'B',
+};
+
+const DIFFICULTY_COLORS = [0x4ade80, 0xa3e635, 0xfacc15, 0xfb923c, 0xf43f5e] as const;
+
 function drawTypeIcons(
   g: Phaser.GameObjects.Graphics,
   types: readonly BrickType[],
@@ -346,29 +361,50 @@ function drawTypeIcons(
   if (types.length === 0) {
     return;
   }
-  const size = Math.max(7, maxWidth * 0.08);
-  const gap = size * 0.35;
+  const size = Math.max(10, maxWidth * 0.12);
+  const gap = size * 0.28;
   const total = types.length * size + gap * (types.length - 1);
   let x = centerX - total / 2;
   for (const type of types) {
     g.fillStyle(TYPE_ICON_COLORS[type], 1);
-    if (type === 'bonus') {
-      g.fillTriangle(x + size / 2, y, x, y + size, x + size, y + size);
-    } else if (type === 'metal') {
-      g.fillRect(x, y, size, size);
+    g.fillRoundedRect(x, y, size, size, 3);
+    if (type === 'metal') {
       g.fillStyle(0xe9ecef, 0.9);
       g.fillRect(x, y, size, size * 0.28);
     } else if (type === 'cracked') {
-      g.fillRect(x, y, size, size);
       g.fillStyle(0x1b1b1b, 0.7);
       g.fillRect(x + size * 0.42, y + size * 0.12, size * 0.16, size * 0.76);
-    } else {
-      g.fillRoundedRect(x, y, size, size, 2);
+    } else if (type === 'bonus') {
+      g.fillStyle(0xffe66d, 1);
+      g.fillTriangle(x + size / 2, y + 2, x + 2, y + size - 2, x + size - 2, y + size - 2);
     }
     x += size + gap;
   }
 }
 
-function difficultyStars(rating: 1 | 2 | 3 | 4 | 5): string {
-  return `${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}`;
+function drawDifficultyPips(
+  g: Phaser.GameObjects.Graphics,
+  rating: 1 | 2 | 3 | 4 | 5,
+  centerX: number,
+  y: number,
+  maxWidth: number,
+): void {
+  const size = Math.max(6, maxWidth * 0.08);
+  const gap = size * 0.45;
+  const total = 5 * size + gap * 4;
+  let x = centerX - total / 2;
+  for (let i = 0; i < 5; i++) {
+    const filled = i < rating;
+    g.fillStyle(filled ? DIFFICULTY_COLORS[rating - 1] : 0x1f2937, filled ? 1 : 0.7);
+    g.fillRoundedRect(x, y, size, size * 0.55, 2);
+    x += size + gap;
+  }
+}
+
+function difficultyLabel(rating: 1 | 2 | 3 | 4 | 5): string {
+  return `DIFF ${rating}`;
+}
+
+function typeLetters(types: readonly BrickType[]): string {
+  return types.map((type) => TYPE_CHIP_LABEL[type]).join(' ');
 }

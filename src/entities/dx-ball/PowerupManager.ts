@@ -35,10 +35,10 @@ import { playDxBallSfx } from '@entities/dx-ball/audioCues';
  * the caught-queue it drains afterward.
  *
  * DXB-12 expands the default spawn pool with Fire Ball, Multi Ball,
- * Small Paddle, and Fast Ball. DXB-23 replaces the uniform draw with a
- * weighted table in `PowerupDropTable.ts` so Extra Life is very rare
- * and Fire Ball is rare. DXB-24 adds Laser Paddle to that table. This
- * manager still does not know what any type does.
+ * Small Paddle, and Fast Ball. DXB-23 replaced the uniform draw with a
+ * weighted table in `PowerupDropTable.ts`. DXB-25 is the final rarity
+ * pass: Extra Life extremely rare, Laser very rare, Fire Ball rare.
+ * This manager still does not know what any type does.
  */
 export interface PowerupManagerConfig {
   /** Which effect types can spawn; one is picked from the weighted table per `spawn()` call. */

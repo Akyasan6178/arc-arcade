@@ -53,6 +53,11 @@ import { drawPaddleCosmetic, type PaddleCosmeticVisual } from '@entities/dx-ball
  * DXB-23: each motif paints a unique silhouette (robot pistons, alien
  * waves, reactor core, pulse slug) via `paddleCosmetic.ts`. The
  * rectangle stays the collision body and is hidden; size is unchanged.
+ *
+ * DXB-24: `applyLaserEffect()` queues dual upward muzzle points while a
+ * timed laser is active. DXB-25 shortens that timer (scene-owned) and
+ * adds `clearTimedEffects()` so Time Attack can reset widen / small /
+ * laser between wrapped levels.
  */
 export type PaddleSkinVisual = PaddleCosmeticVisual;
 
@@ -251,6 +256,17 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     return this.laserRemainingMs;
   }
 
+  /**
+   * DXB-25: Drops widen / small / laser immediately. Used when Time
+   * Attack advances so a timed effect cannot carry into the next layout.
+   * Score and lives stay with the owning scene.
+   */
+  clearTimedEffects(): void {
+    this.clearWidenBoost();
+    this.clearShrinkEffect();
+    this.clearLaserEffect();
+  }
+
   /** DXB-24: Drains muzzle points queued since the last call (two per volley). */
   consumePendingLaserShots(): LaserShot[] {
     if (this.pendingLaserShots.length === 0) {
@@ -294,6 +310,16 @@ export class Paddle extends Phaser.GameObjects.Rectangle {
     }
     this.smallRemainingMs = 0;
     this.revertWidthMultiplier();
+  }
+
+  private clearLaserEffect(): void {
+    if (this.laserRemainingMs <= 0 && this.pendingLaserShots.length === 0) {
+      return;
+    }
+    this.laserRemainingMs = 0;
+    this.laserCooldownMs = 0;
+    this.pendingLaserShots.length = 0;
+    this.redrawMotif();
   }
 
   private tickLaser(deltaMs: number): void {

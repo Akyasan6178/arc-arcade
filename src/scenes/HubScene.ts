@@ -3,7 +3,7 @@ import { SceneKeys } from '@systems/SceneKeys';
 import { GameViewport, type ViewportSnapshot } from '@systems/GameViewport';
 import { AudioManager } from '@systems/AudioManager';
 import { playDxBallThemeMusic } from '@entities/dx-ball/audioCues';
-import { formatGameVersion } from '@entities/dx-ball/Version';
+import { formatCreatorCredit, formatGameVersion, formatStudioCredit } from '@entities/dx-ball/Version';
 import { getTheme } from '@entities/dx-ball/Theme';
 import { loadPlayableThemeId } from '@entities/dx-ball/Progress';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
@@ -65,7 +65,13 @@ export class HubScene extends Phaser.Scene {
       `MAIN MENU  ·  ${formatGameVersion()}`,
     );
     this.rule = createMenuRule(this, snapshot, theme.overlay.panelStroke);
-    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Tap a row to open', 'center');
+    this.hintText = createMenuHint(
+      this,
+      snapshot,
+      theme.hud.hint,
+      `${formatCreatorCredit()}  ·  ${formatStudioCredit()}`,
+      'center',
+    );
     this.menu = new SelectMenu(
       this,
       snapshot.width,
@@ -75,37 +81,37 @@ export class HubScene extends Phaser.Scene {
         {
           id: 'play',
           title: 'Play',
-          description: 'Theme, mode, then Classic level previews',
+          description: 'Theme · Mode · Level',
         },
         {
           id: 'garage',
           title: 'Garage',
-          description: 'Equip themes, paddles, and balls',
+          description: 'Skins and themes',
         },
         {
           id: 'tutorial',
-          title: 'Tutorial',
-          description: 'Paddle, bricks, powerups, modes, unlocks',
+          title: 'How To',
+          description: 'Visual guide',
         },
         {
           id: 'stats',
           title: 'Statistics',
-          description: 'Lifetime stats, boards, and progress',
+          description: 'Scores and records',
         },
         {
           id: 'achievements',
           title: 'Achievements',
-          description: 'Lifetime unlocks and completion',
+          description: 'Lifetime goals',
         },
         {
           id: 'credits',
           title: 'Credits',
-          description: 'Title, version, and development',
+          description: 'Creators',
         },
         {
           id: 'settings',
           title: 'Settings',
-          description: 'Sound on or off',
+          description: 'Mute, music, SFX',
         },
       ],
       (id) => this.openHub(id),

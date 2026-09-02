@@ -13,6 +13,9 @@ import Phaser from 'phaser';
  * and SFX use separate internal volume buses; the existing global
  * `enabled` mute flag still gates both and stops music immediately.
  *
+ * DXB-25: user-facing `setSfxVolume` / `setMusicVolume` (0..1, persisted)
+ * multiply those buses. Mute is unchanged. No new audio architecture.
+ *
  * Every operation is defensive and never throws.
  */
 export type ToneWaveform = 'sine' | 'square' | 'triangle' | 'sawtooth';
@@ -61,10 +64,10 @@ const DEFAULT_GAIN = 0.2;
 /** Fraction of a step's duration spent ramping gain up/down, avoiding an audible click at its start/end. */
 const ENVELOPE_RATIO = 0.15;
 const ENABLED_STORAGE_KEY = 'arc-arcade-audio-enabled';
-/** Internal SFX bus. Existing ToneSpec gains are authored against this 1.0. */
-const SFX_VOLUME = 1;
-/** Internal music bus, quieter so beds sit under gameplay cues. */
-const MUSIC_VOLUME = 0.48;
+const SFX_VOLUME_STORAGE_KEY = 'arc-arcade-sfx-volume';
+const MUSIC_VOLUME_STORAGE_KEY = 'arc-arcade-music-volume';
+/** Internal music bus, quieter so beds sit under gameplay cues at user 100%. */
+const MUSIC_BUS = 0.48;
 const MUSIC_LOOKAHEAD_SECONDS = 0.85;
 const MUSIC_SCHEDULE_MS = 200;
 
@@ -73,6 +76,10 @@ export class AudioManager {
 
   private readonly game: Phaser.Game;
   private enabled: boolean;
+  /** User-facing SFX volume, 0..1. Mute is a separate flag. */
+  private sfxVolume: number;
+  /** User-facing music volume, 0..1. Multiplied by MUSIC_BUS at mix time. */
+  private musicVolume: number;
   private audioContext: AudioContext | undefined;
   /** Set once the Web Audio API is confirmed unavailable/blocked, so every later `play()` short-circuits instead of retrying construction. */
   private synthesisUnavailable = false;
@@ -91,6 +98,8 @@ export class AudioManager {
   private constructor(game: Phaser.Game) {
     this.game = game;
     this.enabled = AudioManager.readPersistedEnabled();
+    this.sfxVolume = AudioManager.readPersistedVolume(SFX_VOLUME_STORAGE_KEY, 1);
+    this.musicVolume = AudioManager.readPersistedVolume(MUSIC_VOLUME_STORAGE_KEY, 1);
   }
 
   /** Creates the single shared AudioManager instance. Call once, right after `new Phaser.Game(config)`. */
@@ -111,6 +120,27 @@ export class AudioManager {
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  getSfxVolume(): number {
+    return this.sfxVolume;
+  }
+
+  getMusicVolume(): number {
+    return this.musicVolume;
+  }
+
+  /** User-facing SFX volume, 0..1. Mute still gates playback. */
+  setSfxVolume(volume: number): void {
+    this.sfxVolume = AudioManager.clampVolume(volume);
+    AudioManager.writePersistedVolume(SFX_VOLUME_STORAGE_KEY, this.sfxVolume);
+  }
+
+  /** User-facing music volume, 0..1. Applied to the live bed immediately. */
+  setMusicVolume(volume: number): void {
+    this.musicVolume = AudioManager.clampVolume(volume);
+    AudioManager.writePersistedVolume(MUSIC_VOLUME_STORAGE_KEY, this.musicVolume);
+    this.applyLiveMusicVolume();
   }
 
   /** Global enable/disable flag for every sound effect and music bed. Persisted across reloads. */
@@ -144,7 +174,7 @@ export class AudioManager {
 
     try {
       if (this.game.cache.audio.exists(key)) {
-        this.game.sound.play(key, { volume: SFX_VOLUME });
+        this.game.sound.play(key, { volume: this.sfxVolume });
         return;
       }
     } catch {
@@ -205,7 +235,10 @@ export class AudioManager {
 
     try {
       if (this.game.cache.audio.exists(this.musicKey)) {
-        const sound = this.game.sound.add(this.musicKey, { loop: true, volume: MUSIC_VOLUME });
+        const sound = this.game.sound.add(this.musicKey, {
+          loop: true,
+          volume: this.effectiveMusicVolume(),
+        });
         sound.play();
         this.phaserMusic = sound;
         return;
@@ -284,7 +317,7 @@ export class AudioManager {
 
     try {
       const gain = context.createGain();
-      gain.gain.value = MUSIC_VOLUME;
+      gain.gain.value = this.effectiveMusicVolume();
       gain.connect(context.destination);
       this.musicGainNode = gain;
       return gain;
@@ -393,7 +426,7 @@ export class AudioManager {
 
       let startTime = context.currentTime;
       for (const step of spec.steps) {
-        startTime = AudioManager.scheduleStep(context, step, startTime);
+        startTime = AudioManager.scheduleStep(context, step, startTime, this.sfxVolume);
       }
     } catch {
       // A synthesis failure never breaks gameplay — just skip this one
@@ -401,10 +434,38 @@ export class AudioManager {
     }
   }
 
-  private static scheduleStep(context: AudioContext, step: ToneStep, startTime: number): number {
+  private effectiveMusicVolume(): number {
+    return MUSIC_BUS * this.musicVolume;
+  }
+
+  private applyLiveMusicVolume(): void {
+    const volume = this.effectiveMusicVolume();
+    if (this.phaserMusic) {
+      try {
+        const withVolume = this.phaserMusic as Phaser.Sound.BaseSound & { setVolume?: (value: number) => void };
+        withVolume.setVolume?.(volume);
+      } catch {
+        // Phaser sound already gone — ignore.
+      }
+    }
+    if (this.musicGainNode) {
+      try {
+        this.musicGainNode.gain.value = volume;
+      } catch {
+        // Gain node already disconnected — ignore.
+      }
+    }
+  }
+
+  private static scheduleStep(
+    context: AudioContext,
+    step: ToneStep,
+    startTime: number,
+    volume: number,
+  ): number {
     const durationSeconds = step.durationMs / 1000;
     const attackSeconds = durationSeconds * ENVELOPE_RATIO;
-    const peakGain = (step.gain ?? DEFAULT_GAIN) * SFX_VOLUME;
+    const peakGain = (step.gain ?? DEFAULT_GAIN) * volume;
 
     const oscillator = context.createOscillator();
     oscillator.type = step.type ?? DEFAULT_WAVEFORM;
@@ -459,6 +520,41 @@ export class AudioManager {
       return raw === null ? true : raw === '1';
     } catch {
       return true;
+    }
+  }
+
+  private static clampVolume(volume: number): number {
+    if (!Number.isFinite(volume)) {
+      return 1;
+    }
+    return Math.max(0, Math.min(1, volume));
+  }
+
+  private static readPersistedVolume(key: string, fallback: number): number {
+    if (typeof window === 'undefined') {
+      return fallback;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) {
+        return fallback;
+      }
+      return AudioManager.clampVolume(Number.parseFloat(raw));
+    } catch {
+      return fallback;
+    }
+  }
+
+  private static writePersistedVolume(key: string, volume: number): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(key, String(volume));
+    } catch {
+      // Storage unavailable — preference won't persist this session.
     }
   }
 

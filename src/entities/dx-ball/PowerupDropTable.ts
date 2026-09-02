@@ -8,11 +8,17 @@ import type { PowerupType } from '@entities/dx-ball/Powerup';
  * type. Weights are integers, not equal shares — power strength tracks
  * rarity. Extra Life is a special reward, not a regular catch.
  *
- * DXB-24 adds Laser Paddle as a rare type. Weights still unique and
- * still sum to 100.
+ * DXB-24 added Laser Paddle. DXB-25 is the final rarity pass: Extra
+ * Life is extremely rare, Laser is very rare, Fire Ball is rare.
+ * Weights stay unique and still sum to 100.
  */
 
-export type PowerupRarity = 'very-rare' | 'rare' | 'uncommon' | 'common';
+export type PowerupRarity =
+  | 'extremely-rare'
+  | 'very-rare'
+  | 'rare'
+  | 'uncommon'
+  | 'common';
 
 export interface PowerupDropEntry {
   type: PowerupType;
@@ -20,39 +26,40 @@ export interface PowerupDropEntry {
   rarity: PowerupRarity;
 }
 
+export const POWERUP_RARITY_LABELS: Record<PowerupRarity, string> = {
+  'extremely-rare': 'Extremely Rare',
+  'very-rare': 'Very Rare',
+  rare: 'Rare',
+  uncommon: 'Uncommon',
+  common: 'Common',
+};
+
 /**
- * Final DXB-24 table. Weights sum to 100 so a roll is a percent.
+ * Final DXB-25 table. Weights sum to 100 so a roll is a percent.
  *
- * Extra Life     3%  Very Rare
- * Laser Paddle   6%  Rare
+ * Extra Life     2%  Extremely Rare
+ * Laser Paddle   4%  Very Rare
  * Fire Ball      8%  Rare
  * Multi Ball    13%  Uncommon
- * Small Paddle  14%  Common
- * Fast Ball     16%  Common
- * Widen Paddle  18%  Common
- * Slow Ball     22%  Common
+ * Small Paddle  16%  Common
+ * Fast Ball     17%  Common
+ * Widen Paddle  19%  Common
+ * Slow Ball     21%  Common
  */
 export const POWERUP_DROP_TABLE: readonly PowerupDropEntry[] = [
-  { type: 'extra-life', weight: 3, rarity: 'very-rare' },
-  { type: 'laser-paddle', weight: 6, rarity: 'rare' },
+  { type: 'extra-life', weight: 2, rarity: 'extremely-rare' },
+  { type: 'laser-paddle', weight: 4, rarity: 'very-rare' },
   { type: 'fire-ball', weight: 8, rarity: 'rare' },
   { type: 'multi-ball', weight: 13, rarity: 'uncommon' },
-  { type: 'small-paddle', weight: 14, rarity: 'common' },
-  { type: 'fast-ball', weight: 16, rarity: 'common' },
-  { type: 'widen-paddle', weight: 18, rarity: 'common' },
-  { type: 'slow-ball', weight: 22, rarity: 'common' },
+  { type: 'small-paddle', weight: 16, rarity: 'common' },
+  { type: 'fast-ball', weight: 17, rarity: 'common' },
+  { type: 'widen-paddle', weight: 19, rarity: 'common' },
+  { type: 'slow-ball', weight: 21, rarity: 'common' },
 ];
 
-const WEIGHT_BY_TYPE: Record<PowerupType, number> = {
-  'extra-life': 3,
-  'laser-paddle': 6,
-  'fire-ball': 8,
-  'multi-ball': 13,
-  'small-paddle': 14,
-  'fast-ball': 16,
-  'widen-paddle': 18,
-  'slow-ball': 22,
-};
+const WEIGHT_BY_TYPE = Object.fromEntries(
+  POWERUP_DROP_TABLE.map((entry) => [entry.type, entry.weight]),
+) as Record<PowerupType, number>;
 
 export function pickWeightedPowerupType(types: readonly PowerupType[]): PowerupType {
   if (types.length === 0) {

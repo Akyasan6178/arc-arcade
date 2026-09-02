@@ -14,6 +14,9 @@ import { fittedRowHeight } from '@ui/menuLayout';
  * DXB-18: `onHighlight` fires when the highlight moves (garage live
  * preview). `favorite` on a row is shown next to equipped. `getSelectedId()`
  * lets a scene favorite the highlighted item without confirming it.
+ *
+ * DXB-25: `completeChrome` paints gold cards, a completion ribbon, and
+ * a badge on finished achievement rows so completion is obvious.
  */
 
 export interface ProgressListConfig {
@@ -30,6 +33,11 @@ export interface ProgressListConfig {
   selectable?: boolean;
   /** Label used at 100% (UNLOCKED for cosmetics, COMPLETE for achievements). */
   completeLabel?: string;
+  /**
+   * DXB-25: Gold border, glow, ribbon, and a completion badge on
+   * finished rows. Achievements turn this on; Garage leaves it off.
+   */
+  completeChrome?: boolean;
   /** DXB-18: Index highlighted when the list is created. */
   initialIndex?: number;
   /** DXB-18: Fires when the highlight moves, before confirm. */
@@ -51,11 +59,14 @@ const DEFAULT_CONFIG: Required<Omit<ProgressListConfig, 'onHighlight' | 'initial
   depth: HUD_DEPTH,
   selectable: true,
   completeLabel: 'UNLOCKED',
+  completeChrome: false,
 };
 
 interface ProgressListRow {
+  chrome: Phaser.GameObjects.Graphics;
   title: Phaser.GameObjects.Text;
   description: Phaser.GameObjects.Text;
+  badge: Phaser.GameObjects.Text;
 }
 
 export class ProgressList {
@@ -98,6 +109,8 @@ export class ProgressList {
     );
 
     for (let i = 0; i < items.length; i++) {
+      const chrome = scene.add.graphics().setDepth(this.config.depth - 1);
+
       const title = scene.add
         .text(0, 0, '', {
           fontFamily: HUD_FONT_FAMILY,
@@ -128,13 +141,27 @@ export class ProgressList {
         .setDepth(this.config.depth)
         .setInteractive({ useHandCursor: true });
 
+      const badge = scene.add
+        .text(0, 0, '', {
+          fontFamily: HUD_FONT_FAMILY,
+          fontSize: '10px',
+          color: '#1b1404',
+          fontStyle: 'bold',
+          align: 'center',
+          stroke: '#ffd166',
+          strokeThickness: 2,
+        })
+        .setOrigin(1, 0)
+        .setDepth(this.config.depth)
+        .setVisible(false);
+
       const selectIndex = i;
       title.on('pointerover', () => this.setSelectedIndex(selectIndex));
       description.on('pointerover', () => this.setSelectedIndex(selectIndex));
       title.on('pointerup', () => this.confirm());
       description.on('pointerup', () => this.confirm());
 
-      this.visualRows.push({ title, description });
+      this.visualRows.push({ chrome, title, description, badge });
     }
 
     this.layout();
@@ -170,8 +197,10 @@ export class ProgressList {
     keyboard?.off('keydown-SPACE', this.onSpace);
 
     for (const row of this.visualRows) {
+      row.chrome.destroy();
       row.title.destroy();
       row.description.destroy();
+      row.badge.destroy();
     }
     this.visualRows.length = 0;
   }
@@ -247,16 +276,27 @@ export class ProgressList {
       this.config.rowHeightRatio,
       this.viewportHeight * 0.9,
     );
-    const wrapWidth = this.viewportWidth * 0.84;
+    const wrapWidth = this.viewportWidth * (this.config.completeChrome ? 0.7 : 0.84);
+    const cardW = this.viewportWidth * 0.86;
+    const cardX = (this.viewportWidth - cardW) / 2;
 
     for (let i = 0; i < this.visualRows.length; i++) {
       const row = this.visualRows[i];
+      const item = this.items[i];
       const y = this.originY + i * rowHeight;
-      row.title.setPosition(this.viewportWidth / 2, y);
+      const cardH = rowHeight * 0.88;
+      row.title.setPosition(this.viewportWidth / 2, y + (this.config.completeChrome ? cardH * 0.12 : 0));
       row.title.setFontSize(titleSize);
-      row.description.setPosition(this.viewportWidth / 2, y + titleSize * 1.12);
+      row.description.setPosition(
+        this.viewportWidth / 2,
+        y + (this.config.completeChrome ? cardH * 0.12 : 0) + titleSize * 1.12,
+      );
       row.description.setFontSize(descriptionSize);
       row.description.setWordWrapWidth(wrapWidth);
+      row.badge.setPosition(cardX + 14, y + 8);
+      row.badge.setFontSize(Math.max(9, Math.round(descriptionSize * 0.95)));
+      row.badge.setOrigin(0, 0);
+      this.drawRowChrome(row, item, cardX, y, cardW, cardH, i === this.selectedIndex);
     }
   }
 
@@ -269,26 +309,80 @@ export class ProgressList {
       }
 
       const selected = i === this.selectedIndex;
+      const complete = Boolean(item.complete);
       row.title.setText(selected ? `>  ${item.title}  <` : item.title);
       row.title.setColor(
         selected
-          ? this.config.highlightColor
-          : item.unlocked
-            ? this.config.color
-            : this.config.mutedColor,
+          ? complete && this.config.completeChrome
+            ? '#ffe8a3'
+            : this.config.highlightColor
+          : complete && this.config.completeChrome
+            ? '#ffd166'
+            : item.unlocked
+              ? this.config.color
+              : this.config.mutedColor,
       );
       row.description.setText(
         `${ProgressList.statusLabel(item, this.config.completeLabel)}  ·  ${item.requirement}`,
       );
       row.description.setColor(
         selected
-          ? item.complete
+          ? complete
             ? this.config.completeColor
             : this.config.descriptionColor
-          : item.complete
+          : complete
             ? this.config.completeColor
             : this.config.mutedColor,
       );
+      row.badge.setVisible(this.config.completeChrome && complete);
+      row.badge.setText(complete ? '✓ COMPLETE' : '');
+    }
+
+    if (this.config.completeChrome) {
+      this.layout();
+    }
+  }
+
+  private drawRowChrome(
+    row: ProgressListRow,
+    item: ProgressRow | undefined,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    selected: boolean,
+  ): void {
+    row.chrome.clear();
+    if (!this.config.completeChrome || !item) {
+      return;
+    }
+
+    const radius = Math.max(6, height * 0.18);
+    const complete = item.complete;
+    if (complete) {
+      row.chrome.fillStyle(0xffd166, selected ? 0.28 : 0.18);
+      row.chrome.fillRoundedRect(x - 4, y - 3, width + 8, height + 6, radius + 2);
+      row.chrome.fillStyle(0x2a2108, 0.92);
+      row.chrome.fillRoundedRect(x, y, width, height, radius);
+      row.chrome.lineStyle(selected ? 3.5 : 2.5, 0xffd166, 1);
+      row.chrome.strokeRoundedRect(x, y, width, height, radius);
+      row.chrome.fillStyle(0xe11d48, 1);
+      row.chrome.fillTriangle(x + width - 46, y, x + width, y, x + width, y + 46);
+      row.chrome.fillStyle(0xffd166, 1);
+      row.chrome.fillTriangle(x + width - 28, y, x + width, y, x + width, y + 28);
+    } else {
+      row.chrome.fillStyle(0x12182c, selected ? 0.88 : 0.72);
+      row.chrome.fillRoundedRect(x, y, width, height, radius);
+      row.chrome.lineStyle(selected ? 2 : 1, selected ? 0x90e0ef : 0x2a3348, 0.9);
+      row.chrome.strokeRoundedRect(x, y, width, height, radius);
+      const barW = width * 0.72;
+      const barH = Math.max(4, height * 0.08);
+      const barX = x + (width - barW) / 2;
+      const barY = y + height - barH - 8;
+      row.chrome.fillStyle(0x0b1320, 0.9);
+      row.chrome.fillRoundedRect(barX, barY, barW, barH, 2);
+      row.chrome.fillStyle(0x90e0ef, 0.85);
+      row.chrome.fillRoundedRect(barX, barY, barW * (item.percent / 100), barH, 2);
     }
   }
 

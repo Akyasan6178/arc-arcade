@@ -21,6 +21,8 @@ export interface TabBarConfig<T extends string = string> {
   fontSizeRatio?: number;
   depth?: number;
   initialId?: T;
+  /** Horizontal inset as a fraction of viewport width. */
+  sideRatio?: number;
 }
 
 const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
@@ -32,6 +34,7 @@ const DEFAULT_CONFIG: Required<Omit<TabBarConfig, 'initialId'>> = {
   mutedColor: '#6c7a89',
   fontSizeRatio: 0.024,
   depth: HUD_DEPTH,
+  sideRatio: 0.1,
 };
 
 export class TabBar<T extends string = string> {
@@ -171,8 +174,8 @@ export class TabBar<T extends string = string> {
     }
 
     const fontSize = Math.max(12, Math.round(this.viewportHeight * this.config.fontSizeRatio));
-    const startX = this.viewportWidth * 0.1;
-    const endX = this.viewportWidth * 0.9;
+    const startX = this.viewportWidth * this.config.sideRatio;
+    const endX = this.viewportWidth * (1 - this.config.sideRatio);
     const span = count === 1 ? 0 : (endX - startX) / (count - 1);
 
     for (let i = 0; i < count; i++) {

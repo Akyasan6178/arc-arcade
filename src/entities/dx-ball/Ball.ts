@@ -388,6 +388,17 @@ export class Ball extends Phaser.GameObjects.Arc {
     return this.fireRemainingMs;
   }
 
+  /**
+   * DXB-25: Drops slow / fast / fire immediately. Time Attack recreates
+   * the serve ball on advance, so this is a safety net if a live ball
+   * is ever kept across a wrap.
+   */
+  clearTimedEffects(): void {
+    this.clearSlowEffect();
+    this.clearFastEffect();
+    this.clearFireEffect();
+  }
+
   isLaunched(): boolean {
     return this.serveState === 'launched';
   }
@@ -658,6 +669,14 @@ export class Ball extends Phaser.GameObjects.Arc {
     }
     this.fastRemainingMs = 0;
     this.revertSpeedMultiplier();
+  }
+
+  private clearFireEffect(): void {
+    if (this.fireRemainingMs <= 0) {
+      return;
+    }
+    this.fireRemainingMs = 0;
+    this.applyFireVisuals(false);
   }
 
   private revertSpeedMultiplier(): void {

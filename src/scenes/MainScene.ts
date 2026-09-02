@@ -192,7 +192,10 @@ import { buildRunSummary } from '@entities/dx-ball/RunSummary';
  *
  * DXB-24: Laser Paddle, brick impact FX, strong-powerup celebration,
  * richer end-of-run copy, and a local leaderboard adapter seam. Score /
- * lives / modes are unchanged.
+ * lives / modes stay on the existing call sites.
+ *
+ * DXB-25: Fire Ball and Laser last 5s. Time Attack clears timed paddle
+ * effects on level wrap. Drop weights live in `PowerupDropTable.ts`.
  */
 
 export interface MainSceneData {
@@ -208,16 +211,16 @@ const STARTING_LIVES = 3;
 /** DXB-09: How long widen-paddle / slow-ball last, in ms — preserved from the original timed pair. */
 const POWERUP_EFFECT_DURATION_MS = 8000;
 
-/** DXB-12: Per-type durations. Instant effects use `0`. DXB-21 shortened Fire Ball. */
+/** DXB-12: Per-type durations. Instant effects use `0`. DXB-25: Fire Ball and Laser Paddle are 5s. */
 const POWERUP_DURATION_MS: Record<PowerupType, number> = {
   'widen-paddle': POWERUP_EFFECT_DURATION_MS,
   'slow-ball': POWERUP_EFFECT_DURATION_MS,
   'extra-life': 0,
-  'fire-ball': 7000,
+  'fire-ball': 5000,
   'multi-ball': 0,
   'small-paddle': 15000,
   'fast-ball': 10000,
-  'laser-paddle': 10000,
+  'laser-paddle': 5000,
 };
 
 /** DXB-12: Multi Ball always tops up to this many balls, never more. */
@@ -969,6 +972,11 @@ export class MainScene extends Phaser.Scene {
     // shouldn't carry into the next one's fresh brick layout.
     this.powerupManager.clear();
     this.clearLasers();
+    // DXB-25: Time Attack starts each wrapped level clean. Score stays.
+    // Classic still carries paddle-timed effects across campaign stages.
+    if (this.mode === 'time-attack') {
+      this.paddle.clearTimedEffects();
+    }
     this.effectsLabel.setEffects([]);
 
     this.lastMissCount = 0;

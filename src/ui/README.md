@@ -57,9 +57,10 @@ Currently:
 - `ProgressList.ts` — DXB-16's reusable catalog list (title + locked /
   unlocked / percent / equipped). Space confirms only unlocked
   selectable rows. DXB-18 adds `onHighlight`, `initialIndex`,
-  `getSelectedId()`, and a FAVORITE badge. Garage and Achievements
-  are the current callers. Not DX-Ball-specific beyond the
-  `ProgressRow` shape.
+  `getSelectedId()`, and a FAVORITE badge. DXB-25 adds optional
+  `completeChrome` (gold card, ribbon, completion badge) for
+  Achievements. Garage and Achievements are the current callers. Not
+  DX-Ball-specific beyond the `ProgressRow` shape.
 - `StatsList.ts` — DXB-17's reusable read-only label/value list
   (statistics, personal bests, leaderboards, progress summary).
   Arrow keys highlight; there is no confirm. Not DX-Ball-specific
@@ -87,4 +88,9 @@ Currently:
   helper. Not a new screen.
 - `LevelBrowser.ts` — DXB-23's Classic campaign thumbnail grid. DXB-24
   adds brick-type icons and a 1–5 difficulty rating under the miniature
-  layout. Confirm reports the highlighted index. Not a gameplay system.
+  layout. DXB-25 strengthens each card (thumbnail well, colored
+  difficulty pips, type chips + letters). Confirm reports the
+  highlighted index. Not a gameplay system.
+- `TutorialBoard.ts` — DXB-25's visual how-to board (center example,
+  short notes left/right). TutorialScene is the caller. Not a
+  gameplay system.

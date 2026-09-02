@@ -34,8 +34,10 @@ Currently:
   looping music (`playMusic` / `stopMusic`) on the same real-asset-then-
   synthesized-fallback seam as one-shot SFX. Music and SFX sit on
   separate internal volume buses; the persisted global `enabled` mute
-  still gates both and stops music immediately. Knows nothing about
-  DX-Ball's cue names — see `entities/dx-ball/audioCues.ts`.
+  still gates both and stops music immediately. DXB-25 exposes
+  persisted user-facing `setSfxVolume` / `setMusicVolume` (0..1) that
+  multiply those buses. Knows nothing about DX-Ball's cue names — see
+  `entities/dx-ball/audioCues.ts`.
 - `ThemeStore.ts` — DXB-15 string persistence for a selected theme id.
   Same localStorage wrapper shape as `HighScoreStore`, but for strings.
   Knows nothing about palettes; `entities/dx-ball/Theme.ts` owns those.
