@@ -24,21 +24,26 @@ export const GAME_MODES: readonly GameModeInfo[] = [
   {
     id: 'classic',
     label: 'Classic',
-    description: 'Browse the campaign, then clear levels. Score and lives carry through.',
+    description: 'Always starts at Level 1. Clear 1 → 10.',
   },
   {
     id: 'time-attack',
     label: 'Time Attack',
-    description: '90 seconds. Highest score wins. The run ends when time runs out.',
+    description: '90 seconds each level. Timer resets on clear.',
   },
   {
     id: 'endless',
     label: 'Endless',
-    description: 'Levels wrap forever. The ball speeds up gradually. Score never resets.',
+    description: 'Layouts wrap. Ball speeds up. Score stays.',
   },
 ];
 
-/** DXB-14: Time Attack duration. DXB-21 left this at 90s. */
+/**
+ * DXB-14: Time Attack duration. DXB-21 left this at 90s.
+ * DXB-26: this is the duration of EVERY Time Attack level. Completing a
+ * level does not carry leftover time into the next one — `MainScene`
+ * writes a fresh `TIME_ATTACK_DURATION_MS` when the next stage begins.
+ */
 export const TIME_ATTACK_DURATION_MS = 90_000;
 
 /**

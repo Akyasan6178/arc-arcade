@@ -285,6 +285,7 @@ export class ProgressList {
       const item = this.items[i];
       const y = this.originY + i * rowHeight;
       const cardH = rowHeight * 0.88;
+      const complete = Boolean(item?.complete);
       row.title.setPosition(this.viewportWidth / 2, y + (this.config.completeChrome ? cardH * 0.12 : 0));
       row.title.setFontSize(titleSize);
       row.description.setPosition(
@@ -293,9 +294,13 @@ export class ProgressList {
       );
       row.description.setFontSize(descriptionSize);
       row.description.setWordWrapWidth(wrapWidth);
-      row.badge.setPosition(cardX + 14, y + 8);
-      row.badge.setFontSize(Math.max(9, Math.round(descriptionSize * 0.95)));
-      row.badge.setOrigin(0, 0);
+      row.badge.setPosition(cardX + cardW - 28, y + cardH * 0.5);
+      row.badge.setOrigin(0.5, 0.5);
+      row.badge.setFontSize(
+        complete && this.config.completeChrome
+          ? Math.max(22, Math.round(cardH * 0.42))
+          : Math.max(9, Math.round(descriptionSize * 0.95)),
+      );
       this.drawRowChrome(row, item, cardX, y, cardW, cardH, i === this.selectedIndex);
     }
   }
@@ -310,7 +315,7 @@ export class ProgressList {
 
       const selected = i === this.selectedIndex;
       const complete = Boolean(item.complete);
-      row.title.setText(selected ? `>  ${item.title}  <` : item.title);
+      row.title.setText(item.title);
       row.title.setColor(
         selected
           ? complete && this.config.completeChrome
@@ -335,7 +340,9 @@ export class ProgressList {
             : this.config.mutedColor,
       );
       row.badge.setVisible(this.config.completeChrome && complete);
-      row.badge.setText(complete ? '✓ COMPLETE' : '');
+      row.badge.setText(complete ? '✓' : '');
+      row.badge.setColor(complete ? '#1b1404' : this.config.mutedColor);
+      row.badge.setStroke(complete ? '#ffd166' : '#0b1320', complete ? 3 : 2);
     }
 
     if (this.config.completeChrome) {
@@ -360,16 +367,22 @@ export class ProgressList {
     const radius = Math.max(6, height * 0.18);
     const complete = item.complete;
     if (complete) {
-      row.chrome.fillStyle(0xffd166, selected ? 0.28 : 0.18);
-      row.chrome.fillRoundedRect(x - 4, y - 3, width + 8, height + 6, radius + 2);
-      row.chrome.fillStyle(0x2a2108, 0.92);
+      row.chrome.fillStyle(0xffd166, selected ? 0.34 : 0.22);
+      row.chrome.fillRoundedRect(x - 5, y - 4, width + 10, height + 8, radius + 3);
+      row.chrome.fillStyle(0x3a2a08, 0.96);
       row.chrome.fillRoundedRect(x, y, width, height, radius);
-      row.chrome.lineStyle(selected ? 3.5 : 2.5, 0xffd166, 1);
+      row.chrome.lineStyle(selected ? 3.5 : 2.75, 0xffd166, 1);
       row.chrome.strokeRoundedRect(x, y, width, height, radius);
-      row.chrome.fillStyle(0xe11d48, 1);
-      row.chrome.fillTriangle(x + width - 46, y, x + width, y, x + width, y + 46);
       row.chrome.fillStyle(0xffd166, 1);
-      row.chrome.fillTriangle(x + width - 28, y, x + width, y, x + width, y + 28);
+      row.chrome.fillCircle(x + width - 28, y + height * 0.5, Math.max(12, height * 0.28));
+      const barW = width * 0.58;
+      const barH = Math.max(5, height * 0.1);
+      const barX = x + (width - barW) / 2 - 12;
+      const barY = y + height - barH - 7;
+      row.chrome.fillStyle(0x1b1404, 0.85);
+      row.chrome.fillRoundedRect(barX, barY, barW, barH, 2);
+      row.chrome.fillStyle(0xffd166, 1);
+      row.chrome.fillRoundedRect(barX, barY, barW, barH, 2);
     } else {
       row.chrome.fillStyle(0x12182c, selected ? 0.88 : 0.72);
       row.chrome.fillRoundedRect(x, y, width, height, radius);

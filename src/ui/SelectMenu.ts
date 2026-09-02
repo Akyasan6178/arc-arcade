@@ -7,10 +7,10 @@ import { fittedRowHeight } from '@ui/menuLayout';
  * DXB-14: A reusable vertical option list (keyboard + pointer). Not
  * DX-Ball-specific — the caller supplies `{ id, title, description }`
  * rows and an `onSelect` callback. Arrow keys move the highlight;
- * Space / Enter / a click confirm. Shares the HUD typeface/stroke
- * language from DXB-13. DXB-16: an option may set `locked` so it stays
- * highlightable (to show a requirement) but Space / click will not
- * confirm it.
+ * Space / Enter / a click confirm. DXB-16: an option may set `locked`.
+ *
+ * DXB-26: card chrome and visual highlight instead of `> title <`
+ * debug prefixes, so Hub / Theme / Mode read as a finished game UI.
  */
 
 export interface SelectMenuOption<T extends string = string> {
@@ -31,6 +31,9 @@ export interface SelectMenuConfig<T extends string = string> {
   rowHeightRatio?: number;
   /** Draw depth. Pause overlays pass a value above gameplay HUD / messages. */
   depth?: number;
+  panel?: number;
+  panelStroke?: number;
+  accent?: number;
   /** DXB-15: Index highlighted when the menu is created. */
   initialIndex?: number;
   /** DXB-15: Fires when the highlight moves, before confirm. */
@@ -45,15 +48,21 @@ const DEFAULT_CONFIG: Required<Omit<SelectMenuConfig, 'onHighlight' | 'initialIn
   highlightColor: '#f8f9fa',
   descriptionColor: '#90e0ef',
   mutedColor: '#6c7a89',
-  titleFontSizeRatio: 0.042,
-  descriptionFontSizeRatio: 0.022,
-  rowHeightRatio: 0.11,
+  titleFontSizeRatio: 0.032,
+  descriptionFontSizeRatio: 0.016,
+  rowHeightRatio: 0.09,
   depth: HUD_DEPTH,
+  panel: 0x12182c,
+  panelStroke: 0x2de2e6,
+  accent: 0xff2a6d,
 };
 
 interface SelectMenuRow {
+  hit: Phaser.GameObjects.Rectangle;
+  chrome: Phaser.GameObjects.Graphics;
   title: Phaser.GameObjects.Text;
   description: Phaser.GameObjects.Text;
+  badge: Phaser.GameObjects.Text;
 }
 
 export class SelectMenu<T extends string = string> {
@@ -98,18 +107,23 @@ export class SelectMenu<T extends string = string> {
 
     for (let i = 0; i < options.length; i++) {
       const option = options[i];
+      const chrome = scene.add.graphics().setDepth(this.config.depth - 1);
+      const hit = scene.add
+        .rectangle(0, 0, 10, 10, 0x000000, 0.01)
+        .setDepth(this.config.depth + 1)
+        .setInteractive({ useHandCursor: !option.locked });
+
       const title = scene.add
-        .text(0, 0, '', {
+        .text(0, 0, option.title, {
           fontFamily: HUD_FONT_FAMILY,
           fontSize: '16px',
           color: this.config.color,
           fontStyle: 'bold',
           align: 'center',
           stroke: '#0b1320',
-          strokeThickness: 5,
+          strokeThickness: 4,
         })
         .setOrigin(0.5, 0)
-        .setPadding(8, 6, 8, 6)
         .setShadow(1, 2, '#000000', 3, true, true)
         .setDepth(this.config.depth)
         .setInteractive({ useHandCursor: true });
@@ -126,21 +140,30 @@ export class SelectMenu<T extends string = string> {
         })
         .setOrigin(0.5, 0)
         .setShadow(1, 2, '#000000', 2, true, true)
-        .setDepth(this.config.depth);
+        .setDepth(this.config.depth)
+        .setVisible(Boolean(option.description));
 
-      if (option.description) {
-        description.setInteractive({ useHandCursor: true });
-      } else {
-        description.setVisible(false);
-      }
+      const badge = scene.add
+        .text(0, 0, option.locked ? 'LOCKED' : '', {
+          fontFamily: HUD_FONT_FAMILY,
+          fontSize: '10px',
+          color: this.config.mutedColor,
+          fontStyle: 'bold',
+          align: 'right',
+          stroke: '#0b1320',
+          strokeThickness: 3,
+        })
+        .setOrigin(1, 0.5)
+        .setDepth(this.config.depth)
+        .setVisible(Boolean(option.locked));
 
       const selectIndex = i;
+      hit.on('pointerover', () => this.setSelectedIndex(selectIndex));
+      hit.on('pointerup', () => this.confirm());
       title.on('pointerover', () => this.setSelectedIndex(selectIndex));
-      description.on('pointerover', () => this.setSelectedIndex(selectIndex));
       title.on('pointerup', () => this.confirm());
-      description.on('pointerup', () => this.confirm());
 
-      this.rows.push({ title, description });
+      this.rows.push({ hit, chrome, title, description, badge });
     }
 
     this.layout();
@@ -163,8 +186,11 @@ export class SelectMenu<T extends string = string> {
     keyboard?.off('keydown-SPACE', this.onSpace);
 
     for (const row of this.rows) {
+      row.hit.destroy();
+      row.chrome.destroy();
       row.title.destroy();
       row.description.destroy();
+      row.badge.destroy();
     }
     this.rows.length = 0;
   }
@@ -226,9 +252,9 @@ export class SelectMenu<T extends string = string> {
   }
 
   private layout(): void {
-    const titleSize = Math.max(14, Math.round(this.viewportHeight * this.config.titleFontSizeRatio));
+    const titleSize = Math.max(13, Math.round(this.viewportHeight * this.config.titleFontSizeRatio));
     const descriptionSize = Math.max(
-      11,
+      10,
       Math.round(this.viewportHeight * this.config.descriptionFontSizeRatio),
     );
     const rowHeight = fittedRowHeight(
@@ -238,16 +264,45 @@ export class SelectMenu<T extends string = string> {
       this.config.rowHeightRatio,
       this.viewportHeight * 0.9,
     );
-    const wrapWidth = this.viewportWidth * 0.72;
+    const cardW = this.viewportWidth * 0.78;
+    const cardX = (this.viewportWidth - cardW) / 2;
+    const wrapWidth = cardW * 0.78;
 
     for (let i = 0; i < this.rows.length; i++) {
       const row = this.rows[i];
+      const option = this.options[i];
       const y = this.originY + i * rowHeight;
-      row.title.setPosition(this.viewportWidth / 2, y);
+      const cardH = rowHeight * 0.86;
+      const radius = Math.max(8, cardH * 0.18);
+      const selected = i === this.selectedIndex;
+      const hasDesc = Boolean(option.description);
+
+      row.chrome.clear();
+      row.chrome.fillStyle(this.config.panel, selected ? 0.96 : 0.82);
+      row.chrome.fillRoundedRect(cardX, y, cardW, cardH, radius);
+      row.chrome.lineStyle(
+        selected ? 2.5 : 1.25,
+        selected ? this.config.accent : this.config.panelStroke,
+        selected ? 1 : 0.7,
+      );
+      row.chrome.strokeRoundedRect(cardX, y, cardW, cardH, radius);
+      if (selected) {
+        row.chrome.fillStyle(this.config.accent, 1);
+        row.chrome.fillRect(cardX, y + cardH * 0.18, 4, cardH * 0.64);
+      }
+
+      const titleY = hasDesc ? y + cardH * 0.16 : y + cardH * 0.5 - titleSize * 0.55;
+      row.title.setPosition(this.viewportWidth / 2, titleY);
       row.title.setFontSize(titleSize);
-      row.description.setPosition(this.viewportWidth / 2, y + titleSize * 1.15);
+      row.description.setPosition(this.viewportWidth / 2, titleY + titleSize * 1.15);
       row.description.setFontSize(descriptionSize);
       row.description.setWordWrapWidth(wrapWidth);
+      row.badge.setPosition(cardX + cardW - 14, y + cardH * 0.5);
+      row.badge.setFontSize(Math.max(9, descriptionSize));
+
+      row.hit.setPosition(this.viewportWidth / 2, y + cardH / 2);
+      row.hit.setSize(cardW, cardH);
+      row.hit.setDisplaySize(cardW, cardH);
     }
   }
 
@@ -256,9 +311,7 @@ export class SelectMenu<T extends string = string> {
       const option = this.options[i];
       const row = this.rows[i];
       const selected = i === this.selectedIndex;
-      const prefix = option.locked ? '[LOCKED] ' : '';
-      const label = `${prefix}${option.title}`;
-      row.title.setText(selected ? `>  ${label}  <` : label);
+      row.title.setText(option.title);
       row.title.setColor(
         selected
           ? this.config.highlightColor
@@ -269,6 +322,8 @@ export class SelectMenu<T extends string = string> {
       row.description.setColor(
         selected && !option.locked ? this.config.descriptionColor : this.config.mutedColor,
       );
+      row.badge.setVisible(Boolean(option.locked));
     }
+    this.layout();
   }
 }

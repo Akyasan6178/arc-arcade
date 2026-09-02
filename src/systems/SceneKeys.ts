@@ -14,6 +14,7 @@
  * dedicated `Achievements` destination from the Hub. DXB-17 adds
  * `Stats`. DXB-18 adds `Garage`. DXB-18A adds `Hub` and `Settings`.
  * DXB-23 adds `LevelSelect`, `Tutorial`, and `Credits`.
+ * DXB-26 adds `ReleaseNotes`.
  */
 export const SceneKeys = {
   Boot: 'BootScene',
@@ -24,6 +25,7 @@ export const SceneKeys = {
   LevelSelect: 'LevelSelectScene',
   Tutorial: 'TutorialScene',
   Credits: 'CreditsScene',
+  ReleaseNotes: 'ReleaseNotesScene',
   Achievements: 'AchievementsScene',
   Stats: 'StatsScene',
   Garage: 'GarageScene',

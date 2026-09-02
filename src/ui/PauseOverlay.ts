@@ -1,17 +1,18 @@
 import Phaser from 'phaser';
-import { SelectMenu, type SelectMenuOption } from '@ui/SelectMenu';
+import { AudioPanel } from '@ui/AudioPanel';
+import { TextButton } from '@ui/TextButton';
 
 /**
  * ui/PauseOverlay.ts
  *
  * DXB-13A: A reusable pause/menu overlay. Dims the playfield, shows a
- * title, and hosts a `SelectMenu`. Not DX-Ball-specific — the caller
- * supplies the option list and handles each selected id. Hidden until
- * `show()`; `hide()` tears down the menu so its Space / Enter bindings
- * cannot leak into gameplay.
+ * title, and hosts Resume / Restart / Leave actions. Hidden until
+ * `show()`; `hide()` tears down interactive controls so they cannot
+ * leak into gameplay.
  *
- * DXB-15: framed panel, accent bar, and theme tokens so pause matches
- * the rest of the identity system.
+ * DXB-15: framed panel, accent bar, and theme tokens.
+ * DXB-26: visible Music / SFX toggles and volume meters via AudioPanel
+ * so the player never has to leave a run to silence audio.
  */
 
 export type PauseOverlayAction = 'resume' | 'restart' | 'mode-select';
@@ -33,12 +34,6 @@ export interface PauseOverlayColors {
 const OVERLAY_DEPTH = 40;
 const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
 
-const DEFAULT_OPTIONS: readonly SelectMenuOption<PauseOverlayAction>[] = [
-  { id: 'resume', title: 'Resume', description: 'Back to the run' },
-  { id: 'restart', title: 'Restart Run', description: 'Same mode, same theme' },
-  { id: 'mode-select', title: 'Leave Run', description: 'Return to mode select' },
-];
-
 const DEFAULT_COLORS: PauseOverlayColors = {
   dim: 0x050814,
   dimAlpha: 0.64,
@@ -56,7 +51,8 @@ export class PauseOverlay {
   private readonly accent: Phaser.GameObjects.Rectangle;
   private readonly title: Phaser.GameObjects.Text;
   private readonly hint: Phaser.GameObjects.Text;
-  private menu?: SelectMenu<PauseOverlayAction>;
+  private buttons: TextButton[] = [];
+  private audioPanel?: AudioPanel;
   private onSelect?: (action: PauseOverlayAction) => void;
   private colors: PauseOverlayColors = { ...DEFAULT_COLORS };
   private viewportWidth = 0;
@@ -76,14 +72,14 @@ export class PauseOverlay {
     this.panel = scene.add.graphics().setDepth(OVERLAY_DEPTH + 1).setVisible(false);
 
     this.accent = scene.add
-      .rectangle(viewportWidth / 2, viewportHeight * 0.3, viewportWidth * 0.36, 4, this.colors.panelStroke)
+      .rectangle(viewportWidth / 2, viewportHeight * 0.22, viewportWidth * 0.28, 4, this.colors.panelStroke)
       .setDepth(OVERLAY_DEPTH + 2)
       .setVisible(false);
 
     this.title = scene.add
-      .text(viewportWidth / 2, viewportHeight * 0.18, 'PAUSED', {
+      .text(viewportWidth / 2, viewportHeight * 0.1, 'PAUSED', {
         fontFamily: HUD_FONT_FAMILY,
-        fontSize: `${Math.round(viewportHeight * 0.07)}px`,
+        fontSize: `${Math.round(viewportHeight * 0.055)}px`,
         color: this.colors.title,
         fontStyle: 'bold',
         align: 'center',
@@ -96,9 +92,9 @@ export class PauseOverlay {
       .setVisible(false);
 
     this.hint = scene.add
-      .text(viewportWidth / 2, viewportHeight * 0.86, 'Tap a row to choose  ·  Esc resumes', {
+      .text(viewportWidth / 2, viewportHeight * 0.93, 'Tap a control', {
         fontFamily: HUD_FONT_FAMILY,
-        fontSize: `${Math.round(viewportHeight * 0.02)}px`,
+        fontSize: `${Math.round(viewportHeight * 0.018)}px`,
         color: this.colors.body,
         align: 'center',
         stroke: '#0b1320',
@@ -122,7 +118,7 @@ export class PauseOverlay {
     this.hint.setColor(this.colors.body);
     if (this.visible) {
       this.redrawPanel();
-      this.rebuildMenu();
+      this.rebuildControls();
     }
   }
 
@@ -140,7 +136,7 @@ export class PauseOverlay {
     this.title.setVisible(true);
     this.hint.setVisible(true);
     this.layout();
-    this.rebuildMenu();
+    this.rebuildControls();
   }
 
   hide(): void {
@@ -155,8 +151,7 @@ export class PauseOverlay {
     this.accent.setVisible(false);
     this.title.setVisible(false);
     this.hint.setVisible(false);
-    this.menu?.destroy();
-    this.menu = undefined;
+    this.clearControls();
     this.onSelect = undefined;
   }
 
@@ -165,11 +160,11 @@ export class PauseOverlay {
     this.viewportHeight = viewportHeight;
     this.dim.setPosition(viewportWidth / 2, viewportHeight / 2);
     this.dim.setSize(viewportWidth, viewportHeight);
-    this.title.setFontSize(Math.max(22, Math.round(viewportHeight * 0.06)));
-    this.hint.setFontSize(Math.max(12, Math.round(viewportHeight * 0.02)));
+    this.title.setFontSize(Math.max(20, Math.round(viewportHeight * 0.05)));
+    this.hint.setFontSize(Math.max(11, Math.round(viewportHeight * 0.018)));
     if (this.visible) {
       this.layout();
-      this.menu?.resize(viewportWidth, viewportHeight, PauseOverlay.menuOriginY(viewportHeight));
+      this.rebuildControls();
     }
   }
 
@@ -185,61 +180,91 @@ export class PauseOverlay {
   private layout(): void {
     const width = this.viewportWidth;
     const height = this.viewportHeight;
-    this.title.setPosition(width / 2, height * 0.18);
-    this.accent.setPosition(width / 2, height * 0.3);
-    this.accent.setSize(width * 0.36, Math.max(3, height * 0.006));
-    this.hint.setPosition(width / 2, height * 0.86);
-    this.hint.setWordWrapWidth(width * 0.62);
+    this.title.setPosition(width / 2, height * 0.1);
+    this.accent.setPosition(width / 2, height * 0.2);
+    this.accent.setSize(width * 0.28, Math.max(3, height * 0.005));
+    this.hint.setPosition(width / 2, height * 0.94);
+    this.hint.setWordWrapWidth(width * 0.7);
     this.redrawPanel();
   }
 
   private redrawPanel(): void {
     const width = this.viewportWidth;
     const height = this.viewportHeight;
-    const panelW = width * 0.7;
-    const panelH = height * 0.62;
+    const panelW = Math.min(width * 0.78, 560);
+    const panelH = height * 0.82;
     const x = (width - panelW) / 2;
-    const y = height * 0.12;
+    const y = height * 0.06;
     const radius = Math.min(width, height) * 0.02;
 
     this.panel.clear();
-    this.panel.fillStyle(this.colors.panel, 0.94);
+    this.panel.fillStyle(this.colors.panel, 0.96);
     this.panel.fillRoundedRect(x, y, panelW, panelH, radius);
-    this.panel.lineStyle(Math.max(2, height * 0.006), this.colors.panelStroke, 1);
+    this.panel.lineStyle(Math.max(2, height * 0.005), this.colors.panelStroke, 1);
     this.panel.strokeRoundedRect(x, y, panelW, panelH, radius);
     this.panel.fillStyle(numberFromHex(this.colors.accent), 0.9);
     this.panel.fillRect(x, y, Math.max(6, width * 0.01), panelH);
   }
 
-  private rebuildMenu(): void {
-    this.menu?.destroy();
+  private rebuildControls(): void {
+    this.clearControls();
     const onSelect = this.onSelect;
     if (!onSelect) {
       return;
     }
 
-    this.menu = new SelectMenu(
-      this.scene,
-      this.viewportWidth,
-      this.viewportHeight,
-      PauseOverlay.menuOriginY(this.viewportHeight),
-      DEFAULT_OPTIONS,
-      (action) => onSelect(action),
-      {
-        depth: OVERLAY_DEPTH + 2,
-        titleFontSizeRatio: 0.036,
-        descriptionFontSizeRatio: 0.018,
-        rowHeightRatio: 0.09,
-        color: this.colors.menuColor,
-        highlightColor: this.colors.menuHighlight,
-        descriptionColor: this.colors.menuDescription,
-        mutedColor: this.colors.menuMuted,
-      },
+    const width = this.viewportWidth;
+    const height = this.viewportHeight;
+    const color = this.colors.menuColor ?? this.colors.body;
+    const highlight = this.colors.menuHighlight ?? this.colors.title;
+    const font = Math.max(14, Math.round(height * 0.028));
+    const startY = height * 0.24;
+    const gap = height * 0.075;
+    const actions: Array<{ id: PauseOverlayAction; label: string }> = [
+      { id: 'resume', label: 'Resume' },
+      { id: 'restart', label: 'Restart Run' },
+      { id: 'mode-select', label: 'Leave Run' },
+    ];
+
+    this.buttons = actions.map((action, index) =>
+      new TextButton(this.scene, width / 2, startY + index * gap, action.label, () => onSelect(action.id), {
+        color,
+        highlightColor: highlight,
+        originX: 0.5,
+        originY: 0.5,
+        fontSize: font,
+        depth: OVERLAY_DEPTH + 3,
+      }),
     );
+
+    const panelW = Math.min(width * 0.66, 480);
+    const audioY = startY + gap * 3.05;
+    this.audioPanel = new AudioPanel(
+      this.scene,
+      (width - panelW) / 2,
+      audioY,
+      panelW,
+      {
+        color,
+        highlightColor: highlight,
+        mutedColor: this.colors.menuMuted ?? this.colors.body,
+        panel: 0x0b1320,
+        panelStroke: this.colors.panelStroke,
+        accent: numberFromHex(this.colors.accent),
+        title: this.colors.title,
+      },
+      OVERLAY_DEPTH + 3,
+    );
+    this.audioPanel.layout((width - panelW) / 2, audioY, panelW, height);
   }
 
-  private static menuOriginY(viewportHeight: number): number {
-    return viewportHeight * 0.36;
+  private clearControls(): void {
+    for (const button of this.buttons) {
+      button.destroy();
+    }
+    this.buttons = [];
+    this.audioPanel?.destroy();
+    this.audioPanel = undefined;
   }
 }
 

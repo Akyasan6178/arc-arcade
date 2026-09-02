@@ -42,12 +42,14 @@ Currently:
   Space) and a configurable `depth`. DXB-15 adds `initialIndex` and
   `onHighlight` for live theme preview. DXB-16 adds `locked` so a
   highlightable row cannot be confirmed. DXB-20 shrinks row height
-  when the list would otherwise clip the Back/hint row. Not
+  when the list would otherwise clip the Back/hint row. DXB-26 paints
+  card chrome and drops the `> title <` debug prefix. Not
   DX-Ball-specific.
 - `PauseOverlay.ts` — DXB-13A's reusable pause/menu overlay. Dims the
-  playfield, shows a title, and hosts a `SelectMenu`. Hidden until
-  `show()`. DXB-15 adds a framed panel, accent bar, and `applyTheme()`.
-  Not DX-Ball-specific.
+  playfield, shows a title, and hosts Resume / Restart / Leave. Hidden
+  until `show()`. DXB-15 adds a framed panel, accent bar, and `applyTheme()`.
+  DXB-26 adds visible Music / SFX on-off and volume meters via
+  `AudioPanel`. Not DX-Ball-specific.
 - `ResultOverlay.ts` — DXB-15's reusable end/transition card (victory,
   game over, time-up, level-clear). Dim + framed panel + title + body.
   DXB-20 adds a tap-to-continue hint and word wrap. DXB-22 adds a
@@ -58,7 +60,7 @@ Currently:
   unlocked / percent / equipped). Space confirms only unlocked
   selectable rows. DXB-18 adds `onHighlight`, `initialIndex`,
   `getSelectedId()`, and a FAVORITE badge. DXB-25 adds optional
-  `completeChrome` (gold card, ribbon, completion badge) for
+  `completeChrome` (gold card, large ✓, filled gold bar) for
   Achievements. Garage and Achievements are the current callers. Not
   DX-Ball-specific beyond the `ProgressRow` shape.
 - `StatsList.ts` — DXB-17's reusable read-only label/value list
@@ -89,8 +91,10 @@ Currently:
 - `LevelBrowser.ts` — DXB-23's Classic campaign thumbnail grid. DXB-24
   adds brick-type icons and a 1–5 difficulty rating under the miniature
   layout. DXB-25 strengthens each card (thumbnail well, colored
-  difficulty pips, type chips + letters). Confirm reports the
-  highlighted index. Not a gameplay system.
-- `TutorialBoard.ts` — DXB-25's visual how-to board (center example,
-  short notes left/right). TutorialScene is the caller. Not a
-  gameplay system.
+  difficulty pips, type chips + letters). DXB-26 adds `previewOnly` so
+  Classic cannot start from an arbitrary level. Not a gameplay system.
+- `TutorialBoard.ts` — DXB-26's visual-first how-to board (center
+  vignette, short notes left/right, portrait stacks). TutorialScene is
+  the caller. Not a gameplay system.
+- `AudioPanel.ts` — DXB-26's shared Music / SFX toggles and volume
+  meters. Pause and Settings are the callers. Not a new audio system.

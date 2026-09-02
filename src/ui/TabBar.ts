@@ -189,8 +189,9 @@ export class TabBar<T extends string = string> {
     for (let i = 0; i < this.labels.length; i++) {
       const option = this.options[i];
       const selected = i === this.selectedIndex;
-      this.labels[i].setText(selected ? `> ${option.title} <` : option.title);
+      this.labels[i].setText(option.title);
       this.labels[i].setColor(selected ? this.config.highlightColor : this.config.mutedColor);
+      this.labels[i].setAlpha(selected ? 1 : 0.72);
     }
   }
 }

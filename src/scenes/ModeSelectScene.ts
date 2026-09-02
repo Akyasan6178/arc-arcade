@@ -65,7 +65,7 @@ export class ModeSelectScene extends Phaser.Scene {
     this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
     this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'SELECT MODE');
     this.themeHintText = this.createThemeHint(snapshot, theme.label, theme.hud.hint);
-    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Classic opens level previews');
+    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Classic starts at Level 1');
     this.backButton = this.createBackButton(snapshot, theme.menu.color);
     this.menu = new SelectMenu(
       this,
@@ -83,6 +83,12 @@ export class ModeSelectScene extends Phaser.Scene {
         highlightColor: theme.menu.highlightColor,
         descriptionColor: theme.menu.descriptionColor,
         mutedColor: theme.menu.mutedColor,
+        panel: theme.overlay.panel,
+        panelStroke: theme.overlay.panelStroke,
+        accent: Number.parseInt(theme.overlay.accent.replace('#', ''), 16) || 0xff2a6d,
+        titleFontSizeRatio: 0.034,
+        descriptionFontSizeRatio: 0.016,
+        rowHeightRatio: 0.12,
       },
     );
 
@@ -122,19 +128,14 @@ export class ModeSelectScene extends Phaser.Scene {
     color: string,
   ): Phaser.GameObjects.Text {
     return this.add
-      .text(
-        snapshot.width / 2,
-        menuExtraLineY(snapshot),
-        `Theme: ${themeLabel}  ·  Back to change`,
-        {
-          fontFamily: MENU_FONT_FAMILY,
-          fontSize: `${menuFontSize(snapshot.height, MENU_LAYOUT.extraLineFontRatio, MENU_LAYOUT.extraLineMinPx)}px`,
-          color,
-          align: 'center',
-          stroke: MENU_STROKE,
-          strokeThickness: 3,
-        },
-      )
+      .text(snapshot.width / 2, menuExtraLineY(snapshot), themeLabel, {
+        fontFamily: MENU_FONT_FAMILY,
+        fontSize: `${menuFontSize(snapshot.height, MENU_LAYOUT.extraLineFontRatio, MENU_LAYOUT.extraLineMinPx)}px`,
+        color,
+        align: 'center',
+        stroke: MENU_STROKE,
+        strokeThickness: 3,
+      })
       .setOrigin(0.5, 0)
       .setShadow(1, 2, '#000000', 3, true, true)
       .setDepth(20);

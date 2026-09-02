@@ -7,6 +7,7 @@ import { ModeSelectScene } from '@scenes/ModeSelectScene';
 import { LevelSelectScene } from '@scenes/LevelSelectScene';
 import { TutorialScene } from '@scenes/TutorialScene';
 import { CreditsScene } from '@scenes/CreditsScene';
+import { ReleaseNotesScene } from '@scenes/ReleaseNotesScene';
 import { AchievementsScene } from '@scenes/AchievementsScene';
 import { StatsScene } from '@scenes/StatsScene';
 import { GarageScene } from '@scenes/GarageScene';
@@ -61,6 +62,7 @@ const config: Phaser.Types.Core.GameConfig = {
     LevelSelectScene,
     TutorialScene,
     CreditsScene,
+    ReleaseNotesScene,
     AchievementsScene,
     StatsScene,
     GarageScene,

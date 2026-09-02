@@ -76,7 +76,7 @@ export class ThemeSelectScene extends Phaser.Scene {
     this.subtitleText = createMenuSubtitle(this, snapshot, current.hud.subtitle, 'SELECT THEME');
     this.ruleColor = current.overlay.panelStroke;
     this.rule = createMenuRule(this, snapshot, this.ruleColor);
-    this.hintText = createMenuHint(this, snapshot, current.hud.hint, 'Locked themes preview only');
+    this.hintText = createMenuHint(this, snapshot, current.hud.hint, 'Preview locked themes');
     this.backButton = this.createBackButton(snapshot, current.menu.color);
     this.menu = new SelectMenu(
       this,
@@ -88,7 +88,7 @@ export class ThemeSelectScene extends Phaser.Scene {
         return {
           id: theme.id,
           title: theme.label,
-          description: unlocked ? theme.description : getThemeUnlockHint(theme.id),
+          description: unlocked ? undefined : getThemeUnlockHint(theme.id),
           locked: !unlocked,
         };
       }),
@@ -100,9 +100,12 @@ export class ThemeSelectScene extends Phaser.Scene {
         highlightColor: current.menu.highlightColor,
         descriptionColor: current.menu.descriptionColor,
         mutedColor: current.menu.mutedColor,
-        titleFontSizeRatio: 0.028,
-        descriptionFontSizeRatio: 0.016,
-        rowHeightRatio: 0.1,
+        titleFontSizeRatio: 0.024,
+        descriptionFontSizeRatio: 0.014,
+        rowHeightRatio: 0.088,
+        panel: current.overlay.panel,
+        panelStroke: current.overlay.panelStroke,
+        accent: Number.parseInt(current.overlay.accent.replace('#', ''), 16) || 0xff2a6d,
       },
     );
 

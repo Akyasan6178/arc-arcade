@@ -194,13 +194,14 @@ import { buildRunSummary } from '@entities/dx-ball/RunSummary';
  * richer end-of-run copy, and a local leaderboard adapter seam. Score /
  * lives / modes stay on the existing call sites.
  *
- * DXB-25: Fire Ball and Laser last 5s. Time Attack clears timed paddle
- * effects on level wrap. Drop weights live in `PowerupDropTable.ts`.
+ * DXB-26: Classic always starts at Level 1. Time Attack resets the
+ * configured per-level timer and timed effects on every stage. Fire /
+ * Laser durations stay 5s. Drop weights live in `PowerupDropTable.ts`.
  */
 
 export interface MainSceneData {
   mode?: GameModeId;
-  /** DXB-23: Classic campaign start (0-based). Ignored in other modes. */
+  /** DXB-23: Classic campaign start (ignored since DXB-26 — always Level 1). */
   startLevelIndex?: number;
 }
 const HIGH_SCORE_KEY = 'dx-ball-high-score';
@@ -315,11 +316,9 @@ export class MainScene extends Phaser.Scene {
 
   init(data: MainSceneData = {}): void {
     this.mode = isGameModeId(data.mode) ? data.mode : 'classic';
-    const requested = data.startLevelIndex;
-    this.startLevelIndex =
-      this.mode === 'classic' && typeof requested === 'number' && Number.isFinite(requested)
-        ? Phaser.Math.Clamp(Math.floor(requested), 0, LEVELS.length - 1)
-        : 0;
+    // DXB-26: Classic always starts at Level 1. The Level Browser is
+    // preview-only and must not launch an arbitrary campaign index.
+    this.startLevelIndex = 0;
   }
 
   create(): void {
@@ -479,14 +478,14 @@ export class MainScene extends Phaser.Scene {
       return;
     }
 
-    this.updateTimeAttack(delta);
-    if (this.timedOut) {
-      return;
-    }
-
     this.updateEndlessSpeed(delta);
 
     if (this.transitioning) {
+      return;
+    }
+
+    this.updateTimeAttack(delta);
+    if (this.timedOut) {
       return;
     }
 
@@ -972,10 +971,12 @@ export class MainScene extends Phaser.Scene {
     // shouldn't carry into the next one's fresh brick layout.
     this.powerupManager.clear();
     this.clearLasers();
-    // DXB-25: Time Attack starts each wrapped level clean. Score stays.
-    // Classic still carries paddle-timed effects across campaign stages.
+    // DXB-26: Time Attack gives every level a fresh configured duration.
+    // Temporary paddle/ball effects reset; run score and lives stay.
     if (this.mode === 'time-attack') {
+      this.remainingTimeMs = TIME_ATTACK_DURATION_MS;
       this.paddle.clearTimedEffects();
+      this.refreshModeLabel();
     }
     this.effectsLabel.setEffects([]);
 

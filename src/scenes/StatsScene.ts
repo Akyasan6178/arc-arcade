@@ -10,7 +10,7 @@ import {
   loadPlayableThemeId,
   type StatDisplayRow,
 } from '@entities/dx-ball/Progress';
-import { getLeaderboardRows, LEADERBOARD_SIZE } from '@entities/dx-ball/Leaderboards';
+import { getLeaderboardRows } from '@entities/dx-ball/Leaderboards';
 import { GAME_MODES, getGameModeInfo, type GameModeId } from '@entities/dx-ball/GameMode';
 import { getTheme } from '@entities/dx-ball/Theme';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
@@ -85,7 +85,7 @@ export class StatsScene extends Phaser.Scene {
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
     playDxBallThemeMusic(theme.id);
     this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
-    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'STATISTICS  ·  LOCAL');
+    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'STATISTICS');
     this.hintText = createMenuHint(this, snapshot, theme.hud.hint, '');
     this.tabBar = new TabBar(
       this,
@@ -157,7 +157,7 @@ export class StatsScene extends Phaser.Scene {
     this.clearContent();
     this.view = 'boards';
     this.subtitleText.setText('LEADERBOARDS');
-    this.hintText.setText('Tap a mode');
+    this.hintText.setText('');
 
     const snapshot = GameViewport.get().getSnapshot();
     const theme = getTheme(loadPlayableThemeId());
@@ -170,7 +170,6 @@ export class StatsScene extends Phaser.Scene {
       GAME_MODES.map((mode) => ({
         id: mode.id,
         title: mode.label,
-        description: `Top ${LEADERBOARD_SIZE} local scores`,
       })),
       (mode) => this.showBoard(mode),
       {
@@ -178,9 +177,11 @@ export class StatsScene extends Phaser.Scene {
         highlightColor: theme.menu.highlightColor,
         descriptionColor: theme.menu.descriptionColor,
         mutedColor: theme.menu.mutedColor,
+        panel: theme.overlay.panel,
+        panelStroke: theme.overlay.panelStroke,
+        accent: Number.parseInt(theme.overlay.accent.replace('#', ''), 16) || 0xff2a6d,
         rowHeightRatio: 0.1,
         titleFontSizeRatio: 0.032,
-        descriptionFontSizeRatio: 0.018,
       },
     );
   }
@@ -189,7 +190,7 @@ export class StatsScene extends Phaser.Scene {
     this.clearContent();
     this.view = mode;
     this.subtitleText.setText(getGameModeInfo(mode).label.toUpperCase());
-    this.hintText.setText('Back returns to modes');
+    this.hintText.setText('');
     this.createStatsList(getLeaderboardRows(mode), 0.058);
   }
 

@@ -19,8 +19,9 @@ Currently:
 - `SceneKeys.ts` — string keys used to register and start scenes
   (`Boot`, `Preload`, `Hub` since DXB-18A, `ThemeSelect` since DXB-15,
   `ModeSelect` since DXB-14, `LevelSelect` / `Tutorial` / `Credits` since
-  DXB-23, `Achievements` since DXB-18A, `Stats` since DXB-17, `Garage`
-  since DXB-18, `Settings` since DXB-18A, `Main`).
+  DXB-23, `ReleaseNotes` since DXB-26, `Achievements` since DXB-18A,
+  `Stats` since DXB-17, `Garage` since DXB-18, `Settings` since DXB-18A,
+  `Main`).
 - `GameViewport.ts` — ARC-01 responsive-viewport service. Wraps Phaser's
   Scale Manager plus browser orientation/safe-area concerns into a single
   `GameViewport.get()` accessor (`width`, `height`, `centerX`, `centerY`,
@@ -36,7 +37,9 @@ Currently:
   separate internal volume buses; the persisted global `enabled` mute
   still gates both and stops music immediately. DXB-25 exposes
   persisted user-facing `setSfxVolume` / `setMusicVolume` (0..1) that
-  multiply those buses. Knows nothing about DX-Ball's cue names — see
+  multiply those buses. DXB-26 adds independent `musicEnabled` /
+  `sfxEnabled` flags so Pause and Settings can mute one bus without
+  the other. Knows nothing about DX-Ball's cue names — see
   `entities/dx-ball/audioCues.ts`.
 - `ThemeStore.ts` — DXB-15 string persistence for a selected theme id.
   Same localStorage wrapper shape as `HighScoreStore`, but for strings.

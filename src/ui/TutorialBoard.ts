@@ -3,8 +3,9 @@ import Phaser from 'phaser';
 /**
  * ui/TutorialBoard.ts
  *
- * DXB-25: Visual how-to board. Center is a gameplay example; left and
- * right carry short explanations. Not a gameplay system.
+ * DXB-26: Visual-first how-to board. Desktop: short notes left/right,
+ * large gameplay vignette in the center. Portrait stacks the demo on
+ * top with notes underneath. Not a gameplay system.
  */
 
 export interface TutorialBoardPage {
@@ -110,39 +111,72 @@ export class TutorialBoard {
     this.rightBody.destroy();
   }
 
+  private isPortrait(): boolean {
+    return this.viewportHeight > this.viewportWidth * 1.05;
+  }
+
   private layout(): void {
-    const bottom = this.viewportHeight * 0.88;
-    const height = Math.max(120, bottom - this.originY);
-    const side = this.viewportWidth * 0.05;
-    const colGap = this.viewportWidth * 0.018;
-    const colW = (this.viewportWidth - side * 2 - colGap * 2) / 3;
-    const y = this.originY;
+    const regions = this.regions();
     const titleSize = Math.max(12, Math.round(this.viewportHeight * 0.022));
     const bodySize = Math.max(11, Math.round(this.viewportHeight * 0.016));
 
-    this.leftTitle.setPosition(side + colW / 2, y + 12);
-    this.leftTitle.setFontSize(titleSize);
-    this.leftTitle.setWordWrapWidth(colW * 0.88);
-    this.leftBody.setPosition(side + colW / 2, y + 12 + titleSize * 1.35);
-    this.leftBody.setFontSize(bodySize);
-    this.leftBody.setWordWrapWidth(colW * 0.88);
-
-    this.rightTitle.setPosition(this.viewportWidth - side - colW / 2, y + 12);
-    this.rightTitle.setFontSize(titleSize);
-    this.rightTitle.setWordWrapWidth(colW * 0.88);
-    this.rightBody.setPosition(this.viewportWidth - side - colW / 2, y + 12 + titleSize * 1.35);
-    this.rightBody.setFontSize(bodySize);
-    this.rightBody.setWordWrapWidth(colW * 0.88);
+    this.placeNote(this.leftTitle, this.leftBody, regions.left, titleSize, bodySize);
+    this.placeNote(this.rightTitle, this.rightBody, regions.right, titleSize, bodySize);
 
     this.chrome.clear();
-    this.drawCard(side, y, colW, height, false);
-    this.drawCard(side + colW + colGap, y, colW, height, true);
-    this.drawCard(side + (colW + colGap) * 2, y, colW, height, false);
+    this.drawCard(regions.left.x, regions.left.y, regions.left.w, regions.left.h, false);
+    this.drawCard(regions.center.x, regions.center.y, regions.center.w, regions.center.h, true);
+    this.drawCard(regions.right.x, regions.right.y, regions.right.w, regions.right.h, false);
+  }
+
+  private placeNote(
+    title: Phaser.GameObjects.Text,
+    body: Phaser.GameObjects.Text,
+    region: { x: number; y: number; w: number; h: number },
+    titleSize: number,
+    bodySize: number,
+  ): void {
+    title.setPosition(region.x + region.w / 2, region.y + 12);
+    title.setFontSize(titleSize);
+    title.setWordWrapWidth(region.w * 0.86);
+    body.setPosition(region.x + region.w / 2, region.y + 12 + titleSize * 1.4);
+    body.setFontSize(bodySize);
+    body.setWordWrapWidth(region.w * 0.86);
+  }
+
+  private regions(): {
+    left: { x: number; y: number; w: number; h: number };
+    center: { x: number; y: number; w: number; h: number };
+    right: { x: number; y: number; w: number; h: number };
+  } {
+    const bottom = this.viewportHeight * 0.82;
+    const height = Math.max(140, bottom - this.originY);
+    const side = this.viewportWidth * 0.04;
+    const gap = this.viewportWidth * 0.014;
+
+    if (this.isPortrait()) {
+      const demoH = height * 0.58;
+      const noteH = height - demoH - gap;
+      const noteW = (this.viewportWidth - side * 2 - gap) / 2;
+      return {
+        center: { x: side, y: this.originY, w: this.viewportWidth - side * 2, h: demoH },
+        left: { x: side, y: this.originY + demoH + gap, w: noteW, h: noteH },
+        right: { x: side + noteW + gap, y: this.originY + demoH + gap, w: noteW, h: noteH },
+      };
+    }
+
+    const sideW = (this.viewportWidth - side * 2 - gap * 2) * 0.24;
+    const centerW = this.viewportWidth - side * 2 - gap * 2 - sideW * 2;
+    return {
+      left: { x: side, y: this.originY, w: sideW, h: height },
+      center: { x: side + sideW + gap, y: this.originY, w: centerW, h: height },
+      right: { x: side + sideW + gap + centerW + gap, y: this.originY, w: sideW, h: height },
+    };
   }
 
   private drawCard(x: number, y: number, w: number, h: number, featured: boolean): void {
     const radius = Math.max(8, h * 0.04);
-    this.chrome.fillStyle(this.colors.panel, featured ? 0.94 : 0.82);
+    this.chrome.fillStyle(this.colors.panel, featured ? 0.95 : 0.82);
     this.chrome.fillRoundedRect(x, y, w, h, radius);
     this.chrome.lineStyle(featured ? 2.5 : 1.5, featured ? this.colors.accent : this.colors.panelStroke, 1);
     this.chrome.strokeRoundedRect(x, y, w, h, radius);
@@ -162,14 +196,15 @@ export class TutorialBoard {
     if (!this.page) {
       return;
     }
-    const side = this.viewportWidth * 0.05;
-    const colGap = this.viewportWidth * 0.018;
-    const colW = (this.viewportWidth - side * 2 - colGap * 2) / 3;
-    const bottom = this.viewportHeight * 0.88;
-    const height = Math.max(120, bottom - this.originY);
-    const cx = side + colW + colGap + colW / 2;
-    const cy = this.originY + height * 0.58;
-    this.page.draw(this.demo, cx, cy, colW * 0.82, height * 0.72, this.timeMs);
+    const center = this.regions().center;
+    this.page.draw(
+      this.demo,
+      center.x + center.w / 2,
+      center.y + center.h * 0.54,
+      center.w * 0.86,
+      center.h * 0.78,
+      this.timeMs,
+    );
   }
 
   private static makeLabel(

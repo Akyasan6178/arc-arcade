@@ -24,16 +24,19 @@ import {
 /**
  * scenes/HubScene.ts
  *
- * DXB-18A: Visible main menu. Sits after `PreloadScene` so every session
- * starts on a tappable Play / Garage / Statistics / Achievements /
- * Settings list instead of keyboard-only side screens. Owns no gameplay.
- * Optional G / S / U shortcuts still open Garage / Stats / Achievements.
- *
- * DXB-20: shared menu chrome (title / subtitle / hint spacing and type).
- * DXB-23: Tutorial / Credits rows, version caption, tighter hierarchy.
+ * DXB-18A/DXB-26: Visible main menu. Compact card rows, version chrome,
+ * and a What's New destination. Owns no gameplay.
  */
 
-type HubId = 'play' | 'garage' | 'tutorial' | 'stats' | 'achievements' | 'credits' | 'settings';
+type HubId =
+  | 'play'
+  | 'tutorial'
+  | 'garage'
+  | 'whats-new'
+  | 'stats'
+  | 'achievements'
+  | 'settings'
+  | 'credits';
 
 export class HubScene extends Phaser.Scene {
   private background!: ArcadeBackground;
@@ -62,7 +65,7 @@ export class HubScene extends Phaser.Scene {
       this,
       snapshot,
       theme.hud.subtitle,
-      `MAIN MENU  ·  ${formatGameVersion()}`,
+      formatGameVersion(),
     );
     this.rule = createMenuRule(this, snapshot, theme.overlay.panelStroke);
     this.hintText = createMenuHint(
@@ -72,47 +75,21 @@ export class HubScene extends Phaser.Scene {
       `${formatCreatorCredit()}  ·  ${formatStudioCredit()}`,
       'center',
     );
+    const accent = Number.parseInt(theme.overlay.accent.replace('#', ''), 16) || 0xff2a6d;
     this.menu = new SelectMenu(
       this,
       snapshot.width,
       snapshot.height,
-      menuOriginY(snapshot, true),
+      menuOriginY(snapshot, true) + snapshot.height * 0.02,
       [
-        {
-          id: 'play',
-          title: 'Play',
-          description: 'Theme · Mode · Level',
-        },
-        {
-          id: 'garage',
-          title: 'Garage',
-          description: 'Skins and themes',
-        },
-        {
-          id: 'tutorial',
-          title: 'How To',
-          description: 'Visual guide',
-        },
-        {
-          id: 'stats',
-          title: 'Statistics',
-          description: 'Scores and records',
-        },
-        {
-          id: 'achievements',
-          title: 'Achievements',
-          description: 'Lifetime goals',
-        },
-        {
-          id: 'credits',
-          title: 'Credits',
-          description: 'Creators',
-        },
-        {
-          id: 'settings',
-          title: 'Settings',
-          description: 'Mute, music, SFX',
-        },
+        { id: 'play', title: 'Play' },
+        { id: 'tutorial', title: 'How To' },
+        { id: 'garage', title: 'Garage' },
+        { id: 'whats-new', title: "What's New" },
+        { id: 'stats', title: 'Statistics' },
+        { id: 'achievements', title: 'Achievements' },
+        { id: 'settings', title: 'Settings' },
+        { id: 'credits', title: 'Credits' },
       ],
       (id) => this.openHub(id),
       {
@@ -120,9 +97,11 @@ export class HubScene extends Phaser.Scene {
         highlightColor: theme.menu.highlightColor,
         descriptionColor: theme.menu.descriptionColor,
         mutedColor: theme.menu.mutedColor,
-        rowHeightRatio: 0.078,
-        titleFontSizeRatio: 0.032,
-        descriptionFontSizeRatio: 0.016,
+        panel: theme.overlay.panel,
+        panelStroke: theme.overlay.panelStroke,
+        accent,
+        rowHeightRatio: 0.072,
+        titleFontSizeRatio: 0.026,
       },
     );
 
@@ -133,7 +112,7 @@ export class HubScene extends Phaser.Scene {
       try {
         AudioManager.get().toggle();
       } catch {
-        // AudioManager missing/unavailable — ignore the toggle.
+        // ignore
       }
     });
 
@@ -145,11 +124,14 @@ export class HubScene extends Phaser.Scene {
       case 'play':
         this.scene.start(SceneKeys.ThemeSelect);
         return;
+      case 'tutorial':
+        this.scene.start(SceneKeys.Tutorial, { from: SceneKeys.Hub });
+        return;
       case 'garage':
         this.scene.start(SceneKeys.Garage, { from: SceneKeys.Hub });
         return;
-      case 'tutorial':
-        this.scene.start(SceneKeys.Tutorial, { from: SceneKeys.Hub });
+      case 'whats-new':
+        this.scene.start(SceneKeys.ReleaseNotes, { from: SceneKeys.Hub });
         return;
       case 'stats':
         this.scene.start(SceneKeys.Stats, { from: SceneKeys.Hub });
@@ -157,11 +139,11 @@ export class HubScene extends Phaser.Scene {
       case 'achievements':
         this.scene.start(SceneKeys.Achievements, { from: SceneKeys.Hub });
         return;
-      case 'credits':
-        this.scene.start(SceneKeys.Credits, { from: SceneKeys.Hub });
-        return;
       case 'settings':
         this.scene.start(SceneKeys.Settings, { from: SceneKeys.Hub });
+        return;
+      case 'credits':
+        this.scene.start(SceneKeys.Credits, { from: SceneKeys.Hub });
         return;
     }
   }
@@ -175,6 +157,6 @@ export class HubScene extends Phaser.Scene {
     layoutMenuSubtitle(this.subtitleText, snapshot);
     layoutMenuRule(this.rule, snapshot, theme.overlay.panelStroke);
     layoutMenuHint(this.hintText, snapshot, 'center');
-    this.menu.resize(snapshot.width, snapshot.height, menuOriginY(snapshot, true));
+    this.menu.resize(snapshot.width, snapshot.height, menuOriginY(snapshot, true) + snapshot.height * 0.02);
   }
 }

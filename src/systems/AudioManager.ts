@@ -16,6 +16,10 @@ import Phaser from 'phaser';
  * DXB-25: user-facing `setSfxVolume` / `setMusicVolume` (0..1, persisted)
  * multiply those buses. Mute is unchanged. No new audio architecture.
  *
+ * DXB-26: independent `musicEnabled` / `sfxEnabled` flags so Pause and
+ * Settings can mute one bus without visiting the other. Global `enabled`
+ * still gates both and remains the persisted M-key mute.
+ *
  * Every operation is defensive and never throws.
  */
 export type ToneWaveform = 'sine' | 'square' | 'triangle' | 'sawtooth';
@@ -64,6 +68,8 @@ const DEFAULT_GAIN = 0.2;
 /** Fraction of a step's duration spent ramping gain up/down, avoiding an audible click at its start/end. */
 const ENVELOPE_RATIO = 0.15;
 const ENABLED_STORAGE_KEY = 'arc-arcade-audio-enabled';
+const MUSIC_ENABLED_STORAGE_KEY = 'arc-arcade-music-enabled';
+const SFX_ENABLED_STORAGE_KEY = 'arc-arcade-sfx-enabled';
 const SFX_VOLUME_STORAGE_KEY = 'arc-arcade-sfx-volume';
 const MUSIC_VOLUME_STORAGE_KEY = 'arc-arcade-music-volume';
 /** Internal music bus, quieter so beds sit under gameplay cues at user 100%. */
@@ -76,6 +82,10 @@ export class AudioManager {
 
   private readonly game: Phaser.Game;
   private enabled: boolean;
+  /** DXB-26: Music bed on/off, independent of SFX. Global mute still wins. */
+  private musicEnabled: boolean;
+  /** DXB-26: SFX on/off, independent of music. Global mute still wins. */
+  private sfxEnabled: boolean;
   /** User-facing SFX volume, 0..1. Mute is a separate flag. */
   private sfxVolume: number;
   /** User-facing music volume, 0..1. Multiplied by MUSIC_BUS at mix time. */
@@ -98,6 +108,8 @@ export class AudioManager {
   private constructor(game: Phaser.Game) {
     this.game = game;
     this.enabled = AudioManager.readPersistedEnabled();
+    this.musicEnabled = AudioManager.readPersistedFlag(MUSIC_ENABLED_STORAGE_KEY, true);
+    this.sfxEnabled = AudioManager.readPersistedFlag(SFX_ENABLED_STORAGE_KEY, true);
     this.sfxVolume = AudioManager.readPersistedVolume(SFX_VOLUME_STORAGE_KEY, 1);
     this.musicVolume = AudioManager.readPersistedVolume(MUSIC_VOLUME_STORAGE_KEY, 1);
   }
@@ -122,6 +134,14 @@ export class AudioManager {
     return this.enabled;
   }
 
+  isMusicEnabled(): boolean {
+    return this.musicEnabled;
+  }
+
+  isSfxEnabled(): boolean {
+    return this.sfxEnabled;
+  }
+
   getSfxVolume(): number {
     return this.sfxVolume;
   }
@@ -141,6 +161,33 @@ export class AudioManager {
     this.musicVolume = AudioManager.clampVolume(volume);
     AudioManager.writePersistedVolume(MUSIC_VOLUME_STORAGE_KEY, this.musicVolume);
     this.applyLiveMusicVolume();
+  }
+
+  /** Music bed on/off. Global mute still silences everything. */
+  setMusicEnabled(enabled: boolean): void {
+    this.musicEnabled = enabled;
+    AudioManager.writePersistedFlag(MUSIC_ENABLED_STORAGE_KEY, enabled);
+    if (!enabled) {
+      this.haltMusicPlayback();
+      return;
+    }
+    this.resumeMusicIfNeeded();
+  }
+
+  /** SFX on/off. Global mute still silences everything. */
+  setSfxEnabled(enabled: boolean): void {
+    this.sfxEnabled = enabled;
+    AudioManager.writePersistedFlag(SFX_ENABLED_STORAGE_KEY, enabled);
+  }
+
+  toggleMusic(): boolean {
+    this.setMusicEnabled(!this.musicEnabled);
+    return this.musicEnabled;
+  }
+
+  toggleSfx(): boolean {
+    this.setSfxEnabled(!this.sfxEnabled);
+    return this.sfxEnabled;
   }
 
   /** Global enable/disable flag for every sound effect and music bed. Persisted across reloads. */
@@ -168,7 +215,7 @@ export class AudioManager {
    * available, or playback fails for any reason.
    */
   play(key: string, fallback?: ToneSpec): void {
-    if (!this.enabled) {
+    if (!this.enabled || !this.sfxEnabled) {
       return;
     }
 
@@ -204,7 +251,7 @@ export class AudioManager {
     this.musicKey = key;
     this.musicFallback = fallback;
 
-    if (!this.enabled) {
+    if (!this.enabled || !this.musicEnabled) {
       return;
     }
 
@@ -219,7 +266,7 @@ export class AudioManager {
   }
 
   private isMusicAudible(): boolean {
-    if (!this.enabled || !this.musicKey) {
+    if (!this.enabled || !this.musicEnabled || !this.musicKey) {
       return false;
     }
     if (this.phaserMusic) {
@@ -229,7 +276,7 @@ export class AudioManager {
   }
 
   private startMusicPlayback(): void {
-    if (!this.enabled || !this.musicKey) {
+    if (!this.enabled || !this.musicEnabled || !this.musicKey) {
       return;
     }
 
@@ -270,7 +317,7 @@ export class AudioManager {
   }
 
   private resumeMusicIfNeeded(): void {
-    if (!this.musicKey) {
+    if (!this.musicKey || !this.musicEnabled) {
       return;
     }
     this.startMusicPlayback();
@@ -327,7 +374,7 @@ export class AudioManager {
   }
 
   private scheduleMusicAhead(): void {
-    if (!this.enabled || !this.musicFallback) {
+    if (!this.enabled || !this.musicEnabled || !this.musicFallback) {
       return;
     }
 
@@ -509,17 +556,33 @@ export class AudioManager {
   }
 
   private static readPersistedEnabled(): boolean {
+    return AudioManager.readPersistedFlag(ENABLED_STORAGE_KEY, true);
+  }
+
+  private static readPersistedFlag(key: string, fallback: boolean): boolean {
     if (typeof window === 'undefined') {
-      return true;
+      return fallback;
     }
 
     try {
-      const raw = window.localStorage.getItem(ENABLED_STORAGE_KEY);
-      // Unset (never toggled before) defaults to enabled; only an
-      // explicit prior "disabled" should stay disabled across reloads.
-      return raw === null ? true : raw === '1';
+      const raw = window.localStorage.getItem(key);
+      // Unset defaults to `fallback`; only an explicit prior "disabled"
+      // should stay disabled across reloads.
+      return raw === null ? fallback : raw === '1';
     } catch {
-      return true;
+      return fallback;
+    }
+  }
+
+  private static writePersistedFlag(key: string, enabled: boolean): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(key, enabled ? '1' : '0');
+    } catch {
+      // Storage unavailable — preference won't persist this session.
     }
   }
 
@@ -559,15 +622,6 @@ export class AudioManager {
   }
 
   private static writePersistedEnabled(enabled: boolean): void {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(ENABLED_STORAGE_KEY, enabled ? '1' : '0');
-    } catch {
-      // Storage unavailable/full/blocked — the preference just won't
-      // persist this session; gameplay itself is unaffected.
-    }
+    AudioManager.writePersistedFlag(ENABLED_STORAGE_KEY, enabled);
   }
 }

@@ -27,11 +27,10 @@ import {
 /**
  * scenes/LevelSelectScene.ts
  *
- * DXB-23: Classic campaign browser. Sits between Mode Select and
- * MainScene so the player can inspect every level's miniature layout
- * before starting. Time Attack / Endless skip this screen. Confirm
- * starts Classic at the highlighted index; Esc / Back return to Mode
- * Select. Owns no gameplay.
+ * DXB-26: Classic campaign browser is preview-only. The player may
+ * inspect all 10 layouts, difficulty, and brick composition, but
+ * starting Classic always launches Level 1. Time Attack / Endless skip
+ * this screen. Esc / Back return to Mode Select. Owns no gameplay.
  */
 
 export class LevelSelectScene extends Phaser.Scene {
@@ -40,6 +39,7 @@ export class LevelSelectScene extends Phaser.Scene {
   private subtitleText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
   private backButton?: TextButton;
+  private startButton?: TextButton;
   private browser?: LevelBrowser;
   private unsubscribeViewport?: () => void;
 
@@ -58,16 +58,17 @@ export class LevelSelectScene extends Phaser.Scene {
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
     playDxBallThemeMusic(theme.id);
     this.titleText = createMenuTitle(this, snapshot, theme.hud.title);
-    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'CAMPAIGN');
-    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Tap a card to start');
+    this.subtitleText = createMenuSubtitle(this, snapshot, theme.hud.subtitle, 'LEVEL BROWSER  ·  PREVIEW');
+    this.hintText = createMenuHint(this, snapshot, theme.hud.hint, 'Inspect layouts', 'center');
     this.backButton = this.createBackButton(snapshot, theme.menu.color);
+    this.startButton = this.createStartButton(snapshot, theme.menu.highlightColor);
     this.browser = new LevelBrowser(
       this,
       snapshot.width,
       snapshot.height,
       menuContentY(snapshot),
       levels,
-      (index) => this.startClassic(index),
+      () => undefined,
       {
         color: theme.menu.color,
         highlightColor: theme.menu.highlightColor,
@@ -76,6 +77,8 @@ export class LevelSelectScene extends Phaser.Scene {
         panelStroke: theme.overlay.panelStroke,
         accent: Number.parseInt(theme.overlay.accent.replace('#', ''), 16) || 0xff2a6d,
       },
+      undefined,
+      { previewOnly: true },
     );
 
     this.unsubscribeViewport = viewport.onChange((next) => this.handleViewportChange(next));
@@ -85,21 +88,23 @@ export class LevelSelectScene extends Phaser.Scene {
       this.browser = undefined;
       this.backButton?.destroy();
       this.backButton = undefined;
+      this.startButton?.destroy();
+      this.startButton = undefined;
     });
 
     this.input.keyboard?.on('keydown-M', () => {
       try {
         AudioManager.get().toggle();
       } catch {
-        // AudioManager missing/unavailable — ignore the toggle.
+        // ignore
       }
     });
     this.input.keyboard?.on('keydown-ESC', () => this.goBack());
     bindOptionalMenuShortcuts(this, SceneKeys.ModeSelect);
   }
 
-  private startClassic(index: number): void {
-    this.scene.start(SceneKeys.Main, { mode: 'classic', startLevelIndex: index });
+  private startClassic(): void {
+    this.scene.start(SceneKeys.Main, { mode: 'classic' });
   }
 
   private goBack(): void {
@@ -123,14 +128,35 @@ export class LevelSelectScene extends Phaser.Scene {
     );
   }
 
+  private createStartButton(snapshot: ViewportSnapshot, color: string): TextButton {
+    return new TextButton(
+      this,
+      snapshot.width - menuBackX(snapshot),
+      menuHintY(snapshot),
+      'Start Campaign',
+      () => this.startClassic(),
+      {
+        color,
+        originX: 1,
+        originY: 1,
+        fontSize: menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
+        align: 'right',
+      },
+    );
+  }
+
   private handleViewportChange(snapshot: ViewportSnapshot): void {
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.background.resize(snapshot.width, snapshot.height);
     layoutMenuTitle(this.titleText, snapshot);
     layoutMenuSubtitle(this.subtitleText, snapshot);
-    layoutMenuHint(this.hintText, snapshot);
+    layoutMenuHint(this.hintText, snapshot, 'center');
     this.backButton?.setPosition(menuBackX(snapshot), menuHintY(snapshot));
     this.backButton?.setFontSize(
+      menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
+    );
+    this.startButton?.setPosition(snapshot.width - menuBackX(snapshot), menuHintY(snapshot));
+    this.startButton?.setFontSize(
       menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
     );
     this.browser?.resize(snapshot.width, snapshot.height, menuContentY(snapshot));

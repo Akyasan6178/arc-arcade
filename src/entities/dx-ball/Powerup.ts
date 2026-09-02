@@ -116,7 +116,7 @@ export class Powerup extends Phaser.GameObjects.Container {
     background.strokeRoundedRect(-this.halfWidth, -this.halfHeight, width, height, corner);
 
     const icon = scene.add.graphics();
-    drawPowerupIcon(icon, type, visual.stroke, width, height);
+    drawPowerupIcon(icon, type, visual.stroke, width, height, 0, 0);
 
     const letterSize = Math.max(8, Math.round(height * 0.34));
     const label = scene.add
@@ -152,12 +152,15 @@ export class Powerup extends Phaser.GameObjects.Container {
   }
 }
 
-function drawPowerupIcon(
+/** DXB-26: Exported so the How To board can reuse gameplay icons. */
+export function drawPowerupIcon(
   g: Phaser.GameObjects.Graphics,
   type: PowerupType,
   color: number,
   width: number,
   height: number,
+  originX = 0,
+  originY = 0,
 ): void {
   const s = Math.min(width, height) * 0.72;
   g.lineStyle(Math.max(1.6, s * 0.1), color, 1);
@@ -165,95 +168,95 @@ function drawPowerupIcon(
 
   switch (type) {
     case 'extra-life':
-      drawHeart(g, s * 0.42);
+      drawHeart(g, originX, originY, s * 0.42);
       break;
     case 'fire-ball':
-      drawFlame(g, s * 0.4);
+      drawFlame(g, originX, originY, s * 0.4);
       break;
     case 'multi-ball':
-      drawMultiSpheres(g, s * 0.38);
+      drawMultiSpheres(g, originX, originY, s * 0.38);
       break;
     case 'widen-paddle':
-      drawExpand(g, s * 0.4);
+      drawExpand(g, originX, originY, s * 0.4);
       break;
     case 'small-paddle':
-      drawShrink(g, s * 0.4);
+      drawShrink(g, originX, originY, s * 0.4);
       break;
     case 'slow-ball':
-      drawSlow(g, s * 0.4);
+      drawSlow(g, originX, originY, s * 0.4);
       break;
     case 'fast-ball':
-      drawFast(g, s * 0.4);
+      drawFast(g, originX, originY, s * 0.4);
       break;
     case 'laser-paddle':
-      drawLaser(g, s * 0.4);
+      drawLaser(g, originX, originY, s * 0.4);
       break;
   }
 }
 
-function drawHeart(g: Phaser.GameObjects.Graphics, r: number): void {
+function drawHeart(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
   g.beginPath();
-  g.moveTo(0, r * 0.55);
-  g.lineTo(-r * 0.92, -r * 0.15);
-  g.arc(-r * 0.42, -r * 0.38, r * 0.42, Math.PI * 0.85, Math.PI * 1.95, false);
-  g.arc(r * 0.42, -r * 0.38, r * 0.42, Math.PI * 1.05, Math.PI * 0.15, false);
+  g.moveTo(x, y + r * 0.55);
+  g.lineTo(x - r * 0.92, y - r * 0.15);
+  g.arc(x - r * 0.42, y - r * 0.38, r * 0.42, Math.PI * 0.85, Math.PI * 1.95, false);
+  g.arc(x + r * 0.42, y - r * 0.38, r * 0.42, Math.PI * 1.05, Math.PI * 0.15, false);
   g.closePath();
   g.fillPath();
 }
 
-function drawFlame(g: Phaser.GameObjects.Graphics, r: number): void {
+function drawFlame(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
   g.beginPath();
-  g.moveTo(0, -r);
-  g.lineTo(r * 0.55, r * 0.15);
-  g.arc(0, r * 0.2, r * 0.58, 0.15, Math.PI - 0.15, false);
+  g.moveTo(x, y - r);
+  g.lineTo(x + r * 0.55, y + r * 0.15);
+  g.arc(x, y + r * 0.2, r * 0.58, 0.15, Math.PI - 0.15, false);
   g.closePath();
   g.fillPath();
   g.fillStyle(0xffffff, 0.35);
-  g.fillTriangle(0, -r * 0.25, -r * 0.18, r * 0.35, r * 0.18, r * 0.35);
+  g.fillTriangle(x, y - r * 0.25, x - r * 0.18, y + r * 0.35, x + r * 0.18, y + r * 0.35);
 }
 
-function drawMultiSpheres(g: Phaser.GameObjects.Graphics, r: number): void {
+function drawMultiSpheres(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
   const rad = r * 0.38;
-  g.fillCircle(-r * 0.42, r * 0.2, rad);
-  g.fillCircle(r * 0.42, r * 0.2, rad);
-  g.fillCircle(0, -r * 0.38, rad);
-  g.strokeCircle(-r * 0.42, r * 0.2, rad);
-  g.strokeCircle(r * 0.42, r * 0.2, rad);
-  g.strokeCircle(0, -r * 0.38, rad);
+  g.fillCircle(x - r * 0.42, y + r * 0.2, rad);
+  g.fillCircle(x + r * 0.42, y + r * 0.2, rad);
+  g.fillCircle(x, y - r * 0.38, rad);
+  g.strokeCircle(x - r * 0.42, y + r * 0.2, rad);
+  g.strokeCircle(x + r * 0.42, y + r * 0.2, rad);
+  g.strokeCircle(x, y - r * 0.38, rad);
 }
 
-function drawExpand(g: Phaser.GameObjects.Graphics, r: number): void {
-  g.fillRect(-r * 0.55, -r * 0.16, r * 1.1, r * 0.32);
-  g.fillTriangle(-r * 0.95, 0, -r * 0.5, -r * 0.42, -r * 0.5, r * 0.42);
-  g.fillTriangle(r * 0.95, 0, r * 0.5, -r * 0.42, r * 0.5, r * 0.42);
+function drawExpand(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillRect(x - r * 0.55, y - r * 0.16, r * 1.1, r * 0.32);
+  g.fillTriangle(x - r * 0.95, y, x - r * 0.5, y - r * 0.42, x - r * 0.5, y + r * 0.42);
+  g.fillTriangle(x + r * 0.95, y, x + r * 0.5, y - r * 0.42, x + r * 0.5, y + r * 0.42);
 }
 
-function drawShrink(g: Phaser.GameObjects.Graphics, r: number): void {
-  g.fillRect(-r * 0.28, -r * 0.16, r * 0.56, r * 0.32);
-  g.fillTriangle(-r * 0.35, 0, -r * 0.85, -r * 0.4, -r * 0.85, r * 0.4);
-  g.fillTriangle(r * 0.35, 0, r * 0.85, -r * 0.4, r * 0.85, r * 0.4);
+function drawShrink(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillRect(x - r * 0.28, y - r * 0.16, r * 0.56, r * 0.32);
+  g.fillTriangle(x - r * 0.35, y, x - r * 0.85, y - r * 0.4, x - r * 0.85, y + r * 0.4);
+  g.fillTriangle(x + r * 0.35, y, x + r * 0.85, y - r * 0.4, x + r * 0.85, y + r * 0.4);
 }
 
-function drawSlow(g: Phaser.GameObjects.Graphics, r: number): void {
-  g.strokeCircle(0, 0, r * 0.72);
+function drawSlow(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.strokeCircle(x, y, r * 0.72);
   g.beginPath();
-  g.moveTo(0, -r * 0.42);
-  g.lineTo(0, 0);
-  g.lineTo(r * 0.38, r * 0.18);
+  g.moveTo(x, y - r * 0.42);
+  g.lineTo(x, y);
+  g.lineTo(x + r * 0.38, y + r * 0.18);
   g.strokePath();
-  g.fillTriangle(0, r * 0.85, -r * 0.28, r * 0.48, r * 0.28, r * 0.48);
+  g.fillTriangle(x, y + r * 0.85, x - r * 0.28, y + r * 0.48, x + r * 0.28, y + r * 0.48);
 }
 
-function drawFast(g: Phaser.GameObjects.Graphics, r: number): void {
-  g.fillTriangle(-r * 0.15, -r * 0.7, r * 0.7, 0, -r * 0.15, r * 0.7);
-  g.fillTriangle(-r * 0.75, -r * 0.55, 0.05 * r, 0, -r * 0.75, r * 0.55);
+function drawFast(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillTriangle(x - r * 0.15, y - r * 0.7, x + r * 0.7, y, x - r * 0.15, y + r * 0.7);
+  g.fillTriangle(x - r * 0.75, y - r * 0.55, x + 0.05 * r, y, x - r * 0.75, y + r * 0.55);
 }
 
-function drawLaser(g: Phaser.GameObjects.Graphics, r: number): void {
-  g.fillRect(-r * 0.55, r * 0.22, r * 1.1, r * 0.22);
-  g.fillRect(-r * 0.42, -r * 0.85, r * 0.22, r * 1.05);
-  g.fillRect(r * 0.2, -r * 0.85, r * 0.22, r * 1.05);
+function drawLaser(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillRect(x - r * 0.55, y + r * 0.22, r * 1.1, r * 0.22);
+  g.fillRect(x - r * 0.42, y - r * 0.85, r * 0.22, r * 1.05);
+  g.fillRect(x + r * 0.2, y - r * 0.85, r * 0.22, r * 1.05);
   g.fillStyle(0xffffff, 0.55);
-  g.fillRect(-r * 0.36, -r * 0.85, r * 0.1, r * 0.55);
-  g.fillRect(r * 0.26, -r * 0.85, r * 0.1, r * 0.55);
+  g.fillRect(x - r * 0.36, y - r * 0.85, r * 0.1, r * 0.55);
+  g.fillRect(x + r * 0.26, y - r * 0.85, r * 0.1, r * 0.55);
 }

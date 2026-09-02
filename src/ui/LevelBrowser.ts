@@ -21,6 +21,11 @@ export interface LevelBrowserColors {
   accent: number;
 }
 
+export interface LevelBrowserConfig {
+  /** DXB-26: Highlight inspects a layout. Confirm does not start a run. */
+  previewOnly?: boolean;
+}
+
 const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
 const HUD_DEPTH = 20;
 
@@ -48,6 +53,7 @@ export class LevelBrowser {
   private readonly onSelect: (index: number) => void;
   private readonly onHighlight?: (index: number) => void;
   private readonly colors: LevelBrowserColors;
+  private readonly previewOnly: boolean;
   private readonly tiles: LevelBrowserTile[] = [];
   private selectedIndex = 0;
   private viewportWidth = 0;
@@ -71,12 +77,14 @@ export class LevelBrowser {
     onSelect: (index: number) => void,
     colors: Partial<LevelBrowserColors> = {},
     onHighlight?: (index: number) => void,
+    config: LevelBrowserConfig = {},
   ) {
     this.scene = scene;
     this.levels = levels;
     this.onSelect = onSelect;
     this.onHighlight = onHighlight;
     this.colors = { ...DEFAULT_COLORS, ...colors };
+    this.previewOnly = Boolean(config.previewOnly);
     this.viewportWidth = viewportWidth;
     this.viewportHeight = viewportHeight;
     this.originY = originY;
@@ -87,7 +95,7 @@ export class LevelBrowser {
       const map = scene.add.graphics().setDepth(HUD_DEPTH + 1);
       const icons = scene.add.graphics().setDepth(HUD_DEPTH + 1);
       const hit = scene.add
-        .rectangle(0, 0, 10, 10, 0x000000, 0.001)
+        .rectangle(0, 0, 10, 10, 0x000000, 0.01)
         .setDepth(HUD_DEPTH + 2)
         .setInteractive({ useHandCursor: true });
       const caption = scene.add
@@ -184,6 +192,10 @@ export class LevelBrowser {
     keyboard.on('keydown-DOWN', this.onDown);
     keyboard.on('keydown-ENTER', this.onEnter);
     keyboard.on('keydown-SPACE', this.onSpace);
+    if (this.previewOnly) {
+      keyboard.off('keydown-ENTER', this.onEnter);
+      keyboard.off('keydown-SPACE', this.onSpace);
+    }
   }
 
   private move(delta: number): void {
@@ -204,7 +216,7 @@ export class LevelBrowser {
   }
 
   private confirm(): void {
-    if (this.destroyed) {
+    if (this.destroyed || this.previewOnly) {
       return;
     }
     this.onSelect(this.selectedIndex);
