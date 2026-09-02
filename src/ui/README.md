@@ -70,7 +70,9 @@ Currently:
 - `CollectionPreview.ts` — DXB-18's live preview stage (themed
   swatch + paddle / ball cosmetics). Caller supplies visual tokens.
   DXB-22 animates those tokens and the theme motif so Garage shows
-  why a cosmetic is worth unlocking. No gameplay. Not DX-Ball-specific.
+  why a cosmetic is worth unlocking. DXB-27 enlarges the paddle,
+  drifts it, and names its motion identity. No gameplay. Not
+  DX-Ball-specific.
 - `CatchFlash.ts` — DXB-22's one-shot full-viewport color flash.
   `MainScene` uses it for powerup collection. DXB-24 adds a stronger
   `celebrate` flash for Fire Ball / Multi Ball / Laser Paddle / Extra
@@ -93,8 +95,9 @@ Currently:
   layout. DXB-25 strengthens each card (thumbnail well, colored
   difficulty pips, type chips + letters). DXB-26 adds `previewOnly` so
   Classic cannot start from an arbitrary level. Not a gameplay system.
-- `TutorialBoard.ts` — DXB-26's visual-first how-to board (center
-  vignette, short notes left/right, portrait stacks). TutorialScene is
+- `TutorialStage.ts` — DXB-27's full-width live how-to stage. Each
+  page is a looping miniature gameplay showcase (controls, bricks,
+  powerups, modes, progression). Short caption only. TutorialScene is
   the caller. Not a gameplay system.
 - `AudioPanel.ts` — DXB-26's shared Music / SFX toggles and volume
   meters. Pause and Settings are the callers. Not a new audio system.

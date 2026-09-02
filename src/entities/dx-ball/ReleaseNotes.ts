@@ -18,6 +18,16 @@ export const CURRENT_RELEASE_LABEL = `${GAME_TITLE} v${GAME_VERSION}`;
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v0.27.0',
+    title: 'How To & Paddles',
+    highlights: [
+      'How To is now live gameplay showcases',
+      'Watch bricks, powerups, and modes in action',
+      'Robot, Alien, Reactor, and Pulse paddles use real motion',
+      'Garage previews show why each paddle is unique',
+    ],
+  },
+  {
     version: 'v0.26.0',
     title: 'Player Presentation',
     highlights: [

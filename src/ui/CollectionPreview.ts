@@ -12,6 +12,9 @@ import { drawPaddleCosmetic } from '@entities/dx-ball/paddleCosmetic';
  * DXB-22: the stage ticks lightweight Phaser animations so Garage
  * shows paddle motifs, ball glow/shell, and theme atmosphere instead
  * of a static swatch. Still no GIFs and no gameplay.
+ *
+ * DXB-27: paddle preview is larger, drifts, and names the motion
+ * identity so Robot / Alien / Reactor / Pulse read as unlock goals.
  */
 
 export type CollectionPreviewPaddleMotif =
@@ -75,6 +78,7 @@ export interface CollectionPreviewContent {
   themeLabel: string;
   paddleLabel: string;
   ballLabel: string;
+  motionHint?: string;
   locked?: boolean;
   paddle: CollectionPreviewPaddleVisual;
   ball: CollectionPreviewBallVisual;
@@ -247,11 +251,12 @@ export class CollectionPreview {
     const paddleLabel = this.content?.paddleLabel ?? 'Paddle';
     const ballLabel = this.content?.ballLabel ?? 'Ball';
     const prefix = locked ? 'LOCKED PREVIEW  ·  ' : 'LIVE PREVIEW  ·  ';
+    const motion = this.content?.motionHint ? `  ·  ${this.content.motionHint}` : '';
     this.caption.setPosition(this.viewportWidth / 2, panelY + playfieldH + inset * 1.4);
     this.caption.setFontSize(captionSize);
     this.caption.setColor(locked ? this.colors.muted : this.colors.body);
     this.caption.setWordWrapWidth(panelWidth * 0.92);
-    this.caption.setText(`${prefix}${themeLabel}  ·  ${paddleLabel}  ·  ${ballLabel}`);
+    this.caption.setText(`${prefix}${themeLabel}  ·  ${paddleLabel}  ·  ${ballLabel}${motion}`);
   }
 
   private drawPlayfieldMotif(x: number, y: number, w: number, h: number): void {
@@ -365,10 +370,11 @@ export class CollectionPreview {
       return;
     }
 
-    const width = playfieldW * 0.42;
-    const height = Math.max(8, playfieldH * 0.11);
-    const x = playfieldX + playfieldW / 2;
-    const y = playfieldY + playfieldH - height * 1.45;
+    const width = playfieldW * 0.58;
+    const height = Math.max(12, playfieldH * 0.16);
+    const drift = Math.sin(this.fxTimeMs / 420) * playfieldW * 0.08;
+    const x = playfieldX + playfieldW / 2 + drift;
+    const y = playfieldY + playfieldH * 0.7;
     drawPaddleCosmetic(this.paddle, visual, width, height, this.fxTimeMs, x, y);
   }
 
@@ -380,10 +386,10 @@ export class CollectionPreview {
       return;
     }
 
-    const paddleHeight = Math.max(8, playfieldH * 0.11);
-    const radius = Math.max(7, paddleHeight * 0.85);
-    const x = playfieldX + playfieldW / 2;
-    const y = playfieldY + playfieldH - paddleHeight * 1.45 - paddleHeight - radius * 1.65;
+    const paddleHeight = Math.max(12, playfieldH * 0.16);
+    const radius = Math.max(7, paddleHeight * 0.7);
+    const x = playfieldX + playfieldW / 2 + Math.sin(this.fxTimeMs / 420) * playfieldW * 0.08;
+    const y = playfieldY + playfieldH * 0.7 - paddleHeight * 1.85;
     const fx = visual.fx ?? 'none';
     const wave = this.wave.bind(this);
     let glowScale = visual.glowScale;
@@ -461,6 +467,7 @@ function collectionPreviewSame(a: CollectionPreviewContent, b: CollectionPreview
     a.themeLabel === b.themeLabel &&
     a.paddleLabel === b.paddleLabel &&
     a.ballLabel === b.ballLabel &&
+    a.motionHint === b.motionHint &&
     a.locked === b.locked &&
     a.backdrop.topColor === b.backdrop.topColor &&
     a.backdrop.bottomColor === b.backdrop.bottomColor &&

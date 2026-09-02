@@ -16,8 +16,9 @@ import type { BallSkinId, PaddleSkinId } from '@entities/dx-ball/Progress';
  * preview can animate without new skin ids. Fire Ball still overrides.
  *
  * DXB-23: paddle motifs still use these same ids. Distinct silhouettes
- * live in `paddleCosmetic.ts` (robot pistons, alien waves, reactor core,
- * pulse slug) so skins are not color-only.
+ * live in `paddleCosmetic.ts`. DXB-27 makes Robot / Alien / Reactor /
+ * Pulse motion-first (pistons, upward waves, orbiting core, traveling
+ * slug) so identity is not color-only.
  */
 
 export type PaddleSkinMotif =
@@ -214,6 +215,28 @@ const BALL_SKINS: Record<BallSkinId, BallSkinVisual> = {
 
 export function getPaddleSkinVisual(id: PaddleSkinId): PaddleSkinVisual {
   return PADDLE_SKINS[id];
+}
+
+/** DXB-27: One-line motion identity shown in Garage so the unlock is about behavior. */
+export function getPaddleMotionHint(id: PaddleSkinId): string {
+  switch (id) {
+    case 'titan':
+      return 'Moving pistons';
+    case 'neon':
+      return 'Rising signal waves';
+    case 'reactor':
+      return 'Orbiting energy core';
+    case 'pulse':
+      return 'Traveling energy flow';
+    case 'crystal':
+      return 'Faceted prism light';
+    case 'obsidian':
+      return 'Jagged shard hull';
+    case 'carbon':
+      return 'Chevron plate weave';
+    case 'classic':
+      return 'Arcade bar';
+  }
 }
 
 export function getBallSkinVisual(id: BallSkinId): BallSkinVisual {

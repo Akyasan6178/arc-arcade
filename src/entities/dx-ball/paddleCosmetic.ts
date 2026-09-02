@@ -3,11 +3,14 @@ import Phaser from 'phaser';
 /**
  * entities/dx-ball/paddleCosmetic.ts
  *
- * DXB-23: Shared paddle-body drawing for gameplay and Garage preview.
+ * Shared paddle-body drawing for gameplay and Garage preview.
  * Collision still lives on `Paddle`'s rectangle; this only paints a
- * distinctive silhouette per motif so skins are identifiable at a
- * glance (moving robot pistons, alien waves above the hull, a rotating
- * reactor core, traveling pulse bands).
+ * distinctive silhouette per motif.
+ *
+ * DXB-27: Robot / Alien / Reactor / Pulse are motion-first identities.
+ * A still screenshot of gameplay should reveal which paddle is equipped
+ * because pistons, signal waves, an orbiting core, or a traveling energy
+ * slug dominate the silhouette — not fill color or glow.
  */
 
 export type PaddleCosmeticMotif =
@@ -129,55 +132,110 @@ function drawAlien(
   oy: number,
   halfW: number,
   halfH: number,
-  width: number,
+  _width: number,
   height: number,
   fxTimeMs: number,
   wave: (periodMs: number) => number,
 ): void {
-  const radius = Math.max(2, height * 0.5);
+  // Living hull: the top and bottom edges undulate so the body is organic,
+  // not a recolored bar.
+  const breathe = 0.55 + 0.45 * wave(220);
+  g.fillStyle(visual.motifColor, 0.12 + 0.1 * breathe);
+  g.beginPath();
+  traceOrganicHull(g, ox, oy, halfW * 1.12, halfH * 1.55, fxTimeMs / 160, 1.15);
+  g.closePath();
+  g.fillPath();
 
-  // Signal waves sit above the hull so the skin reads as alien at a glance.
-  const waveCount = 3;
+  g.fillStyle(visual.fill, 1);
+  g.beginPath();
+  traceOrganicHull(g, ox, oy, halfW, halfH, fxTimeMs / 140, 1);
+  g.closePath();
+  g.fillPath();
+  g.lineStyle(Math.max(1.6, height * 0.14), visual.stroke, 1);
+  g.beginPath();
+  traceOrganicHull(g, ox, oy, halfW, halfH, fxTimeMs / 140, 1);
+  g.closePath();
+  g.strokePath();
+
+  // Antennae sway independently of the hull.
+  const sway = Math.sin(fxTimeMs / 160);
+  drawAlienAntenna(g, visual, ox - halfW * 0.62, oy - halfH, -0.55 - sway * 0.35, height);
+  drawAlienAntenna(g, visual, ox + halfW * 0.62, oy - halfH, 0.55 + sway * 0.35, height);
+
+  // Upward signal waves are the identity: expanding arcs that leave the hull
+  // and travel well above the paddle so a screenshot still reads as Alien.
+  const waveCount = 4;
   for (let i = 0; i < waveCount; i++) {
-    const phase = (fxTimeMs / 420 + i / waveCount) % 1;
-    const spread = height * (0.55 + phase * 1.55);
-    const alpha = (1 - phase) * (0.35 + 0.45 * wave(180));
-    g.lineStyle(Math.max(1.2, height * 0.1), visual.motifColor, alpha);
+    const phase = (fxTimeMs / 260 + i / waveCount) % 1;
+    const lift = height * (0.4 + phase * 3.4);
+    const spread = halfW * (0.35 + phase * 0.95);
+    const alpha = (1 - phase) * (0.55 + 0.4 * breathe);
+    g.lineStyle(Math.max(2, height * (0.16 - phase * 0.06)), visual.motifColor, alpha);
     g.beginPath();
-    g.arc(ox, oy - halfH * 0.85, spread, Math.PI * 1.12, Math.PI * 1.88, false);
+    g.arc(ox, oy - halfH - lift * 0.15, spread, Math.PI * 1.08, Math.PI * 1.92, false);
+    g.strokePath();
+    g.lineStyle(Math.max(1.2, height * 0.08), 0xffffff, alpha * 0.45);
+    g.beginPath();
+    g.arc(ox, oy - halfH - lift * 0.15, spread * 0.82, Math.PI * 1.18, Math.PI * 1.82, false);
     g.strokePath();
   }
 
-  g.fillStyle(visual.motifColor, 0.16 + 0.14 * wave(220));
-  g.fillRoundedRect(ox - halfW - 8, oy - halfH - 7, width + 16, height + 14, radius);
+  g.fillStyle(visual.motifColor, 0.45 + 0.5 * wave(150));
+  g.fillCircle(ox - halfW * 0.28, oy - halfH * 0.1, Math.max(2, height * 0.22));
+  g.fillCircle(ox + halfW * 0.28, oy - halfH * 0.1, Math.max(2, height * 0.22));
+  g.fillStyle(0xffffff, 0.55 + 0.4 * wave(120));
+  g.fillCircle(ox - halfW * 0.28, oy - halfH * 0.18, Math.max(1, height * 0.08));
+  g.fillCircle(ox + halfW * 0.28, oy - halfH * 0.18, Math.max(1, height * 0.08));
+}
 
-  g.fillStyle(visual.fill, 1);
-  g.fillRoundedRect(ox - halfW, oy - halfH * 0.72, width, height * 0.72, radius);
-  g.lineStyle(Math.max(1.5, height * 0.14), visual.stroke, 1);
-  g.strokeRoundedRect(ox - halfW, oy - halfH * 0.72, width, height * 0.72, radius);
-
-  g.fillStyle(visual.stroke, 0.95);
-  g.fillCircle(ox - halfW * 0.72, oy - halfH * 1.05, Math.max(2, height * 0.22));
-  g.fillCircle(ox + halfW * 0.72, oy - halfH * 1.05, Math.max(2, height * 0.22));
-  g.fillStyle(visual.motifColor, 0.55 + 0.4 * wave(180));
-  g.fillCircle(ox - halfW * 0.72, oy - halfH * 1.05, Math.max(1, height * 0.1));
-  g.fillCircle(ox + halfW * 0.72, oy - halfH * 1.05, Math.max(1, height * 0.1));
-
-  g.lineStyle(Math.max(1.4, height * 0.12), visual.motifColor, 0.7);
-  g.beginPath();
-  const amp = height * 0.28;
-  const steps = 16;
+function traceOrganicHull(
+  g: Phaser.GameObjects.Graphics,
+  ox: number,
+  oy: number,
+  halfW: number,
+  halfH: number,
+  phase: number,
+  amp: number,
+): void {
+  const steps = 18;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    const x = ox - halfW * 0.9 + width * 0.9 * t;
-    const y = oy + Math.sin(t * Math.PI * 3 + fxTimeMs / 140) * amp * 0.55;
+    const x = ox - halfW + halfW * 2 * t;
+    const bulge = Math.sin(t * Math.PI) * halfH * 0.35 * amp;
+    const rip = Math.sin(t * Math.PI * 3 + phase) * halfH * 0.45 * amp;
+    const y = oy - halfH - bulge - rip;
     if (i === 0) {
       g.moveTo(x, y);
     } else {
       g.lineTo(x, y);
     }
   }
-  g.strokePath();
+  for (let i = steps; i >= 0; i--) {
+    const t = i / steps;
+    const x = ox - halfW + halfW * 2 * t;
+    const bulge = Math.sin(t * Math.PI) * halfH * 0.2 * amp;
+    const rip = Math.sin(t * Math.PI * 3 + phase + 0.8) * halfH * 0.28 * amp;
+    g.lineTo(x, oy + halfH + bulge + rip);
+  }
+}
+
+function drawAlienAntenna(
+  g: Phaser.GameObjects.Graphics,
+  visual: PaddleCosmeticVisual,
+  x: number,
+  y: number,
+  tilt: number,
+  height: number,
+): void {
+  const len = height * 1.65;
+  const tipX = x + Math.sin(tilt) * len;
+  const tipY = y - Math.cos(tilt) * len;
+  g.lineStyle(Math.max(2, height * 0.14), visual.stroke, 1);
+  g.lineBetween(x, y, tipX, tipY);
+  g.fillStyle(visual.motifColor, 1);
+  g.fillCircle(tipX, tipY, Math.max(2.4, height * 0.28));
+  g.fillStyle(0xffffff, 0.7);
+  g.fillCircle(tipX, tipY, Math.max(1, height * 0.12));
 }
 
 function drawReactor(
@@ -192,39 +250,58 @@ function drawReactor(
   fxTimeMs: number,
   wave: (periodMs: number) => number,
 ): void {
-  const radius = Math.max(2, height * 0.28);
+  const radius = Math.max(2, height * 0.22);
   g.fillStyle(visual.fill, 1);
   g.fillRoundedRect(ox - halfW, oy - halfH, width, height, radius);
-  g.lineStyle(Math.max(1.5, height * visual.strokeWidthRatio), visual.stroke, 1);
+  g.lineStyle(Math.max(1.6, height * visual.strokeWidthRatio), visual.stroke, 1);
   g.strokeRoundedRect(ox - halfW, oy - halfH, width, height, radius);
 
-  g.fillStyle(visual.stroke, 0.35);
-  g.fillRect(ox - halfW * 0.92, oy - halfH * 0.2, width * 0.18, Math.max(2, height * 0.4));
-  g.fillRect(ox + halfW * 0.74, oy - halfH * 0.2, width * 0.18, Math.max(2, height * 0.4));
+  g.fillStyle(visual.stroke, 0.85);
+  g.fillRect(ox - halfW * 0.96, oy - halfH * 0.55, width * 0.16, height * 1.1);
+  g.fillRect(ox + halfW * 0.8, oy - halfH * 0.55, width * 0.16, height * 1.1);
 
-  const coreR = height * (0.5 + 0.12 * wave(140));
-  g.fillStyle(visual.motifColor, 0.18 + 0.16 * wave(140));
-  g.fillCircle(ox, oy, coreR * 1.95);
-  g.fillStyle(visual.motifColor, 0.95);
-  g.fillCircle(ox, oy, coreR);
-  g.fillStyle(0xffffff, 0.5 + 0.35 * wave(90));
-  g.fillCircle(ox - coreR * 0.18, oy - coreR * 0.18, coreR * 0.28);
+  const coreR = height * (0.82 + 0.12 * wave(110));
+  const spin = fxTimeMs / 110;
 
-  const spin = fxTimeMs / 180;
-  const spokeR = coreR * 1.55;
-  g.lineStyle(Math.max(1.4, height * 0.12), visual.motifColor, 0.85);
-  for (let i = 0; i < 4; i++) {
-    const angle = spin + (i * Math.PI) / 2;
-    g.lineBetween(
-      ox + Math.cos(angle) * coreR * 0.35,
-      oy + Math.sin(angle) * coreR * 0.35,
-      ox + Math.cos(angle) * spokeR,
-      oy + Math.sin(angle) * spokeR,
-    );
+  g.fillStyle(visual.motifColor, 0.16 + 0.14 * wave(110));
+  g.fillCircle(ox, oy, coreR * 2.15);
+
+  // Orbiting energy beads — the motion that identifies Reactor in a still.
+  for (let i = 0; i < 3; i++) {
+    const angle = spin + (i * Math.PI * 2) / 3;
+    const orbit = coreR * 1.85;
+    const bx = ox + Math.cos(angle) * orbit;
+    const by = oy + Math.sin(angle) * orbit;
+    g.fillStyle(visual.motifColor, 0.95);
+    g.fillCircle(bx, by, Math.max(2.2, height * 0.22));
+    g.fillStyle(0xffffff, 0.75);
+    g.fillCircle(bx - 1, by - 1, Math.max(1, height * 0.08));
+    g.lineStyle(Math.max(1.2, height * 0.08), visual.motifColor, 0.55);
+    g.lineBetween(ox, oy, bx, by);
   }
 
-  g.lineStyle(Math.max(1.2, height * 0.1), visual.motifColor, 0.45 + 0.4 * wave(160));
-  g.strokeCircle(ox, oy, coreR * 1.7);
+  g.fillStyle(visual.motifColor, 1);
+  g.fillCircle(ox, oy, coreR);
+  g.fillStyle(visual.fill, 0.55);
+  g.fillCircle(ox, oy, coreR * 0.62);
+
+  for (let i = 0; i < 6; i++) {
+    const angle = spin * 1.4 + (i * Math.PI) / 3;
+    const inner = coreR * 0.18;
+    const outer = coreR * 0.58;
+    g.fillStyle(0xffffff, 0.55 + 0.35 * wave(80));
+    g.beginPath();
+    g.moveTo(ox + Math.cos(angle) * inner, oy + Math.sin(angle) * inner);
+    g.lineTo(ox + Math.cos(angle + 0.28) * outer, oy + Math.sin(angle + 0.28) * outer);
+    g.lineTo(ox + Math.cos(angle - 0.28) * outer, oy + Math.sin(angle - 0.28) * outer);
+    g.closePath();
+    g.fillPath();
+  }
+
+  g.fillStyle(0xffffff, 0.7 + 0.25 * wave(70));
+  g.fillCircle(ox, oy, coreR * 0.22);
+  g.lineStyle(Math.max(2, height * 0.12), visual.stroke, 1);
+  g.strokeCircle(ox, oy, coreR);
 }
 
 function drawCrystal(
@@ -277,38 +354,60 @@ function drawRobot(
 ): void {
   const radius = Math.max(1, height * 0.12);
   g.fillStyle(visual.fill, 1);
-  g.fillRoundedRect(ox - halfW * 0.72, oy - halfH * 0.85, width * 0.72, height * 0.85, radius);
-  g.lineStyle(Math.max(1.5, height * visual.strokeWidthRatio), visual.stroke, 1);
-  g.strokeRoundedRect(ox - halfW * 0.72, oy - halfH * 0.85, width * 0.72, height * 0.85, radius);
-
-  const piston = Math.sin(fxTimeMs / 180);
-  const leftExt = height * (0.55 + 0.95 * (0.5 + 0.5 * piston));
-  const rightExt = height * (0.55 + 0.95 * (0.5 + 0.5 * -piston));
-  const armW = width * 0.1;
-  const housingW = armW * 1.55;
-
-  // Side housings
-  g.fillStyle(visual.stroke, 1);
-  g.fillRoundedRect(ox - halfW * 0.98, oy - height * 0.42, housingW, height * 0.84, 2);
-  g.fillRoundedRect(ox + halfW * 0.98 - housingW, oy - height * 0.42, housingW, height * 0.84, 2);
-
-  // Moving piston rods + caps
-  g.fillStyle(visual.motifColor, 1);
-  g.fillRect(ox - halfW * 0.94, oy - leftExt / 2, armW * 0.55, leftExt);
-  g.fillRect(ox + halfW * 0.94 - armW * 0.55, oy - rightExt / 2, armW * 0.55, rightExt);
-  g.fillStyle(0xf8ead4, 1);
-  g.fillRect(ox - halfW * 1.08, oy - leftExt / 2 - 2, housingW, Math.max(4, height * 0.28));
-  g.fillRect(ox + halfW * 1.08 - housingW, oy - rightExt / 2 - 2, housingW, Math.max(4, height * 0.28));
+  g.fillRoundedRect(ox - halfW * 0.7, oy - halfH, width * 0.7, height, radius);
+  g.lineStyle(Math.max(1.6, height * visual.strokeWidthRatio), visual.stroke, 1);
+  g.strokeRoundedRect(ox - halfW * 0.7, oy - halfH, width * 0.7, height, radius);
 
   g.fillStyle(visual.motifColor, 0.95);
-  const plateW = width * 0.16;
-  const plateH = Math.max(2, height * 0.55);
-  g.fillRect(ox - plateW * 1.15, oy - plateH / 2, plateW, plateH);
-  g.fillRect(ox + plateW * 0.15, oy - plateH / 2, plateW, plateH);
+  const plateW = width * 0.14;
+  g.fillRect(ox - plateW * 1.2, oy - halfH * 0.7, plateW, height * 0.7);
+  g.fillRect(ox + plateW * 0.2, oy - halfH * 0.7, plateW, height * 0.7);
 
-  g.fillStyle(0xf8ead4, 0.35 + 0.4 * wave(320));
-  g.fillCircle(ox - halfW * 0.28, oy, Math.max(1.5, height * 0.16));
-  g.fillCircle(ox + halfW * 0.28, oy, Math.max(1.5, height * 0.16));
+  // Three vertical pistons. Left and right pump in opposite phase; the
+  // center rod lags. Travel is several paddle-heights so the motion is
+  // the silhouette, not a tint.
+  const pump = Math.sin(fxTimeMs / 130);
+  drawPistonStack(g, visual, ox - halfW * 0.92, oy, height, width, pump);
+  drawPistonStack(g, visual, ox + halfW * 0.92, oy, height, width, -pump);
+  drawPistonStack(g, visual, ox, oy, height * 0.82, width * 0.72, Math.sin(fxTimeMs / 130 + 1.1));
+
+  g.fillStyle(0xf8ead4, 0.45 + 0.5 * wave(180));
+  g.fillCircle(ox - halfW * 0.22, oy, Math.max(2, height * 0.18));
+  g.fillCircle(ox + halfW * 0.22, oy, Math.max(2, height * 0.18));
+}
+
+function drawPistonStack(
+  g: Phaser.GameObjects.Graphics,
+  visual: PaddleCosmeticVisual,
+  x: number,
+  oy: number,
+  height: number,
+  width: number,
+  pump: number,
+): void {
+  const housingW = Math.max(6, width * 0.11);
+  const housingH = height * 1.15;
+  const travel = height * (0.85 + 1.55 * (0.5 + 0.5 * pump));
+  const rodW = housingW * 0.42;
+  const capH = Math.max(5, height * 0.38);
+  const capY = oy - travel;
+
+  g.fillStyle(visual.stroke, 1);
+  g.fillRoundedRect(x - housingW / 2, oy - housingH / 2, housingW, housingH, 2);
+  g.fillStyle(0x1b1510, 0.55);
+  g.fillRect(x - rodW * 0.7, oy - housingH / 2 + 2, rodW * 1.4, housingH - 4);
+
+  g.fillStyle(visual.motifColor, 1);
+  g.fillRect(x - rodW / 2, capY, rodW, travel + housingH * 0.2);
+  g.fillStyle(0xf8ead4, 1);
+  g.fillRoundedRect(x - housingW * 0.7, capY - capH * 0.35, housingW * 1.4, capH, 2);
+  g.fillStyle(visual.stroke, 1);
+  g.fillRect(x - housingW * 0.55, capY - capH * 0.08, housingW * 1.1, Math.max(2, capH * 0.22));
+
+  if (pump > 0.65) {
+    g.fillStyle(0xf8ead4, 0.28 + (pump - 0.65) * 0.8);
+    g.fillCircle(x, capY - capH * 0.7, housingW * 0.55);
+  }
 }
 
 function drawPulse(
@@ -326,30 +425,40 @@ function drawPulse(
   const radius = Math.max(2, height * 0.45);
   g.fillStyle(visual.fill, 1);
   g.fillRoundedRect(ox - halfW, oy - halfH, width, height, radius);
-  g.lineStyle(Math.max(1.6, height * visual.strokeWidthRatio), visual.stroke, 1);
+  g.lineStyle(Math.max(1.8, height * visual.strokeWidthRatio), visual.stroke, 1);
   g.strokeRoundedRect(ox - halfW, oy - halfH, width, height, radius);
 
-  g.fillStyle(0x020617, 0.88);
-  g.fillRoundedRect(ox - halfW * 0.9, oy - halfH * 0.42, width * 0.9, height * 0.42, radius * 0.5);
-
   const channelW = width * 0.9;
+  const channelH = height * 0.58;
   const channelX = ox - halfW * 0.9;
-  for (let i = 0; i < 3; i++) {
-    const travel = ((fxTimeMs / 280 + i / 3) % 1);
-    const bandW = width * 0.18;
-    const bandX = channelX + travel * (channelW - bandW);
-    const alpha = 0.45 + 0.5 * wave(120 + i * 40);
-    g.fillStyle(visual.motifColor, alpha);
-    g.fillRoundedRect(bandX, oy - halfH * 0.34, bandW, height * 0.28, height * 0.16);
+  const channelY = oy - channelH / 2;
+  g.fillStyle(0x020617, 0.95);
+  g.fillRoundedRect(channelX, channelY, channelW, channelH, radius * 0.5);
+
+  const travel = (fxTimeMs / 520) % 1;
+  const slugW = width * 0.28;
+  const slugX = channelX + travel * (channelW - slugW);
+
+  // Trail so direction is obvious even in a still frame.
+  for (let i = 4; i >= 1; i--) {
+    const back = travel - i * 0.07;
+    if (back < 0) {
+      continue;
+    }
+    const tx = channelX + back * (channelW - slugW);
+    g.fillStyle(visual.motifColor, 0.12 * (5 - i));
+    g.fillRoundedRect(tx, channelY + channelH * 0.18, slugW * (0.7 + i * 0.05), channelH * 0.64, height * 0.2);
   }
 
-  g.fillStyle(0xffffff, 0.35 + 0.4 * wave(90));
-  const spark = ((fxTimeMs / 160) % 1);
-  g.fillCircle(channelX + spark * channelW, oy, Math.max(1.5, height * 0.12));
+  g.fillStyle(visual.motifColor, 1);
+  g.fillRoundedRect(slugX, channelY + channelH * 0.08, slugW, channelH * 0.84, height * 0.28);
+  g.fillStyle(0xffffff, 0.55 + 0.4 * wave(80));
+  g.fillRoundedRect(slugX + slugW * 0.18, channelY + channelH * 0.22, slugW * 0.45, channelH * 0.38, height * 0.16);
 
-  const beat = wave(180);
-  g.lineStyle(Math.max(1.2, height * 0.1), visual.motifColor, 0.2 + 0.45 * beat);
-  g.strokeCircle(ox, oy, height * (0.7 + 0.55 * beat));
+  const atEnd = travel > 0.92 || travel < 0.08;
+  g.fillStyle(visual.motifColor, atEnd ? 0.95 : 0.35);
+  g.fillCircle(channelX, oy, Math.max(3, height * 0.28));
+  g.fillCircle(channelX + channelW, oy, Math.max(3, height * 0.28));
 }
 
 function drawObsidian(

@@ -50,9 +50,12 @@ import { drawPaddleCosmetic, type PaddleCosmeticVisual } from '@entities/dx-ball
  * Crystal shimmers, Titan gets a metallic sweep, Pulse rings beat,
  * Reactor's core glows, Obsidian has a dark aura. Collision is unchanged.
  *
- * DXB-23: each motif paints a unique silhouette (robot pistons, alien
- * waves, reactor core, pulse slug) via `paddleCosmetic.ts`. The
- * rectangle stays the collision body and is hidden; size is unchanged.
+ * DXB-23: each motif paints a unique silhouette via `paddleCosmetic.ts`.
+ * The rectangle stays the collision body and is hidden; size is unchanged.
+ *
+ * DXB-27: Robot / Alien / Reactor / Pulse identities are motion-first
+ * (pistons, upward signal waves, orbiting core, traveling energy slug).
+ * Collision, size, and laser cannons are unchanged.
  *
  * DXB-24: `applyLaserEffect()` queues dual upward muzzle points while a
  * timed laser is active. DXB-25 shortens that timer (scene-owned) and

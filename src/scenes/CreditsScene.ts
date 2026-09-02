@@ -30,7 +30,7 @@ import {
  * scenes/CreditsScene.ts
  *
  * DXB-26: Compact credits card. Created By Haydar Talha Akyasan,
- * Powered By Marka Mutfağı, version v0.26.0. Owns no gameplay.
+ * Powered By Marka Mutfağı, version from Version.ts. Owns no gameplay.
  */
 
 export interface CreditsSceneData {

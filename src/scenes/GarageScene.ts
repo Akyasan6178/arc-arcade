@@ -29,7 +29,7 @@ import {
   type ProgressRow,
 } from '@entities/dx-ball/Progress';
 import { getTheme, isThemeId, saveThemeId, type ThemeId } from '@entities/dx-ball/Theme';
-import { getBallSkinVisual, getPaddleSkinVisual } from '@entities/dx-ball/Skins';
+import { getBallSkinVisual, getPaddleMotionHint, getPaddleSkinVisual } from '@entities/dx-ball/Skins';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
 import { ProgressList } from '@ui/ProgressList';
 import { CollectionPreview } from '@ui/CollectionPreview';
@@ -337,6 +337,7 @@ export class GarageScene extends Phaser.Scene {
       themeLabel: getThemeLabel(this.previewThemeId),
       paddleLabel: getPaddleSkinLabel(this.previewPaddleId),
       ballLabel: getBallSkinLabel(this.previewBallId),
+      motionHint: getPaddleMotionHint(this.previewPaddleId),
       locked,
       paddle: getPaddleSkinVisual(this.previewPaddleId),
       ball: getBallSkinVisual(this.previewBallId),
