@@ -18,6 +18,16 @@ export const CURRENT_RELEASE_LABEL = `${GAME_TITLE} v${GAME_VERSION}`;
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v0.28.0',
+    title: 'Leaderboard Prep',
+    highlights: [
+      'Set a player name in Settings',
+      'Shareable run summary after every finish',
+      'Local leaderboards still save on this device',
+      'Online leaderboards are marked Coming Soon',
+    ],
+  },
+  {
     version: 'v0.27.0',
     title: 'How To & Paddles',
     highlights: [

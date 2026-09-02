@@ -50,4 +50,5 @@ Currently:
   `entities/dx-ball/Progress.ts` and `Leaderboards.ts` own those.
   DXB-24 keeps the local Top 10 in `LeaderboardAdapter.ts` (`LocalLeaderboardAdapter`)
   with an unwired `OnlineLeaderboardAdapter` seam — still no accounts
-  or network.
+  or network. DXB-28 expands the stored entry (player name, mode,
+  highest level reached, date, version) and still never contacts a host.

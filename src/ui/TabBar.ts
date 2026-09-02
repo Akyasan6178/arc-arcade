@@ -7,6 +7,8 @@ import Phaser from 'phaser';
  * right keys). Not DX-Ball-specific — the caller supplies `{ id, title }`
  * tabs and an `onSelect` callback. The active tab is highlighted; a tap
  * or Left / Right changes it. Up / Down are left for lists below.
+ * DXB-28: `bindKeyboard: false` lets a nested strip share the screen
+ * without stealing arrows.
  */
 
 export interface TabBarOption<T extends string = string> {
@@ -23,6 +25,8 @@ export interface TabBarConfig<T extends string = string> {
   initialId?: T;
   /** Horizontal inset as a fraction of viewport width. */
   sideRatio?: number;
+  /** When false, Left / Right stay with another TabBar (nested strips). */
+  bindKeyboard?: boolean;
 }
 
 const HUD_FONT_FAMILY = 'Trebuchet MS, Segoe UI, sans-serif';
@@ -35,6 +39,7 @@ const DEFAULT_CONFIG: Required<Omit<TabBarConfig, 'initialId'>> = {
   fontSizeRatio: 0.024,
   depth: HUD_DEPTH,
   sideRatio: 0.1,
+  bindKeyboard: true,
 };
 
 export class TabBar<T extends string = string> {
@@ -100,7 +105,9 @@ export class TabBar<T extends string = string> {
 
     this.layout();
     this.refreshHighlight();
-    this.bindKeyboard();
+    if (this.config.bindKeyboard) {
+      this.bindKeyboard();
+    }
   }
 
   getSelectedId(): T | undefined {
@@ -113,9 +120,11 @@ export class TabBar<T extends string = string> {
     }
 
     this.destroyed = true;
-    const keyboard = this.scene.input.keyboard;
-    keyboard?.off('keydown-LEFT', this.onLeft);
-    keyboard?.off('keydown-RIGHT', this.onRight);
+    if (this.config.bindKeyboard) {
+      const keyboard = this.scene.input.keyboard;
+      keyboard?.off('keydown-LEFT', this.onLeft);
+      keyboard?.off('keydown-RIGHT', this.onRight);
+    }
 
     for (const label of this.labels) {
       label.destroy();

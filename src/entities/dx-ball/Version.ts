@@ -6,12 +6,12 @@
  * Credits can show a product string without coupling Phaser scenes to
  * npm metadata.
  *
- * Versioning scheme: `0.<DXB-task>.0`. This pass is DXB-27, so the
- * product is `DX-Ball v0.27.0`.
+ * Versioning scheme: `0.<DXB-task>.0`. This pass is DXB-28, so the
+ * product is `DX-Ball v0.28.0`.
  */
 
 export const GAME_TITLE = 'DX-Ball';
-export const GAME_VERSION = '0.27.0';
+export const GAME_VERSION = '0.28.0';
 export const CREATOR_NAME = 'Haydar Talha Akyasan';
 export const STUDIO_NAME = 'Marka Mutfağı';
 

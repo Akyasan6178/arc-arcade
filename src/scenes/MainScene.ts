@@ -194,6 +194,10 @@ import { buildRunSummary } from '@entities/dx-ball/RunSummary';
  * richer end-of-run copy, and a local leaderboard adapter seam. Score /
  * lives / modes stay on the existing call sites.
  *
+ * DXB-28: Submits a full leaderboard entry (player name, highest level
+ * reached, date, version) through the local adapter and shows a
+ * shareable run summary on the result card. No online backend.
+ *
  * DXB-26: Classic always starts at Level 1. Time Attack resets the
  * configured per-level timer and timed effects on every stage. Fire /
  * Laser durations stay 5s. Drop weights live in `PowerupDropTable.ts`.
@@ -636,9 +640,10 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
-   * DXB-17: Offers this run's score to the local Top 10 once. Called
-   * from win / game-over / time-up and from shutdown (pause leave /
-   * restart) so a refresh on an end card still persists the entry.
+   * DXB-17/DXB-28: Offers this run to the local Top 10 once, including
+   * player name, highest level reached, date, and version. Called from
+   * win / game-over / time-up and from shutdown (pause leave / restart)
+   * so a refresh on an end card still persists the entry.
    */
   private submitRunIfNeeded(): void {
     if (this.runSubmitted || !this.brickGrid) {
@@ -647,7 +652,11 @@ export class MainScene extends Phaser.Scene {
 
     this.runSubmitted = true;
     this.flushPlayTime();
-    this.lastSubmitResult = submitScore(this.mode, this.brickGrid.getScore());
+    this.lastSubmitResult = submitScore({
+      mode: this.mode,
+      score: this.brickGrid.getScore(),
+      highestLevelReached: this.currentLevelIndex + 1,
+    });
   }
 
   /**
@@ -1270,8 +1279,9 @@ export class MainScene extends Phaser.Scene {
       bestScore: this.bestScore,
       startingBestScore: this.startingBestScore,
       startingModeBest: this.startingModeBest,
-      levelReached: this.currentLevelIndex + 1,
+      highestLevelReached: this.currentLevelIndex + 1,
       campaignLength: LEVELS.length,
+      activeThemeLabel: this.theme.label,
       leaderboard: this.lastSubmitResult,
       outcome,
     });

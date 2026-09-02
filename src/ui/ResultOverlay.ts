@@ -9,7 +9,7 @@ import Phaser from 'phaser';
  *
  * DXB-22: clearer hierarchy (kicker / title / reward / body), stronger
  * theme-colored panel treatment, and a dedicated reward line so scores
- * read first.
+ * read first. DXB-28 lengthens the card for the shareable run summary.
  */
 
 export type ResultOverlayTone = 'victory' | 'defeat' | 'info';
@@ -139,14 +139,14 @@ export class ResultOverlay {
     this.body = scene.add
       .text(viewportWidth / 2, viewportHeight * 0.46, '', {
         fontFamily: HUD_FONT_FAMILY,
-        fontSize: `${Math.max(13, Math.round(viewportHeight * 0.022))}px`,
+        fontSize: `${Math.max(12, Math.round(viewportHeight * 0.018))}px`,
         color: this.colors.body,
         fontStyle: 'bold',
         align: 'center',
         stroke: '#0b1320',
         strokeThickness: 5,
         wordWrap: { width: viewportWidth * 0.58 },
-        lineSpacing: 4,
+        lineSpacing: 3,
       })
       .setOrigin(0.5, 0)
       .setShadow(1, 2, '#000000', 3, true, true)
@@ -244,7 +244,7 @@ export class ResultOverlay {
     this.kicker.setFontSize(Math.max(11, Math.round(viewportHeight * 0.018)));
     this.title.setFontSize(Math.max(24, Math.round(viewportHeight * 0.064)));
     this.reward.setFontSize(Math.max(16, Math.round(viewportHeight * 0.036)));
-    this.body.setFontSize(Math.max(13, Math.round(viewportHeight * 0.022)));
+    this.body.setFontSize(Math.max(12, Math.round(viewportHeight * 0.018)));
     this.hint.setFontSize(Math.max(12, Math.round(viewportHeight * 0.02)));
     if (this.visible) {
       this.layout();
@@ -305,11 +305,11 @@ export class ResultOverlay {
     this.title.setPosition(width / 2, hasKicker ? height * 0.228 : height * 0.21);
     this.accent.setPosition(width / 2, height * 0.348);
     this.accent.setSize(width * 0.38, Math.max(3, height * 0.007));
-    this.reward.setPosition(width / 2, height * 0.375);
+    this.reward.setPosition(width / 2, height * 0.36);
     this.reward.setVisible(hasReward && this.visible);
-    this.body.setPosition(width / 2, hasReward ? height * 0.43 : height * 0.375);
+    this.body.setPosition(width / 2, hasReward ? height * 0.405 : height * 0.36);
     this.body.setWordWrapWidth(width * 0.58);
-    this.hint.setPosition(width / 2, height * 0.64);
+    this.hint.setPosition(width / 2, height * 0.72);
     this.hint.setWordWrapWidth(width * 0.56);
     this.redrawPanel();
   }
@@ -318,7 +318,7 @@ export class ResultOverlay {
     const width = this.viewportWidth;
     const height = this.viewportHeight;
     const panelW = width * 0.74;
-    const panelH = height * 0.58;
+    const panelH = height * 0.66;
     const x = (width - panelW) / 2;
     const y = height * 0.15;
     const radius = Math.min(width, height) * 0.02;

@@ -24,8 +24,10 @@ export const MENU_LAYOUT = {
   extraLineFontRatio: 0.018,
   extraLineMinPx: 12,
   tabYRatio: 0.155,
+  subTabYRatio: 0.205,
   contentYRatio: 0.21,
   menuYRatio: 0.22,
+  boardMenuYRatio: 0.27,
   compactMenuYRatio: 0.155,
   hintYRatio: 0.955,
   hintFontRatio: 0.018,
@@ -57,8 +59,16 @@ export function menuTabY(snapshot: ViewportSnapshot): number {
   return snapshot.safeArea.top + snapshot.height * MENU_LAYOUT.tabYRatio;
 }
 
+export function menuSubTabY(snapshot: ViewportSnapshot): number {
+  return snapshot.safeArea.top + snapshot.height * MENU_LAYOUT.subTabYRatio;
+}
+
 export function menuContentY(snapshot: ViewportSnapshot): number {
   return snapshot.safeArea.top + snapshot.height * MENU_LAYOUT.contentYRatio;
+}
+
+export function menuBoardOriginY(snapshot: ViewportSnapshot): number {
+  return snapshot.safeArea.top + snapshot.height * MENU_LAYOUT.boardMenuYRatio;
 }
 
 export function menuOriginY(snapshot: ViewportSnapshot, compact = false): number {

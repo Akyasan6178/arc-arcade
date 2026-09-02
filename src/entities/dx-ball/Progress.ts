@@ -992,16 +992,6 @@ export function getLifetimeStatRows(): StatDisplayRow[] {
     { id: 'score', title: 'Total Score', value: formatCount(stats.lifetimeScore) },
     { id: 'high', title: 'Highest Score', value: formatCount(stats.highestScore) },
     {
-      id: 'time-attack-high',
-      title: 'Highest Time Attack Score',
-      value: formatCount(stats.timeAttackBestScore),
-    },
-    {
-      id: 'endless-high',
-      title: 'Highest Endless Score',
-      value: formatCount(stats.endlessBestScore),
-    },
-    {
       id: 'bricks',
       title: 'Total Bricks Destroyed',
       value: formatCount(stats.bricksDestroyed),
@@ -1033,13 +1023,13 @@ export function getLifetimeStatRows(): StatDisplayRow[] {
 export function getPersonalBestRows(): StatDisplayRow[] {
   const stats = loadStats();
   return [
-    { id: 'classic', title: 'Best Classic', value: formatCount(stats.classicBestScore) },
+    { id: 'classic', title: 'Highest Classic Score', value: formatCount(stats.classicBestScore) },
     {
       id: 'time-attack',
-      title: 'Best Time Attack',
+      title: 'Highest Time Attack Score',
       value: formatCount(stats.timeAttackBestScore),
     },
-    { id: 'endless', title: 'Best Endless', value: formatCount(stats.endlessBestScore) },
+    { id: 'endless', title: 'Highest Endless Score', value: formatCount(stats.endlessBestScore) },
   ];
 }
 

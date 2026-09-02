@@ -55,7 +55,9 @@ Currently:
   DXB-20 adds a tap-to-continue hint and word wrap. DXB-22 adds a
   kicker, a reward line, and stronger theme-colored panel treatment.
   DXB-24 lengthens the card so Classic / Endless / Time Attack can show
-  score, best, records, and unlock progress. Not DX-Ball-specific.
+  score, best, records, and unlock progress. DXB-28 lengthens it again
+  for the shareable run summary (Score, Mode, Highest Level Reached,
+  Active Theme, Date). Not DX-Ball-specific.
 - `ProgressList.ts` — DXB-16's reusable catalog list (title + locked /
   unlocked / percent / equipped). Space confirms only unlocked
   selectable rows. DXB-18 adds `onHighlight`, `initialIndex`,
@@ -83,13 +85,15 @@ Currently:
   pointerup clicks). Used for visible Back / Favorite / Settings /
   Pause controls. Not DX-Ball-specific.
 - `TabBar.ts` — DXB-18A's reusable horizontal tab strip (tap or Left /
-  Right). Garage and Statistics are the first callers. Not
-  DX-Ball-specific.
+  Right). Garage and Statistics are the first callers. DXB-28 adds
+  optional `bindKeyboard: false` so a nested Local / Online strip does
+  not steal arrow keys from the parent tabs. Not DX-Ball-specific.
 - `menuLayout.ts` — DXB-20's shared menu chrome tokens (title /
   subtitle / hint / Back placement, minimum font sizes, safe-area
   offsets). Hub and every side screen read these so spacing stays
   consistent. DXB-23 adds a short accent rule and a version caption
-  helper. Not a new screen.
+  helper. DXB-28 adds a sub-tab row for nested leaderboard scopes.
+  Not a new screen.
 - `LevelBrowser.ts` — DXB-23's Classic campaign thumbnail grid. DXB-24
   adds brick-type icons and a 1–5 difficulty rating under the miniature
   layout. DXB-25 strengthens each card (thumbnail well, colored
@@ -101,3 +105,7 @@ Currently:
   the caller. Not a gameplay system.
 - `AudioPanel.ts` — DXB-26's shared Music / SFX toggles and volume
   meters. Pause and Settings are the callers. Not a new audio system.
+- `ProfilePanel.ts` — DXB-28's Settings card for a local player name.
+  The caller owns persistence. Not an account widget.
+- `NamePrompt.ts` — DXB-28's DOM overlay for typing a short display
+  name. Phaser has no text field; this is not a network form.

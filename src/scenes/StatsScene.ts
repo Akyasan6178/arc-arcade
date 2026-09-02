@@ -10,7 +10,7 @@ import {
   loadPlayableThemeId,
   type StatDisplayRow,
 } from '@entities/dx-ball/Progress';
-import { getLeaderboardRows } from '@entities/dx-ball/Leaderboards';
+import { getLeaderboardRows, getOnlineComingSoonRows } from '@entities/dx-ball/Leaderboards';
 import { GAME_MODES, getGameModeInfo, type GameModeId } from '@entities/dx-ball/GameMode';
 import { getTheme } from '@entities/dx-ball/Theme';
 import { ArcadeBackground } from '@ui/ArcadeBackground';
@@ -28,10 +28,11 @@ import {
   layoutMenuSubtitle,
   layoutMenuTitle,
   menuBackX,
+  menuBoardOriginY,
   menuContentY,
   menuFontSize,
   menuHintY,
-  menuOriginY,
+  menuSubTabY,
   menuTabY,
 } from '@ui/menuLayout';
 
@@ -39,14 +40,14 @@ import {
  * scenes/StatsScene.ts
  *
  * DXB-17: Dedicated statistics / leaderboards hub. DXB-18A: visible
- * Lifetime Stats / Leaderboards / Progress tabs plus a Back button so
- * every catalog is reachable without a nested hub or keyboard. Personal
- * bests stay on the Lifetime Stats tab. Leaderboards still open a
- * per-mode Top 10; Back from a board returns to the mode list first.
- * Esc and Back return to the Hub (or ThemeSelect / ModeSelect).
+ * Lifetime Stats / Leaderboards / Progress tabs plus a Back button.
+ * DXB-28: Leaderboards host Local / Online (Coming Soon) tabs. Online
+ * is a placeholder — no fabricated ranks. Esc and Back return to the
+ * Hub (or ThemeSelect / ModeSelect).
  */
 
 type TabId = 'stats' | 'boards' | 'summary';
+type BoardScope = 'local' | 'online';
 type View = TabId | GameModeId;
 
 export interface StatsSceneData {
@@ -59,10 +60,12 @@ export class StatsScene extends Phaser.Scene {
   private subtitleText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
   private tabBar?: TabBar<TabId>;
+  private boardScopeBar?: TabBar<BoardScope>;
   private boardsMenu?: SelectMenu<GameModeId>;
   private statsList?: StatsList;
   private backButton?: TextButton;
   private view: View = 'stats';
+  private boardScope: BoardScope = 'local';
   private returnTo: SceneKey = SceneKeys.Hub;
   private unsubscribeViewport?: () => void;
 
@@ -80,6 +83,7 @@ export class StatsScene extends Phaser.Scene {
     const theme = getTheme(loadPlayableThemeId());
 
     this.view = 'stats';
+    this.boardScope = 'local';
     this.cameras.main.setViewport(0, 0, snapshot.width, snapshot.height);
     this.cameras.main.setBackgroundColor(theme.backdrop.canvasBackground);
     this.background = new ArcadeBackground(this, snapshot.width, snapshot.height, theme.backdrop);
@@ -133,7 +137,7 @@ export class StatsScene extends Phaser.Scene {
 
   private handleEscape(): void {
     if (this.view === 'classic' || this.view === 'time-attack' || this.view === 'endless') {
-      this.showBoards();
+      this.showLocalBoards();
       return;
     }
 
@@ -146,17 +150,65 @@ export class StatsScene extends Phaser.Scene {
 
   private openTab(id: TabId): void {
     if (id === 'boards') {
-      this.showBoards();
+      this.showLeaderboards();
       return;
     }
 
     this.showList(id);
   }
 
-  private showBoards(): void {
-    this.clearContent();
+  private showLeaderboards(): void {
+    if (this.boardScope === 'online') {
+      this.showOnlineComingSoon();
+      return;
+    }
+    this.showLocalBoards();
+  }
+
+  private ensureBoardScopeBar(): void {
+    if (this.boardScopeBar) {
+      return;
+    }
+
+    const snapshot = GameViewport.get().getSnapshot();
+    const theme = getTheme(loadPlayableThemeId());
+    this.boardScopeBar = new TabBar(
+      this,
+      snapshot.width,
+      snapshot.height,
+      menuSubTabY(snapshot),
+      [
+        { id: 'local', title: 'Local' },
+        { id: 'online', title: 'Online (Coming Soon)' },
+      ],
+      (id) => this.setBoardScope(id),
+      {
+        initialId: this.boardScope,
+        color: theme.menu.color,
+        highlightColor: theme.menu.highlightColor,
+        mutedColor: theme.menu.mutedColor,
+        fontSizeRatio: 0.018,
+        sideRatio: 0.22,
+        bindKeyboard: false,
+      },
+    );
+  }
+
+  private setBoardScope(scope: BoardScope): void {
+    this.boardScope = scope;
+    if (scope === 'online') {
+      this.showOnlineComingSoon();
+      return;
+    }
+    this.showLocalBoards();
+  }
+
+  private showLocalBoards(): void {
+    this.clearContent({ keepScopeBar: true });
+    this.ensureBoardScopeBar();
     this.view = 'boards';
-    this.subtitleText.setText('LEADERBOARDS');
+    this.boardScope = 'local';
+    this.subtitleText.setText('LOCAL LEADERBOARDS');
     this.hintText.setText('');
 
     const snapshot = GameViewport.get().getSnapshot();
@@ -166,7 +218,7 @@ export class StatsScene extends Phaser.Scene {
       this,
       snapshot.width,
       snapshot.height,
-      menuOriginY(snapshot),
+      menuBoardOriginY(snapshot),
       GAME_MODES.map((mode) => ({
         id: mode.id,
         title: mode.label,
@@ -186,12 +238,23 @@ export class StatsScene extends Phaser.Scene {
     );
   }
 
+  private showOnlineComingSoon(): void {
+    this.clearContent({ keepScopeBar: true });
+    this.ensureBoardScopeBar();
+    this.view = 'boards';
+    this.boardScope = 'online';
+    this.subtitleText.setText('ONLINE LEADERBOARDS');
+    this.hintText.setText('');
+    this.createStatsList(getOnlineComingSoonRows(), 0.08, menuBoardOriginY(GameViewport.get().getSnapshot()));
+  }
+
   private showBoard(mode: GameModeId): void {
-    this.clearContent();
+    this.clearContent({ keepScopeBar: true });
+    this.ensureBoardScopeBar();
     this.view = mode;
     this.subtitleText.setText(getGameModeInfo(mode).label.toUpperCase());
     this.hintText.setText('');
-    this.createStatsList(getLeaderboardRows(mode), 0.058);
+    this.createStatsList(getLeaderboardRows(mode), 0.058, menuBoardOriginY(GameViewport.get().getSnapshot()));
   }
 
   private showList(id: Exclude<TabId, 'boards'>): void {
@@ -212,14 +275,14 @@ export class StatsScene extends Phaser.Scene {
     }
   }
 
-  private createStatsList(items: readonly StatDisplayRow[], rowHeightRatio: number): void {
+  private createStatsList(items: readonly StatDisplayRow[], rowHeightRatio: number, originY?: number): void {
     const snapshot = GameViewport.get().getSnapshot();
     const theme = getTheme(loadPlayableThemeId());
     this.statsList = new StatsList(
       this,
       snapshot.width,
       snapshot.height,
-      menuContentY(snapshot),
+      originY ?? menuContentY(snapshot),
       items,
       {
         color: theme.menu.color,
@@ -233,11 +296,15 @@ export class StatsScene extends Phaser.Scene {
     );
   }
 
-  private clearContent(): void {
+  private clearContent(options: { keepScopeBar?: boolean } = {}): void {
     this.boardsMenu?.destroy();
     this.boardsMenu = undefined;
     this.statsList?.destroy();
     this.statsList = undefined;
+    if (!options.keepScopeBar) {
+      this.boardScopeBar?.destroy();
+      this.boardScopeBar = undefined;
+    }
   }
 
   private createBackButton(snapshot: ViewportSnapshot, color: string): TextButton {
@@ -266,13 +333,19 @@ export class StatsScene extends Phaser.Scene {
     layoutMenuHint(this.hintText, snapshot);
 
     this.tabBar?.resize(snapshot.width, snapshot.height, menuTabY(snapshot));
+    this.boardScopeBar?.resize(snapshot.width, snapshot.height, menuSubTabY(snapshot));
     this.backButton?.setPosition(menuBackX(snapshot), menuHintY(snapshot));
     this.backButton?.setFontSize(
       menuFontSize(snapshot.height, MENU_LAYOUT.backFontRatio, MENU_LAYOUT.backMinPx),
     );
 
-    if (this.view === 'boards') {
-      this.boardsMenu?.resize(snapshot.width, snapshot.height, menuOriginY(snapshot));
+    if (this.view === 'boards' && this.boardScope === 'local' && this.boardsMenu) {
+      this.boardsMenu.resize(snapshot.width, snapshot.height, menuBoardOriginY(snapshot));
+      return;
+    }
+
+    if (this.view === 'boards' || this.view === 'classic' || this.view === 'time-attack' || this.view === 'endless') {
+      this.statsList?.resize(snapshot.width, snapshot.height, menuBoardOriginY(snapshot));
       return;
     }
 

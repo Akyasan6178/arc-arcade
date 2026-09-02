@@ -1,12 +1,15 @@
 import { formatCount, type StatDisplayRow } from '@entities/dx-ball/Progress';
-import { getGameModeInfo, type GameModeId } from '@entities/dx-ball/GameMode';
+import type { GameModeId } from '@entities/dx-ball/GameMode';
+import { loadPlayerName } from '@entities/dx-ball/PlayerProfile';
 import {
   LEADERBOARD_SIZE,
   LocalLeaderboardAdapter,
   OnlineLeaderboardAdapter,
+  completeLeaderboardEntry,
   createDefaultLeaderboardAdapter,
   type LeaderboardAdapter,
   type LeaderboardEntry,
+  type LeaderboardSubmission,
   type LeaderboardSubmitResult,
 } from '@entities/dx-ball/LeaderboardAdapter';
 
@@ -15,15 +18,15 @@ import {
  *
  * DXB-17: Local Top 10 scores per mode. DXB-24 splits persistence into
  * `LeaderboardAdapter.ts` so a future online backend can plug in without
- * touching gameplay. The active adapter is local-only; no accounts,
- * cloud save, or network calls ship in this task.
+ * touching gameplay. DXB-28 enriches the submission model (player name,
+ * highest level reached, date, version) and keeps the active adapter
+ * local-only. No accounts, cloud save, or network calls ship in this task.
  *
  * Public helpers (`submitScore` / `getLeaderboard` / `getLeaderboardRows`)
- * stay stable so MainScene and StatsScene do not change their call sites
- * beyond reading the richer submit result.
+ * stay the facade so MainScene and StatsScene do not talk to adapters.
  */
 
-export type { LeaderboardEntry, LeaderboardSubmitResult, LeaderboardAdapter };
+export type { LeaderboardEntry, LeaderboardSubmission, LeaderboardSubmitResult, LeaderboardAdapter };
 export { LEADERBOARD_SIZE, LocalLeaderboardAdapter, OnlineLeaderboardAdapter };
 
 export type Leaderboards = Record<GameModeId, LeaderboardEntry[]>;
@@ -44,8 +47,12 @@ class LeaderboardService {
     return this.adapter;
   }
 
-  submit(mode: GameModeId, score: number): LeaderboardSubmitResult {
-    return this.adapter.submit(mode, score);
+  submit(submission: LeaderboardSubmission): LeaderboardSubmitResult {
+    const entry = completeLeaderboardEntry(submission, loadPlayerName());
+    if (!entry) {
+      return { accepted: false, rank: null, isNewRecord: false };
+    }
+    return this.adapter.submit(entry);
   }
 
   list(mode: GameModeId): readonly LeaderboardEntry[] {
@@ -67,13 +74,21 @@ export function getLeaderboardAdapter(): LeaderboardAdapter {
   return service.getAdapter();
 }
 
-/** Inserts `score` into that mode's Top 10. Scores of 0 are ignored. */
-export function submitScore(mode: GameModeId, score: number): LeaderboardSubmitResult {
-  return service.submit(mode, score);
+/** Inserts a finished run into that mode's Top 10. Scores of 0 are ignored. */
+export function submitScore(submission: LeaderboardSubmission): LeaderboardSubmitResult {
+  return service.submit(submission);
 }
 
 export function getLeaderboard(mode: GameModeId): readonly LeaderboardEntry[] {
   return service.list(mode);
+}
+
+export function formatLeaderboardValue(entry: LeaderboardEntry): string {
+  const score = formatCount(entry.score);
+  if (entry.highestLevelReached > 0) {
+    return `${score}  ·  Highest Level Reached ${entry.highestLevelReached}`;
+  }
+  return score;
 }
 
 export function getLeaderboardRows(mode: GameModeId): StatDisplayRow[] {
@@ -88,10 +103,28 @@ export function getLeaderboardRows(mode: GameModeId): StatDisplayRow[] {
     ];
   }
 
-  const label = getGameModeInfo(mode).label;
   return entries.map((entry, index) => ({
     id: `${mode}-${index}`,
-    title: `#${index + 1}  ${label}`,
-    value: formatCount(entry.score),
+    title: `#${index + 1}  ${entry.playerName}`,
+    value: formatLeaderboardValue(entry),
   }));
+}
+
+/**
+ * Placeholder rows for the Online tab. Intentionally not a score list —
+ * fabricating ranks would look like a live board.
+ */
+export function getOnlineComingSoonRows(): StatDisplayRow[] {
+  return [
+    {
+      id: 'online-soon',
+      title: 'Coming Soon',
+      value: 'Online leaderboards are not available yet',
+    },
+    {
+      id: 'online-local',
+      title: 'Local',
+      value: 'Scores on this device still save to Local',
+    },
+  ];
 }
